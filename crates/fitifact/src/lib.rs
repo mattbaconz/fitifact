@@ -31,6 +31,10 @@ pub use inspect::{FfprobeInspector, Inspector, artifact_from_ffprobe_json, inspe
 pub use plan::{Plan, PlanOutcome, plan};
 pub use report::{Explanation, explain_check, explain_plan};
 pub use runtime::{
-    ExecutionContext, ProcessSpawner, RecordingSpawner, SystemSpawner, TransformProvider, execute,
+    ExecutionContext, ProcessSpawner, RecordingSpawner, StreamHashes, SystemSpawner,
+    TransformProvider, execute, validate_plan_for_execution,
 };
-pub use validate::{ValidationReport, ValidationStatus, validate};
+pub use validate::{
+    DURATION_TOLERANCE_MS, ProvenanceCheck, ValidationCheck, ValidationReport, ValidationStatus,
+    validate, validate_adaptation,
+};

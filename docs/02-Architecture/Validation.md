@@ -71,6 +71,19 @@ Some fields are approximate:
 
 Hard destination bounds still remain exact when required.
 
+v0.1 requires output duration within 100 ms of the freshly inspected input.
+Width and height are exact. Output must also be non-empty, parseable, retain the
+same safe stream topology, satisfy every hard constraint, and match every typed
+plan expectation for codec, container, pixel format, bit depth, SDR/HDR status,
+and color facts. Missing facts are unknown and never produce an adapted result.
+
+The FFmpeg `streamhash` muxer computes SHA-256 hashes over copied elementary
+streams. Remux requires identical video and audio hashes when audio exists.
+Selective video transcode requires identical AAC audio, H.264 output video, and
+a changed video hash. These checks and their input/output digests are structured
+in the adaptation validation report. Provider exit success alone is never a
+validation result.
+
 ## Validation unknown
 
 If a target constraint relies on a fact the inspector cannot verify:

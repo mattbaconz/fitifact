@@ -71,8 +71,26 @@ fn live_hevc_transcodes_video_only() {
         &dir,
         "hevc-aac.mp4",
         &[
-            "-c:v", "libx265", "-pix_fmt", "yuv420p", "-tag:v", "hvc1", "-c:a", "aac", "-b:a",
+            "-c:v",
+            "libx265",
+            "-pix_fmt",
+            "yuv420p",
+            "-tag:v",
+            "hvc1",
+            "-c:a",
+            "aac",
+            "-b:a",
             "64k",
+            "-color_range",
+            "tv",
+            "-colorspace",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-color_primaries",
+            "bt709",
+            "-x265-params",
+            "colorprim=bt709:transfer=bt709:colormatrix=bt709:range=limited",
         ],
     );
     let original_bytes = std::fs::metadata(&input).unwrap().len();
@@ -97,7 +115,14 @@ fn live_hevc_transcodes_video_only() {
     let plan = result.plan.expect("plan");
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.steps[0].operation, TransformId::TranscodeVideo);
-    let out = result.validation.expect("validation").artifact;
+    let validation = result.validation.expect("validation");
+    assert!(validation.provenance.iter().any(|claim| {
+        claim.claim == "audio_copied" && claim.status == fitifact::ValidationStatus::Pass
+    }));
+    assert!(validation.provenance.iter().any(|claim| {
+        claim.claim == "video_changed" && claim.status == fitifact::ValidationStatus::Pass
+    }));
+    let out = validation.artifact;
     assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
     assert_eq!(out.first_audio().unwrap().codec, Some(AudioCodec::Aac));
     assert_eq!(std::fs::metadata(&input).unwrap().len(), original_bytes);
@@ -171,7 +196,14 @@ fn live_mov_remuxes_without_transcode() {
     .unwrap();
     assert_eq!(result.status, AdaptationStatus::Adapted);
     assert_eq!(result.plan.unwrap().steps[0].operation, TransformId::Remux);
-    let out = result.validation.unwrap().artifact;
+    let validation = result.validation.unwrap();
+    assert!(validation.provenance.iter().any(|claim| {
+        claim.claim == "video_copied" && claim.status == fitifact::ValidationStatus::Pass
+    }));
+    assert!(validation.provenance.iter().any(|claim| {
+        claim.claim == "audio_copied" && claim.status == fitifact::ValidationStatus::Pass
+    }));
+    let out = validation.artifact;
     assert_eq!(out.container.as_ref().unwrap().as_str(), "mp4");
     assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
     let _ = std::fs::remove_dir_all(dir);

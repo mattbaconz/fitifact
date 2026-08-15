@@ -30,6 +30,14 @@ Provider:
 
 Never concatenate user input into shell commands.
 
+The v0.1 native provider uses `Command` with typed argv and system
+`ffmpeg`/`ffprobe` from `PATH`; it never invokes a shell. Media input is limited
+to the `file` protocol. Probe timeout is 30 seconds. Transform timeout defaults
+to 30 minutes and is bounded by the CLI. Process stdout is capped at 1 MiB and
+only the final 256 KiB of stderr is retained; timeout kills, waits for, and
+reaps the child. User errors contain stable summaries rather than raw provider
+argv, environment, paths, or stderr.
+
 ## Modes
 
 ### Browser
@@ -61,6 +69,18 @@ cleanup
 - no traversal;
 - cleanup on failure;
 - retention only by explicit policy.
+
+Every changed final is first a unique hidden sibling in the destination
+directory. Failure, timeout, validation failure, provenance mismatch, or
+persistence failure removes it. A validated sibling is persisted with a
+same-filesystem hard-link create-if-absent operation and then unlinked from the
+staging name. If that atomic no-clobber primitive is unavailable, execution
+refuses instead of falling back to an overwrite-prone rename.
+
+Remux uses `-map 0 -c copy`. Selective transcode accepts only the planner-proven
+one-video/optional-one-AAC topology, maps those exact streams, encodes video
+with `libx264`, and copies audio. Provider entry points defensively reject plan
+version, target, expected-fact, preservation, or topology forgeries.
 
 ## Resource budgets
 

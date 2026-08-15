@@ -38,6 +38,19 @@ cloud worker       isolation boundary
 9. Cloud use explicit.
 10. Models cannot authorize execution.
 
+## v0.1 native enforcement
+
+- `adapt` always inspects, checks, and plans from the requested input and typed
+  constraints; JSON plans are informational and cannot be executed.
+- System FFmpeg tools receive typed argv through `Command`, never a shell, with
+  network media protocols denied and only `file` allowed.
+- FFmpeg uses explicit no-clobber behavior. Originals and occupied outputs are
+  never replaced, including persistence races.
+- Changed output remains a hidden destination sibling until fresh constraint,
+  integrity, expected-fact, and SHA-256 copied-stream validation passes.
+- Probe/process output and time are bounded; external diagnostics shown to
+  users are redacted stable messages.
+
 ## Example policy
 
 ```yaml

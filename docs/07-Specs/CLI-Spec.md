@@ -18,8 +18,9 @@ tags:
 fitifact inspect <file> [--json]
 fitifact check <file> <typed constraints> [--json]
 fitifact plan <file> <typed constraints> [--json]
-fitifact adapt <file> <typed constraints> [-o <new-output>] [--json] [--dry-run]
-fitifact doctor
+fitifact adapt <file> <typed constraints> [-o <new-output>] [--json] [--dry-run] [--timeout-seconds <1..86400>]
+fitifact doctor [--json]
+fitifact --version
 ```
 
 Typed constraint flags are:
@@ -28,7 +29,7 @@ Typed constraint flags are:
 --container <container>
 --video-codec <codec>
 --audio-codec <codec>
---max-size <bytes>
+--max-size <bytes|MB|MiB>
 --max-width <pixels>
 --max-height <pixels>
 --constraints <file.yaml>
@@ -36,16 +37,22 @@ Typed constraint flags are:
 
 At least one constraint flag or `--constraints` file is required for `check`,
 `plan`, and `adapt`. Human output is the default; `--json` is available for all
-automatable commands. `adapt --dry-run` is equivalent to planning and creates no
-output.
+automatable commands, including `doctor`; engine failures requested as JSON use
+the exact `fitifact.error/v1` envelope. `adapt --dry-run` always performs fresh
+inspection/check/planning, is equivalent to `plan`, creates no output, and never
+accepts a serialized plan for execution. Whole raw bytes, decimal `MB`, and
+binary `MiB` use the strict shared size parser.
 
 Container and HEVC-to-H.264 changes are executable within the D-020 matrix.
 File-size and dimension constraints are check-only in v0.1. Unsupported
 mutations return an unsatisfiable result rather than a misleading plan.
 
-Default adaptation output is a new sibling file named with `.adapted` before
-the target extension. `-o` selects a different new output path. Existing paths
-are refused; there is no overwrite option.
+Default adaptation output is a unique sibling such as `video.fitifact.mp4`,
+then `video.fitifact.2.mp4`. `-o` selects a different new output path. Existing
+paths are refused before FFmpeg starts; there is no overwrite option. Changed
+output is written to a unique hidden sibling, freshly validated, then persisted
+with an atomic create-if-absent operation. The default transform timeout is 1800
+seconds and `--timeout-seconds` is bounded to 1 through 86400 seconds.
 
 ## Exit codes — implemented
 
@@ -58,7 +65,9 @@ are refused; there is no overwrite option.
 - 7: security/policy block;
 - 64: CLI usage or other unmapped error.
 
-`doctor` checks only system `ffprobe` and `ffmpeg` availability and versions.
+`doctor` checks system `ffprobe` and `ffmpeg` versions, `libx264`, the MP4 muxer,
+and destination/temp write health. Missing requirements fail with exit 5. An
+FFmpeg major older than the CI-tested 6.1 baseline emits a warning only.
 
 ## Deferred grammar
 

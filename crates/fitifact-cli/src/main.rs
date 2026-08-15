@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use fitifact::artifact::Artifact;
 use fitifact::ffmpeg::FfmpegProvider;
 use fitifact::inspect::FfprobeInspector;
@@ -14,6 +15,7 @@ use fitifact::{
 #[derive(Parser)]
 #[command(
     name = "fitifact",
+    version,
     about = "Make a file fit a destination by changing as little as possible."
 )]
 struct Cli {
@@ -56,9 +58,18 @@ enum Command {
         json: bool,
         #[arg(long)]
         dry_run: bool,
+        #[arg(
+            long,
+            default_value_t = 1800,
+            value_parser = clap::value_parser!(u64).range(1..=86400)
+        )]
+        timeout_seconds: u64,
     },
-    /// Report whether ffprobe/ffmpeg are available.
-    Doctor,
+    /// Report FFmpeg tools, capabilities, and workspace health.
+    Doctor {
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Args, Clone)]
@@ -69,7 +80,7 @@ struct TargetArgs {
     video_codec: Option<String>,
     #[arg(long = "audio-codec")]
     audio_codec: Option<String>,
-    #[arg(long = "max-size", value_name = "BYTES")]
+    #[arg(long = "max-size", value_name = "BYTES|MB|MiB", value_parser = parse_size_arg)]
     max_size: Option<u64>,
     #[arg(long = "max-width")]
     max_width: Option<u32>,
@@ -80,21 +91,29 @@ struct TargetArgs {
 }
 
 fn main() -> ExitCode {
-    match run() {
-        Ok(code) => code,
-        Err(err) => {
-            eprintln!("{err}");
-            if err.usage {
-                ExitCode::from(64)
-            } else {
-                exit_for_error(err.code)
-            }
+    let json_requested = std::env::args_os().any(|arg| arg == "--json");
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            print!("{error}");
+            return ExitCode::SUCCESS;
         }
+        Err(error) => {
+            return render_error(CliError::usage(error.to_string()), json_requested);
+        }
+    };
+    match run(cli) {
+        Ok(code) => code,
+        Err(err) => render_error(err, json_requested),
     }
 }
 
-fn run() -> Result<ExitCode, CliError> {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> Result<ExitCode, CliError> {
     match cli.command {
         Command::Inspect { file, json } => inspect_cmd(&file, json),
         Command::Check { file, target, json } => check_cmd(&file, target, json),
@@ -105,14 +124,15 @@ fn run() -> Result<ExitCode, CliError> {
             output,
             json,
             dry_run,
+            timeout_seconds,
         } => {
             if dry_run {
                 plan_cmd(&file, target, json, true)
             } else {
-                adapt_cmd(&file, target, output, json)
+                adapt_cmd(&file, target, output, json, timeout_seconds)
             }
         }
-        Command::Doctor => doctor_cmd(),
+        Command::Doctor { json } => doctor_cmd(json),
     }
 }
 
@@ -192,6 +212,7 @@ fn adapt_cmd(
     target: TargetArgs,
     output: Option<PathBuf>,
     json: bool,
+    timeout_seconds: u64,
 ) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
     let inspector = FfprobeInspector::default();
@@ -203,7 +224,10 @@ fn adapt_cmd(
         catalog: None,
         inspector: &inspector,
         provider: &provider,
-        execution: ExecutionContext::default(),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(timeout_seconds),
+            temp_dir: None,
+        },
     })
     .map_err(CliError::engine)?;
     if json {
@@ -242,34 +266,62 @@ fn adapt_cmd(
     })
 }
 
-fn doctor_cmd() -> Result<ExitCode, CliError> {
-    let ffprobe = tool_version("ffprobe");
-    let ffmpeg = tool_version("ffmpeg");
-    match &ffprobe {
-        Ok(v) => println!("ffprobe: {v}"),
-        Err(err) => println!("ffprobe: missing ({err})"),
+fn doctor_cmd(json: bool) -> Result<ExitCode, CliError> {
+    let destination = std::env::current_dir()
+        .map_err(|_| CliError::usage("cannot inspect the current destination workspace"))?;
+    let temporary = std::env::temp_dir();
+    let report = fitifact::doctor::diagnose(
+        &SystemSpawner,
+        &destination,
+        &temporary,
+        Duration::from_secs(30),
+    );
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(CliError::json)?
+        );
+    } else {
+        for tool in &report.tools {
+            if tool.available {
+                println!(
+                    "{}: {}",
+                    tool.name,
+                    tool.version.as_deref().unwrap_or("available")
+                );
+            } else {
+                println!("{}: missing", tool.name);
+            }
+        }
+        for capability in &report.capabilities {
+            println!(
+                "{}: {}",
+                capability.name,
+                if capability.available {
+                    "available"
+                } else {
+                    "missing"
+                }
+            );
+        }
+        for warning in &report.warnings {
+            println!("warning: {warning}");
+        }
+        if !report.healthy {
+            println!(
+                "Install a current FFmpeg build with libx264 and MP4 support, then rerun doctor."
+            );
+        }
     }
-    match &ffmpeg {
-        Ok(v) => println!("ffmpeg: {v}"),
-        Err(err) => println!("ffmpeg: missing ({err})"),
-    }
-    if ffprobe.is_ok() && ffmpeg.is_ok() {
+    if report.healthy {
         Ok(ExitCode::SUCCESS)
     } else {
         Ok(ExitCode::from(5))
     }
 }
 
-fn tool_version(name: &str) -> Result<String, String> {
-    let output = std::process::Command::new(name)
-        .arg("-version")
-        .output()
-        .map_err(|err| err.to_string())?;
-    if !output.status.success() {
-        return Err(format!("exit {}", output.status));
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text.lines().next().unwrap_or("ok").to_string())
+fn parse_size_arg(raw: &str) -> Result<u64, String> {
+    fitifact::constraints::parse_size_bytes(raw).map_err(|error| error.message)
 }
 
 fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
@@ -387,6 +439,34 @@ impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
+}
+
+fn render_error(error: CliError, json: bool) -> ExitCode {
+    let exit = if error.usage {
+        ExitCode::from(64)
+    } else {
+        exit_for_error(error.code)
+    };
+    if json {
+        let code = error.code.unwrap_or(fitifact::ErrorCode::InputInvalid);
+        let mut envelope =
+            fitifact::error::ErrorEnvelope::from(fitifact::Error::new(code, error.message));
+        if code == fitifact::ErrorCode::ProviderMissing {
+            envelope.suggestions.push(
+                "Install FFmpeg so ffmpeg and ffprobe are on PATH, then run `fitifact doctor`."
+                    .into(),
+            );
+        }
+        match serde_json::to_string_pretty(&envelope) {
+            Ok(value) => eprintln!("{value}"),
+            Err(_) => eprintln!(
+                "{{\"schema\":\"fitifact.error/v1\",\"code\":\"INPUT_INVALID\",\"message\":\"error serialization failed\"}}"
+            ),
+        }
+    } else {
+        eprintln!("{error}");
+    }
+    exit
 }
 
 fn exit_for_error(code: Option<fitifact::ErrorCode>) -> ExitCode {
