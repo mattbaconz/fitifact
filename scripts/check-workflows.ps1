@@ -35,4 +35,28 @@ if ($badPins.Count -gt 0) {
     throw "Every external action must use a full commit SHA and trailing version comment"
 }
 
-Write-Host "GitHub YAML parse and action-pin audit: PASS ($($yamlFiles.Count) files)"
+$releaseWorkflow = [IO.File]::ReadAllText((Join-Path $root ".github\workflows\release.yml"))
+$releaseRequirements = @(
+    @{ Name = "read-only plan job"; Pattern = '(?ms)^  plan:\r?\n.*?^    permissions:\r?\n      "contents": "read"\s*$' },
+    @{ Name = "repository publication approval"; Pattern = "vars\.FITIFACT_PUBLICATION_APPROVED == 'true'" },
+    @{ Name = "protected release environment"; Pattern = '(?m)^      name: public-release\s*$' },
+    @{ Name = "tag planning without release creation"; Pattern = '(?m)^\s+dist plan .*--output-format=json' },
+    @{ Name = "single-binary-package CycloneDX invocation"; Pattern = 'cargo cyclonedx -v --format xml --describe binaries --manifest-path crates/fitifact-cli/Cargo\.toml' },
+    @{ Name = "single-SBOM assertion"; Pattern = 'expected exactly one uploaded CycloneDX XML file' }
+)
+foreach ($requirement in $releaseRequirements) {
+    if ($releaseWorkflow -notmatch $requirement.Pattern) {
+        throw "Release workflow is missing invariant: $($requirement.Name)"
+    }
+}
+foreach ($permission in @("contents", "attestations", "id-token")) {
+    $writeCount = ([regex]::Matches($releaseWorkflow, "`"$permission`": `"write`"")).Count
+    if ($writeCount -ne 1) {
+        throw "Release workflow must grant $permission write exactly once (host only); found $writeCount"
+    }
+}
+if ($releaseWorkflow -match '(?m)^  announce:\s*$') {
+    throw "Release workflow contains the removed write-capable announce job"
+}
+
+Write-Host "GitHub YAML parse, action pins, publication gate, permissions, and SBOM scope: PASS ($($yamlFiles.Count) files)"

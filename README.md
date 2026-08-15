@@ -99,20 +99,35 @@ archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
 `sha256.sum`, per-archive SHA-256 files, and a CycloneDX
 `fitifact-cli.cdx.xml` SBOM.
 
-Release checksums can then be verified before extraction:
+The checked-in package and binary version is the unpublished
+`0.1.0-rc.1` candidate. Stable `0.1.0` requires a later reviewed version-bump
+commit after RC acceptance; this commit must not receive the stable tag.
+
+Download `sha256.sum` and the one archive for your target into the same
+directory. Verify only that exact downloaded asset before extraction:
 
 ```console
-# Linux
-sha256sum --check sha256.sum
+# Linux x64
+line="$(grep -E '^[0-9a-f]{64}  fitifact-cli-x86_64-unknown-linux-gnu\.tar\.gz$' sha256.sum)" && printf '%s\n' "$line" | sha256sum --check --strict -
 
-# macOS
-shasum --algorithm 256 --check sha256.sum
+# macOS Intel
+line="$(grep -E '^[0-9a-f]{64}  fitifact-cli-x86_64-apple-darwin\.tar\.gz$' sha256.sum)" && printf '%s\n' "$line" | shasum --algorithm 256 --check -
+
+# macOS Apple Silicon
+line="$(grep -E '^[0-9a-f]{64}  fitifact-cli-aarch64-apple-darwin\.tar\.gz$' sha256.sum)" && printf '%s\n' "$line" | shasum --algorithm 256 --check -
 ```
 
-On Windows, compare the expected entry in `sha256.sum` with:
+Each `grep` pattern is anchored to one filename; a missing manifest entry makes
+the pipeline fail. On Windows, select and compare the exact x64 ZIP entry:
 
 ```powershell
-Get-FileHash .\fitifact-cli-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+$asset = "fitifact-cli-x86_64-pc-windows-msvc.zip"
+$entries = @(Select-String -Path .\sha256.sum -Pattern "^[0-9a-fA-F]{64}  $([regex]::Escape($asset))$")
+if ($entries.Count -ne 1) { throw "Expected exactly one checksum entry for $asset" }
+$expected = ($entries[0].Line -split '\s+', 2)[0]
+$actual = (Get-FileHash ".\$asset" -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw "SHA-256 mismatch for $asset" }
+"$asset`: SHA-256 verified"
 ```
 
 GitHub artifact attestations can be verified with GitHub CLI after replacing
