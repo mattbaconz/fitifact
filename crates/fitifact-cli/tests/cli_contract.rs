@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
 fn run(args: &[&str]) -> Output {
@@ -14,6 +15,25 @@ fn json_stderr(output: &Output) -> serde_json::Value {
             String::from_utf8_lossy(&output.stderr)
         )
     })
+}
+
+fn constraint_file(label: &str, length: Option<usize>) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "fitifact-{label}-{}-{}.yaml",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut text = "schema: fitifact.constraints/v1\nhard:\n  - id: container\n    field: media.container\n    op: in\n    value: [mp4]\n".to_string();
+    if let Some(length) = length {
+        assert!(text.len() + 2 <= length);
+        text.push('#');
+        text.push_str(&"x".repeat(length - text.len()));
+    }
+    std::fs::write(&path, text).unwrap();
+    path
 }
 
 #[test]
@@ -71,4 +91,73 @@ fn transform_timeout_is_bounded_and_usage_errors_are_json() {
     ]);
     assert_eq!(output.status.code(), Some(64));
     assert_eq!(json_stderr(&output)["schema"], "fitifact.error/v1");
+}
+
+#[test]
+fn constraints_file_conflicts_with_every_individual_hard_target() {
+    let path = constraint_file("constraint-conflicts", None);
+    let path = path.to_str().unwrap();
+    for flag in [
+        ["--container", "mp4"],
+        ["--video-codec", "h264"],
+        ["--audio-codec", "aac"],
+        ["--max-size", "1"],
+        ["--max-width", "1"],
+        ["--max-height", "1"],
+    ] {
+        let output = run(&[
+            "check",
+            "definitely-missing.mp4",
+            "--constraints",
+            path,
+            flag[0],
+            flag[1],
+            "--json",
+        ]);
+        assert_eq!(output.status.code(), Some(64), "flag {flag:?}");
+        let error = json_stderr(&output);
+        assert_eq!(error["schema"], "fitifact.error/v1");
+        assert_eq!(error["code"], "INPUT_INVALID");
+    }
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn constraint_file_read_accepts_exact_limit_and_rejects_one_byte_over() {
+    const LIMIT: usize = fitifact::constraints::MAX_CONSTRAINT_BYTES;
+    let exact = constraint_file("constraint-exact-limit", Some(LIMIT));
+    let output = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--constraints",
+        exact.to_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(4));
+    assert!(
+        json_stderr(&output)["message"]
+            .as_str()
+            .unwrap()
+            .contains("file not found"),
+        "an exact-limit valid document must reach input inspection"
+    );
+
+    let over = constraint_file("constraint-over-limit", Some(LIMIT + 1));
+    let output = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--constraints",
+        over.to_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(4));
+    assert!(
+        json_stderr(&output)["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 MiB safety limit")
+    );
+
+    std::fs::remove_file(exact).unwrap();
+    std::fs::remove_file(over).unwrap();
 }

@@ -6,7 +6,7 @@ use crate::artifact::{AudioCodec, Container, Family, VideoCodec};
 pub use crate::contract::{CONSTRAINTS_SCHEMA, ConstraintsSchema};
 use crate::error::{Error, ErrorCode, Result};
 
-const MAX_CONSTRAINT_BYTES: usize = 1024 * 1024;
+pub const MAX_CONSTRAINT_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Field {

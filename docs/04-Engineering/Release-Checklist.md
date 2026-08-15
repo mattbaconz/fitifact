@@ -37,6 +37,23 @@ Before either tag:
 - [ ] Run `dist plan --tag=v0.1.0-rc.1` with cargo-dist 0.32.0 and review the four
       native archives, two installers, SHA-256 files, source archive,
       `fitifact-cli.cdx.xml`, and attestation scope.
+- [ ] Run `scripts/check-workflows.ps1` and confirm it finds exactly one
+      `gh release create`, after `actions/attest`, with no `dist host
+      --steps=create`, `gh release upload`, release API, or release-action
+      alternative.
+
+Exact cargo-dist 0.32.0 source is fixed at tag commit
+`6886366640dd4da83d33ba55cc04aa58423cbad2`. Its
+[`do_host`](https://github.com/axodotdev/cargo-dist/blob/6886366640dd4da83d33ba55cc04aa58423cbad2/cargo-dist/src/host.rs#L19-L43)
+explicitly leaves GitHub hosting "implemented in CI backend" and only saves the
+merged manifest. The matching
+[generated host template](https://github.com/axodotdev/cargo-dist/blob/6886366640dd4da83d33ba55cc04aa58423cbad2/cargo-dist/templates/ci/github/release.yml.j2#L540-L555)
+then includes the
+[GitHub publication partial](https://github.com/axodotdev/cargo-dist/blob/6886366640dd4da83d33ba55cc04aa58423cbad2/cargo-dist/templates/ci/github/partials/publish_github.yml.j2#L1-L46),
+where attestation precedes the generated `gh release create`. Thus the checked-in
+`dist host --steps=upload --steps=release` invocation is a manifest step, not a
+second GitHub publication primitive; the later `gh release create` is the sole
+release creation/upload operation and must remain after successful attestation.
 
 ## `v0.1.0-rc.1`
 

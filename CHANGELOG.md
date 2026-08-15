@@ -44,5 +44,10 @@ All notable changes to Fitifact are documented here.
   published hard link, and preserve validated finals when cleanup cannot
   complete.
 - Removed pathname rollback deletion: Windows cleanup is handle-bound, Unix
-  workspaces are atomically mode-0700, ambiguous provider partials are retained,
-  and publication/cleanup uncertainty returns structured warning paths.
+  workspaces are atomically mode-0700, ordinary provider partials are claimed
+  and removed, ambiguous or replaced objects are retained, and
+  publication/cleanup uncertainty returns structured warning paths.
+- Refused ambiguous MOV-family demuxer labels without a recognized MP4 or
+  QuickTime brand, rejected mixed constraint-file/flag targets, bounded
+  constraint-file reads to 1 MiB, and locked GitHub publication to one
+  attestation-ordered release creation command.

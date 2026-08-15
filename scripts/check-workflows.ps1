@@ -41,6 +41,7 @@ $releaseRequirements = @(
     @{ Name = "repository publication approval"; Pattern = "vars\.FITIFACT_PUBLICATION_APPROVED == 'true'" },
     @{ Name = "protected release environment"; Pattern = '(?m)^      name: public-release\s*$' },
     @{ Name = "tag planning without release creation"; Pattern = '(?m)^\s+dist plan .*--output-format=json' },
+    @{ Name = "cargo-dist 0.32 GitHub host source evidence"; Pattern = 'cargo-dist v0\.32\.0.*implemented in CI backend' },
     @{ Name = "single-binary-package CycloneDX invocation"; Pattern = 'cargo cyclonedx -v --format xml --describe binaries --manifest-path crates/fitifact-cli/Cargo\.toml' },
     @{ Name = "single-SBOM assertion"; Pattern = 'expected exactly one uploaded CycloneDX XML file' }
 )
@@ -59,4 +60,20 @@ if ($releaseWorkflow -match '(?m)^  announce:\s*$') {
     throw "Release workflow contains the removed write-capable announce job"
 }
 
-Write-Host "GitHub YAML parse, action pins, publication gate, permissions, and SBOM scope: PASS ($($yamlFiles.Count) files)"
+$githubReleaseCreates = [regex]::Matches($releaseWorkflow, '(?m)^\s*gh release create\s+')
+if ($githubReleaseCreates.Count -ne 1) {
+    throw "Release workflow must contain exactly one GitHub release creation command; found $($githubReleaseCreates.Count)"
+}
+if ($releaseWorkflow -match '(?m)^\s*dist host .*--steps=create' -or
+    $releaseWorkflow -match '(?m)^\s*gh release upload\s+' -or
+    $releaseWorkflow -match '(?m)^\s*gh api .*\/releases' -or
+    $releaseWorkflow -match '(?m)^\s*(?:-\s*)?uses:\s*(?:actions\/create-release|softprops\/action-gh-release)') {
+    throw "Release workflow contains a second GitHub release creation/upload primitive"
+}
+$attestationIndex = $releaseWorkflow.IndexOf('uses: actions/attest@', [System.StringComparison]::Ordinal)
+$releaseCreateIndex = $releaseWorkflow.IndexOf('gh release create ', [System.StringComparison]::Ordinal)
+if ($attestationIndex -lt 0 -or $releaseCreateIndex -lt 0 -or $attestationIndex -gt $releaseCreateIndex) {
+    throw "GitHub artifact attestation must complete before the sole GitHub release creation command"
+}
+
+Write-Host "GitHub YAML parse, action pins, publication gate, permissions, attestation order, single release creation, and SBOM scope: PASS ($($yamlFiles.Count) files)"

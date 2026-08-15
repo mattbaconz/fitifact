@@ -42,6 +42,10 @@ the exact `fitifact.error/v1` envelope. `adapt --dry-run` always performs fresh
 inspection/check/planning, is equivalent to `plan`, creates no output, and never
 accepts a serialized plan for execution. Whole raw bytes, decimal `MB`, and
 binary `MiB` use the strict shared size parser.
+`--constraints` is mutually exclusive with every individual hard-target flag;
+combining them is a structured usage error with exit 64. Constraint documents
+are read through a 1 MiB bounded reader before UTF-8 and YAML validation; one
+byte beyond the limit is rejected without reading or allocating the remainder.
 
 Container and HEVC-to-H.264 changes are executable within the D-020 matrix.
 File-size and dimension constraints are check-only in v0.1. Unsupported
@@ -54,9 +58,12 @@ output is written inside an atomically reserved hidden sibling workspace,
 freshly hashed, inspected, and provenance-validated, then published with an
 atomic create-if-absent hard link as the last fallible publication operation.
 The final link is immediately identity-checked against the held validated stage.
-Cleanup or identity-confirmation problems retain the final and emit a structured
-`cleanup_warning` containing a path and message. The default transform timeout
-is 1800 seconds and `--timeout-seconds` is bounded to 1 through 86400 seconds.
+After a failed or timed-out provider has been reaped, a regular partial is
+identity-claimed and removed through the platform cleanup primitive. Ambiguous,
+replaced, or unprovable objects are retained. Cleanup or identity-confirmation
+problems emit a structured `cleanup_warning` containing a path and message. The
+default transform timeout is 1800 seconds and `--timeout-seconds` is bounded to
+1 through 86400 seconds.
 
 ## Exit codes — implemented
 

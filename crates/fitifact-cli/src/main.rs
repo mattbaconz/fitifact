@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -86,7 +87,17 @@ struct TargetArgs {
     max_width: Option<u32>,
     #[arg(long = "max-height")]
     max_height: Option<u32>,
-    #[arg(long)]
+    #[arg(
+        long,
+        conflicts_with_all = [
+            "container",
+            "video_codec",
+            "audio_codec",
+            "max_size",
+            "max_width",
+            "max_height"
+        ]
+    )]
     constraints: Option<PathBuf>,
 }
 
@@ -326,8 +337,9 @@ fn parse_size_arg(raw: &str) -> Result<u64, String> {
 
 fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
     if let Some(path) = &target.constraints {
-        let text = std::fs::read_to_string(path)
+        let mut file = std::fs::File::open(path)
             .map_err(|err| CliError::usage(format!("cannot read {}: {err}", path.display())))?;
+        let text = read_constraint_text(&mut file).map_err(CliError::engine)?;
         return compile_from_yaml(&text).map_err(CliError::engine);
     }
     if target.container.is_none()
@@ -351,6 +363,32 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
         ..ConstraintInput::default()
     })
     .map_err(CliError::engine)
+}
+
+fn read_constraint_text(reader: impl Read) -> Result<String, fitifact::Error> {
+    let limit = fitifact::constraints::MAX_CONSTRAINT_BYTES;
+    let mut bytes = Vec::with_capacity(limit + 1);
+    reader
+        .take((limit + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|_| {
+            fitifact::Error::new(
+                fitifact::ErrorCode::InputInvalid,
+                "constraint document could not be read",
+            )
+        })?;
+    if bytes.len() > limit {
+        return Err(fitifact::Error::new(
+            fitifact::ErrorCode::InputInvalid,
+            "constraint document exceeds the 1 MiB safety limit",
+        ));
+    }
+    String::from_utf8(bytes).map_err(|_| {
+        fitifact::Error::new(
+            fitifact::ErrorCode::InputInvalid,
+            "constraint document is not valid UTF-8",
+        )
+    })
 }
 
 fn print_inspect(artifact: &Artifact) {
@@ -482,5 +520,29 @@ fn exit_for_error(code: Option<fitifact::ErrorCode>) -> ExitCode {
         Some(fitifact::ErrorCode::SecurityBlocked) => ExitCode::from(7),
         Some(fitifact::ErrorCode::NoValidPlan) => ExitCode::from(3),
         _ => ExitCode::from(64),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn constraint_reader_stops_after_limit_plus_one() {
+        let mut exact = Cursor::new(vec![b' '; fitifact::constraints::MAX_CONSTRAINT_BYTES]);
+        let text = read_constraint_text(&mut exact).unwrap();
+        assert_eq!(text.len(), fitifact::constraints::MAX_CONSTRAINT_BYTES);
+
+        let mut over = Cursor::new(vec![
+            b' ';
+            fitifact::constraints::MAX_CONSTRAINT_BYTES + 128
+        ]);
+        let error = read_constraint_text(&mut over).unwrap_err();
+        assert!(error.message.contains("1 MiB safety limit"));
+        assert_eq!(
+            over.position(),
+            (fitifact::constraints::MAX_CONSTRAINT_BYTES + 1) as u64
+        );
     }
 }

@@ -52,9 +52,10 @@ cloud worker       isolation boundary
   hard link, which is the last fallible publication operation.
 - Windows cleanup uses deletion by a held identity handle. Unix staging
   workspaces are atomically created mode `0700`; claimed paths are cleaned only
-  inside that private workspace. A mismatched, unclaimed, or ambiguous path is
-  preserved with a structured warning, and a published final is never rolled
-  back by name.
+  inside that private workspace. After provider failure or timeout, a regular
+  partial is first claimed by identity and then removed through the same cleanup
+  path. A replaced, mismatched, unclaimed, or ambiguous path is preserved with a
+  structured warning, and a published final is never rolled back by name.
 - Other processes running under the same OS account are trusted. No portable
   filesystem API can protect a directory from a malicious same-account process
   with equivalent access; this boundary is explicit rather than approximated.
