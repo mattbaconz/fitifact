@@ -35,6 +35,10 @@ OS signing, and package-manager formulae are deferred.
 - `ffprobe` on `PATH` for inspection, check, and plan
 - `ffmpeg` on `PATH` for adaptations that require a change
 
+Run `fitifact doctor` (or `fitifact doctor --json`) to verify versions,
+`libx264`, MP4 muxing, and destination/temp write access. FFmpeg 6.1 or newer is
+the tested baseline; older majors warn but are not rejected solely for age.
+
 Fitifact has no telemetry and performs no network activity. FFmpeg and ffprobe
 are system dependencies and are not bundled.
 
@@ -49,9 +53,18 @@ cargo run -p fitifact-cli -- plan video.mov --container mp4 --video-codec h264 -
 cargo run -p fitifact-cli -- adapt video.mov --container mp4 --video-codec h264 --audio-codec aac
 ```
 
-Use `--json` with `inspect`, `check`, `plan`, and `adapt` for structured output.
+Use `--json` with every command for structured output; engine failures use
+`fitifact.error/v1`.
 Use `adapt --dry-run` to plan without writing a file. By default, adaptation
-writes a new sibling such as `video.adapted.mp4`; `-o` chooses another new path.
+writes a unique sibling such as `video.fitifact.mp4` or
+`video.fitifact.2.mp4`; `-o` chooses another new path and existing paths are
+refused. The transform timeout defaults to 1800 seconds and can be set from 1
+through 86400 seconds with `--timeout-seconds`.
+
+`--max-size` accepts exact whole bytes, decimal `MB`, or binary `MiB` (for
+example `25000000`, `25 MB`, or `25 MiB`). Adaptation plans are always recreated
+from fresh inspection and typed constraints; saved JSON plans are never
+executable input.
 
 Typed constraints can also be loaded from YAML:
 

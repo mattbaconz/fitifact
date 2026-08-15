@@ -58,27 +58,23 @@ impl<S: ProcessSpawner> Inspector for FfprobeInspector<S> {
             "-show_streams".into(),
             "-show_program_version".into(),
             "-protocol_whitelist".into(),
-            "file,crypto,data".into(),
+            "file".into(),
             path_str.into(),
         ];
         let output = self
             .spawner
             .spawn(&self.ffprobe_program, &args, self.timeout)?;
+        if output.stdout_truncated {
+            return Err(Error::new(
+                ErrorCode::InspectionLimit,
+                "ffprobe inspection output exceeded the 1 MiB safety limit",
+            ));
+        }
         if !output.success() {
-            let stderr = output.stderr_str();
-            if stderr.to_ascii_lowercase().contains("invalid")
-                || stderr.to_ascii_lowercase().contains("error")
-                || output.status != 0
-            {
-                return Err(Error::new(
-                    ErrorCode::InputInvalid,
-                    format!(
-                        "ffprobe could not read {}: {}",
-                        path.display(),
-                        stderr.trim()
-                    ),
-                ));
-            }
+            return Err(Error::new(
+                ErrorCode::InputInvalid,
+                "ffprobe could not parse the input as supported media",
+            ));
         }
         let json = if output.stdout.is_empty() {
             output.stderr_str()
@@ -305,6 +301,24 @@ fn json_u32(value: &serde_json::Value) -> Option<u32> {
 mod tests {
     use super::*;
     use crate::artifact::VideoCodec;
+    use crate::runtime::SpawnOutput;
+
+    struct ProbeSpawner {
+        output: SpawnOutput,
+        args: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl ProcessSpawner for ProbeSpawner {
+        fn spawn(
+            &self,
+            _program: &str,
+            args: &[String],
+            _timeout: Duration,
+        ) -> Result<SpawnOutput> {
+            *self.args.lock().unwrap() = args.to_vec();
+            Ok(self.output.clone())
+        }
+    }
 
     const HEVC_MP4: &str = r#"{
         "streams": [
@@ -347,5 +361,30 @@ mod tests {
         let err =
             artifact_from_ffprobe_json(Path::new("x.mp4"), 1, r#"{"streams":[]}"#).unwrap_err();
         assert_eq!(err.code, ErrorCode::InspectionUnsupported);
+    }
+
+    #[test]
+    fn ffprobe_stdout_overflow_is_a_stable_inspection_limit() {
+        let path =
+            std::env::temp_dir().join(format!("fitifact-probe-limit-{}.mp4", std::process::id()));
+        std::fs::write(&path, b"x").unwrap();
+        let spawner = ProbeSpawner {
+            output: SpawnOutput {
+                status: 0,
+                stdout: br#"{"streams":[]}"#.to_vec(),
+                stderr: Vec::new(),
+                stdout_truncated: true,
+                stderr_truncated: false,
+            },
+            args: std::sync::Mutex::new(Vec::new()),
+        };
+        let err = FfprobeInspector::new(&spawner).inspect(&path).unwrap_err();
+        assert_eq!(err.code, ErrorCode::InspectionLimit);
+        let args = spawner.args.lock().unwrap();
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["-protocol_whitelist", "file"])
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }
