@@ -3,7 +3,7 @@ title: "Transformation Graph"
 type: architecture
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - planner
@@ -16,18 +16,10 @@ tags:
 
 Nodes are artifact states. Edges are transform capabilities.
 
-```text
-MOV/HEVC/AAC/41MB
-   │ transcode video
-   ▼
-MOV/H264/AAC/~32MB
-   │ remux
-   ▼
-MP4/H264/AAC/~32MB
-   │ fit size
-   ▼
-MP4/H264/AAC/24.5MB
-```
+For v0.1 the graph contains only lossless remux to MP4 and selective
+HEVC-to-H.264 video transcode to MP4 with already-valid AAC copied. Size fitting,
+resizing, audio transcode, semantic/HDR conversion, and stream dropping have no
+edges and therefore produce explicit `cannot_satisfy` outcomes.
 
 ## Why graph search
 
@@ -77,7 +69,9 @@ Semantic transforms carry high penalties and clearer consent.
 
 ## Output uncertainty
 
-File size is often an estimate. Edge can expose range or bounded iterative controller.
+File size after remux or transcode is uncertain. If a mutation is required while
+a size limit is present, v0.1 refuses the plan rather than predicting the limit
+still passes. Bounded iterative fitting is deferred.
 
 ## Pruning
 

@@ -76,7 +76,7 @@ impl Capability {
         if self.requires_media && artifact.family != Family::Media {
             return false;
         }
-        if self.requires_video && artifact.video.is_none() {
+        if self.requires_video && artifact.first_video().is_none() {
             return false;
         }
         true

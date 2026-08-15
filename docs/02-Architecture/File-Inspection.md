@@ -3,7 +3,7 @@ title: "File Inspection"
 type: architecture
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - inspection
@@ -33,20 +33,26 @@ These are indicators, not a malware verdict.
 
 ## Media facts
 
-Normalize:
+The `fitifact.artifact/v1` media inspection normalizes every stream, not only
+the first video/audio stream:
 - container;
 - streams;
-- codecs/profile/level;
-- dimensions;
-- fps;
+- stream index and tagged type, including subtitle, data, attachment, and unknown;
+- video codec and dimensions;
+- rational frame rate;
 - bitrate;
 - duration;
-- pixel format;
-- HDR/color metadata;
+- pixel format and bit depth;
+- explicit HDR status and color range/space/transfer/primaries;
 - audio channels/sample rate;
 - subtitle/attachment streams.
 
-FFprobe is a strong initial provider candidate.
+FFprobe is the v0.1 provider. Unknown or omitted facts remain optional and never
+count as pass. Provider version is recorded when the probe output supplies it.
+
+Inspection accepts broader topologies than execution. Before planning a v0.1
+mutation, Fitifact requires exactly one video, zero or one audio, and no other
+streams; it refuses unsafe topology rather than dropping streams.
 
 ## Image facts
 

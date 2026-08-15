@@ -2,6 +2,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::contract::ErrorSchema;
+
 /// Machine-readable error categories from the v0 error model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -55,3 +57,26 @@ impl Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ErrorEnvelope {
+    pub schema: ErrorSchema,
+    pub code: ErrorCode,
+    pub message: String,
+    pub details: std::collections::BTreeMap<String, serde_json::Value>,
+    pub retryable: bool,
+    pub suggestions: Vec<String>,
+}
+
+impl From<Error> for ErrorEnvelope {
+    fn from(error: Error) -> Self {
+        Self {
+            schema: ErrorSchema,
+            code: error.code,
+            message: error.message,
+            details: std::collections::BTreeMap::new(),
+            retryable: false,
+            suggestions: Vec::new(),
+        }
+    }
+}

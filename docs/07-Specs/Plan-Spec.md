@@ -2,8 +2,8 @@
 title: "Plan Specification"
 type: spec
 status: active
-implementation: mixed
-updated: 2026-08-15
+implementation: implemented-v0.1
+updated: 2026-08-16
 canonical: true
 tags:
   - plan
@@ -12,80 +12,59 @@ tags:
 
 # Plan specification
 
-Status: conceptual.
-
-## Example
+The public plan envelope is `fitifact.plan/v1`. Every outcome is tagged as
+`compatible`, `planned`, or `cannot_satisfy` and records planner version
+`0.1.0`.
 
 ```yaml
 schema: fitifact.plan/v1
-id: plan_123
-input_hash: sha256:...
+kind: planned
 planner_version: 0.1.0
-constraints_hash: sha256:...
-
-steps:
-  - id: step-1
-    transform: media.transcode_video
-    params:
-      codec: h264
-      preserve_resolution: true
-    reason:
-      constraint: video-codec
-
-  - id: step-2
-    transform: media.fit_size
-    params:
-      max_bytes: 25000000
-      margin: 0.98
-    reason:
-      constraint: max-size
-
-expected:
-  media.video.codec: h264
-  file.bytes:
-    lte: 25000000
-
-preserved:
-  - media.audio.stream
-  - media.video.width
-  - media.video.height
-
-cost:
-  semantic_loss: none
-  lossy_operations: 1
-  compute: high
-
-warnings: []
+plan:
+  schema: fitifact.plan/v1
+  planner_version: 0.1.0
+  steps:
+    - id: step-1
+      operation: media.transcode_video
+      target:
+        container: mp4
+        video_codec: h264
+      reasons:
+        - constraint_id: video-codec
+          message: The target requires H.264 video.
+      expected:
+        - field: media.video.codec
+          value: h264
+        - field: media.container
+          value: mp4
+      preservation:
+        - video_dimensions
+        - audio_stream_copied
+      warnings: []
+  preserved:
+    - video_dimensions
+    - audio_stream_copied
+  warnings: []
 ```
 
-## Invariants
+Plans contain typed logical operations and targets only. They never serialize a
+provider name, executable, shell command, or argv. Reasons link steps to hard
+constraints; expected facts state only proven post-step facts; preservation
+claims state only guarantees of the logical operation.
 
-- exact input hash;
-- exact constraints hash;
-- typed steps;
-- no shell;
-- reasons link to requirements;
-- expected state;
-- validation implied by hard constraints.
+## v0.1 catalog and search
 
-## Expiry
+The catalog contains two operations: lossless remux to MP4, and HEVC-to-H.264
+video transcode to MP4 while copying already-valid AAC audio. Breadth-first
+search is bounded to depth 2 and candidates rank lexicographically by semantic
+loss, lossy steps, streams changed, then step count.
 
-Plan must be rejected/replanned if input, constraints or provider capability context materially changes.
+The planner refuses unsafe stream topology, non-MP4 targets, audio transcode,
+resize, size fitting, unsupported codecs/containers, HDR or greater-than-8-bit
+conversion, unknown facts needed for safety, and any transform after which a
+size constraint would be uncertain. `cannot_satisfy.blocking[]` carries stable
+machine-readable codes, related constraint IDs, and a readable message.
 
-## Alternatives
-
-Can return:
-- recommended;
-- fastest;
-- highest quality;
-- smallest.
-
-Every offered plan must satisfy hard constraints.
-
-## Unsatisfiable
-
-Return blocking constraints and minimal relaxations instead of fake plan.
-
-## Provider binding
-
-Logical transform can be provider-neutral until execution unless reproducibility pins a provider.
+Task 03 makes `adapt` replan from inspected input and constraints rather than
+trusting plan JSON. Input/constraint hashes and provider-capability snapshots
+remain future reproducibility work and are not claimed by v0.1.

@@ -3,7 +3,7 @@ title: "Error Model"
 type: spec
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - errors
@@ -34,6 +34,7 @@ tags:
 
 ```json
 {
+  "schema": "fitifact.error/v1",
   "code": "VALIDATION_FAILED",
   "message": "The output is still larger than the 25 MB limit.",
   "details": {
@@ -44,6 +45,11 @@ tags:
   "suggestions": []
 }
 ```
+
+Reusable error values carry `fitifact.error/v1`. Constraint parse errors use
+stable top-level codes (`INPUT_INVALID` or `REQUIREMENTS_CONFLICT`) and stable
+reason prefixes in their messages. Planner refusal is not an execution error:
+`fitifact.plan/v1` returns typed blocking codes in `cannot_satisfy`.
 
 ## User messaging
 

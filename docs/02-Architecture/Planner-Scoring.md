@@ -2,8 +2,8 @@
 title: "Planner and Scoring"
 type: architecture
 status: active
-implementation: mixed
-updated: 2026-08-15
+implementation: implemented-v0.1
+updated: 2026-08-16
 canonical: true
 tags:
   - planner
@@ -14,73 +14,40 @@ tags:
 
 ## Objective
 
-Find a plan that:
-1. satisfies every hard constraint;
-2. respects pinned preservation;
-3. minimizes damage and operational cost.
+Find a plan that satisfies every hard constraint using only proven operations,
+then changes as little as possible. Unknown facts are never pass, and a changed
+or uncertain fact is never predicted to remain compatible.
 
-## Avoid one magic score first
+## v0.1 search and ranking
 
-Recommended:
+Decision D-022 defines breadth-first search over the bounded capability catalog
+to maximum depth 2. Feasible candidates rank lexicographically by:
 
-### Feasibility filter
-Reject paths violating hard constraints, security policy or provider capability.
+1. semantic loss;
+2. lossy steps;
+3. streams changed;
+4. step count.
 
-### Pareto frontier
-Compare:
-- semantic loss;
-- quality loss;
-- compute;
-- latency;
-- output size;
-- compatibility confidence;
-- privacy/execution location.
+This is not a weighted score or Pareto frontier. Pareto ranking remains deferred
+until the catalog contains enough proven alternatives to justify it.
 
-### Preference ranking
-Apply user/default policy.
+The only v0.1 edges are lossless MP4 remux and HEVC-to-H.264 video transcode to
+MP4 with already-valid AAC copied. A compatible MP4/H.264/AAC input is a no-op;
+MOV/H.264/AAC selects remux; MP4/HEVC/AAC selects one video-transcode step.
 
-## Default priorities
+## Feasibility and refusal
 
-1. avoid semantic loss;
-2. avoid lossy conversion;
-3. preserve pinned properties;
-4. maximize compatibility confidence;
-5. minimize changed components;
-6. preserve perceptual quality;
-7. minimize compute/latency;
-8. minimize bytes only when relevant.
+Before search, the planner rejects targets or inputs requiring non-MP4 output,
+audio transcode, resizing, size fitting, semantic/HDR conversion,
+greater-than-8-bit conversion, unsupported codecs/containers, or unsafe stream
+topology. A passing size constraint becomes uncertain after remux or transcode,
+so a mutation with any size limit is also refused.
 
-## Example dominance
-
-Input:
-`MOV/H264/AAC/18MB`
-
-Target:
-`MP4/H264/AAC <=25MB`
-
-A: remux only.  
-B: full video+audio re-encode.
-
-A dominates B.
-
-## Size fitting
-
-Try:
-1. lossless reduction;
-2. remove optional data only if allowed;
-3. bitrate adjustment;
-4. resize/fps only if allowed and necessary;
-5. bounded retries.
+`cannot_satisfy` returns stable machine-readable blocking codes, related hard
+constraint IDs, and readable messages. It never emits a speculative plan.
 
 ## Explainability
 
-Plan stores reasons:
-- target requires h264;
-- audio already valid;
-- remux is lossless;
-- current size exceeds target.
-
-## Unsatisfiable
-
-Return blocking constraints and minimal relaxations, e.g.:
-> Cannot satisfy 1 MB while preserving 4K/current quality. Allow 1080p or a larger limit.
+Serialized plans are provider-neutral. Typed steps carry targets, linked
+reasons, proven expected facts, preservation claims, and warnings. Provider
+names, commands, shell strings, and argv belong only to execution.

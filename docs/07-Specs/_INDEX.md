@@ -2,7 +2,7 @@
 title: "Specs Index"
 type: index
 status: active
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - index
@@ -14,6 +14,7 @@ tags:
 - [[07-Specs/CLI-Spec]]
 - [[07-Specs/Profile-Spec]]
 - [[07-Specs/Constraint-Schema]]
+- [[07-Specs/Artifact-Schema]]
 - [[07-Specs/Plan-Spec]]
 - [[07-Specs/Error-Model]]
 - [[07-Specs/Security-Model]]

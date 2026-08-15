@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact::{Artifact, Family};
 use crate::constraints::{Constraint, ConstraintSet, ConstraintValue, Field, Operator};
+pub use crate::contract::{CHECK_SCHEMA, CheckSchema};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -22,6 +23,7 @@ pub struct ConstraintCheck {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompatibilityReport {
+    pub schema: CheckSchema,
     pub compatible: bool,
     pub checks: Vec<ConstraintCheck>,
 }
@@ -53,7 +55,11 @@ pub fn check(artifact: &Artifact, constraints: &ConstraintSet) -> CompatibilityR
         .map(|constraint| evaluate(artifact, constraint))
         .collect();
     let compatible = checks.iter().all(|c| c.result == CheckResult::Pass);
-    CompatibilityReport { compatible, checks }
+    CompatibilityReport {
+        schema: CheckSchema,
+        compatible,
+        checks,
+    }
 }
 
 fn evaluate(artifact: &Artifact, constraint: &Constraint) -> ConstraintCheck {
@@ -145,23 +151,19 @@ fn fact(artifact: &Artifact, field: Field) -> Option<Fact> {
             .as_ref()
             .map(|c| Fact::Text(c.as_str().to_string())),
         Field::MediaVideoCodec => artifact
-            .video
-            .as_ref()
+            .first_video()
             .and_then(|v| v.codec.as_ref())
             .map(|c| Fact::Text(c.as_str().to_string())),
         Field::MediaAudioCodec => artifact
-            .audio
-            .as_ref()
+            .first_audio()
             .and_then(|a| a.codec.as_ref())
             .map(|c| Fact::Text(c.as_str().to_string())),
         Field::MediaVideoWidth => artifact
-            .video
-            .as_ref()
+            .first_video()
             .and_then(|v| v.width)
             .map(|w| Fact::Int(u64::from(w))),
         Field::MediaVideoHeight => artifact
-            .video
-            .as_ref()
+            .first_video()
             .and_then(|v| v.height)
             .map(|h| Fact::Int(u64::from(h))),
     }
@@ -257,7 +259,7 @@ mod tests {
             Some(AudioCodec::Aac),
             1_000,
         );
-        artifact.video.as_mut().unwrap().codec = None;
+        artifact.first_video_mut().unwrap().codec = None;
         let report = check(&artifact, &target());
         assert!(!report.compatible);
         let video = report
@@ -274,7 +276,8 @@ mod tests {
         let constraints = compile(ConstraintInput {
             max_bytes: Some(25),
             ..ConstraintInput::default()
-        });
+        })
+        .unwrap();
         let report = check(&artifact, &constraints);
         assert_eq!(report.checks[0].result, CheckResult::Fail);
     }
@@ -285,7 +288,8 @@ mod tests {
         let constraints = compile(ConstraintInput {
             max_bytes: Some(25),
             ..ConstraintInput::default()
-        });
+        })
+        .unwrap();
         assert!(check(&artifact, &constraints).compatible);
     }
 }

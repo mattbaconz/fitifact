@@ -2,8 +2,8 @@
 title: "Constraint Schema"
 type: spec
 status: active
-implementation: mixed
-updated: 2026-08-15
+implementation: implemented-v0.1
+updated: 2026-08-16
 canonical: true
 tags:
   - constraints
@@ -12,87 +12,51 @@ tags:
 
 # Constraint schema
 
-Status: conceptual.
+The public v0.1 contract is `fitifact.constraints/v1`. YAML and JSON use the
+same hard-constraint shape:
 
-## Constraint
-
-```json
-{
-  "id": "max-size",
-  "field": "file.bytes",
-  "op": "lte",
-  "value": 5000000,
-  "severity": "hard",
-  "source": "src-1"
-}
+```yaml
+schema: fitifact.constraints/v1
+hard:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+preferences:
+  preserve_audio: true
+  preserve_resolution: true
 ```
 
-## Operators
+## v0.1 fields and combinations
 
-Initial:
-- eq;
-- neq;
-- in;
-- not_in;
-- lt/lte/gt/gte;
-- exists;
-- absent;
-- ratio_eq.
+| Field | Operator | Value |
+| --- | --- | --- |
+| `file.family` | `eq` | known family string |
+| `media.container` | `in` | non-empty known-container list |
+| `media.video.codec` | `in` | non-empty known-video-codec list |
+| `media.audio.codec` | `in` | non-empty known-audio-codec list |
+| `file.bytes` | `lte` | positive integer bytes |
+| `media.video.width` | `lte` | positive integer pixels |
+| `media.video.height` | `lte` | positive integer pixels |
 
-Later:
-- conditional;
-- any_of groups.
+The parser rejects input over 1 MiB, a missing or wrong schema, an empty hard
+target, blank or duplicate IDs, conflicting requirements, unknown keys or enum
+values, empty lists, zero limits, and every unsupported field/operator/value
+combination. Unknown extension fields are not ignored in v0.1.
 
-## Fields
+Programmatic CLI inputs compile into this same validated model. Size text may be
+whole unadorned bytes, decimal `MB`, or binary `MiB`; unit names are
+case-insensitive. Unitless fractions, fractional-byte results, ambiguous units,
+and overflow are rejected.
 
-### File
-`file.bytes`, `file.family`, `file.extension`, `file.mime`
-
-### Image
-`image.format`, `width`, `height`, `aspect_ratio`, `alpha`, `frame_count`, `bit_depth`, `colorspace`
-
-### Media
-`media.container`, `duration_ms`, `video.codec`, `video.width`, `video.height`, `video.fps`, `video.pixel_format`, `video.hdr`, `audio.codec`, `audio.channels`, `audio.sample_rate`
-
-### PDF later
-`pdf.version`, `pdf.pages`, `pdf.encrypted`, active features, etc.
-
-## Preferences
-
-```json
-{
-  "preserve": {
-    "resolution": "high",
-    "frameRate": "high",
-    "audio": "high",
-    "metadata": "medium"
-  },
-  "execution": {
-    "prefer": "local"
-  }
-}
-```
-
-Do not expose internal numeric weights as ordinary user API.
-
-## Units
-
-Canonical:
-- bytes;
-- pixels;
-- milliseconds;
-- rational fps;
-- Hz.
-
-Human parsers normalize.
-
-## Unknown
-
-Unknown inspection fact does not satisfy a hard constraint.
-
-## Extension namespace
-
-Third parties can define:
-`x.vendor.field`
-
-Core ignores unknown extension fields unless registered.
+An unknown inspection fact never satisfies a hard constraint. File-size and
+dimension constraints are check-only in v0.1; the planner refuses fitting or
+resizing.

@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::artifact::{Artifact, Container};
 use crate::capability::{CapabilityCatalog, default_catalog};
 use crate::check::{CompatibilityReport, check};
-use crate::constraints::{ConstraintSet, Field};
+use crate::constraints::ConstraintSet;
+use crate::contract::{AdaptationSchema, ErrorSchema};
 use crate::error::{Error, ErrorCode, Result};
 use crate::inspect::Inspector;
 use crate::plan::{Plan, PlanOutcome, plan};
@@ -34,12 +35,14 @@ pub struct AdaptRequest<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorInfo {
+    pub schema: ErrorSchema,
     pub code: ErrorCode,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdaptationResult {
+    pub schema: AdaptationSchema,
     pub status: AdaptationStatus,
     pub original: PathBuf,
     pub output: Option<PathBuf>,
@@ -60,7 +63,8 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
     let explanation = explain_plan(&artifact, &report, &outcome);
 
     match outcome {
-        PlanOutcome::Compatible => Ok(AdaptationResult {
+        PlanOutcome::Compatible { .. } => Ok(AdaptationResult {
+            schema: AdaptationSchema,
             status: AdaptationStatus::Compatible,
             original,
             output: None,
@@ -71,7 +75,8 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
             explanation,
             error: None,
         }),
-        PlanOutcome::CannotSatisfy { blocking } => Ok(AdaptationResult {
+        PlanOutcome::CannotSatisfy { blocking, .. } => Ok(AdaptationResult {
+            schema: AdaptationSchema,
             status: AdaptationStatus::CannotSatisfy,
             original,
             output: None,
@@ -84,17 +89,25 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 details: {
                     let mut d = explanation.details;
                     if !blocking.is_empty() {
-                        d.push(format!("Blocking: {}", blocking.join(", ")));
+                        d.push(format!(
+                            "Blocking: {}",
+                            blocking
+                                .iter()
+                                .map(|reason| reason.message.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
                     }
                     d
                 },
             },
             error: Some(ErrorInfo {
+                schema: ErrorSchema,
                 code: ErrorCode::NoValidPlan,
                 message: "no acceptable plan satisfies the hard constraints".into(),
             }),
         }),
-        PlanOutcome::Planned { plan } => {
+        PlanOutcome::Planned { plan, .. } => {
             let output = match request.output {
                 Some(path) => path,
                 None => default_output(&original, &plan, artifact.container.as_ref()),
@@ -119,6 +132,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
             match validate(&output, &request.constraints, request.inspector) {
                 Ok(validation) if validation.status == ValidationStatus::Pass => {
                     Ok(AdaptationResult {
+                        schema: AdaptationSchema,
                         status: AdaptationStatus::Adapted,
                         original,
                         output: Some(output),
@@ -166,6 +180,7 @@ fn failed(
     validation: Option<ValidationReport>,
 ) -> AdaptationResult {
     AdaptationResult {
+        schema: AdaptationSchema,
         status: AdaptationStatus::Failed,
         original,
         output: None,
@@ -175,6 +190,7 @@ fn failed(
         validation,
         explanation,
         error: Some(ErrorInfo {
+            schema: ErrorSchema,
             code: err.code,
             message: err.message,
         }),
@@ -186,12 +202,7 @@ fn default_output(input: &Path, plan: &Plan, current: Option<&Container>) -> Pat
         .steps
         .iter()
         .rev()
-        .find_map(|step| {
-            step.params
-                .iter()
-                .find(|p| p.field == Field::MediaContainer)
-                .map(|p| Container::parse_loose(&p.value))
-        })
+        .find_map(|step| step.target.container.clone())
         .or_else(|| current.cloned())
         .unwrap_or(Container::Mp4);
     let ext = match container {

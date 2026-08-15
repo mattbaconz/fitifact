@@ -3,7 +3,7 @@ title: "Data Model"
 type: architecture
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - data-model
@@ -15,32 +15,34 @@ tags:
 
 ### Artifact
 ```text
-id
-content_hash
-original_name
+schema: fitifact.artifact/v1
+path?
 byte_length
 family
+container?
+streams[]
+duration_ms?
 inspection
-source
 ```
 
 ### Inspection
 ```text
-schema_version
 provider
 provider_version
-facts
 warnings
 completeness
 ```
 
+Each normalized stream retains its probe index when known and a tagged type.
+Video streams carry codec, dimensions, rational frame rate, pixel format, bit
+depth, color facts, and explicit HDR status. Audio and all non-A/V stream types
+remain represented rather than being silently dropped.
+
 ### ConstraintSet
 ```text
+schema: fitifact.constraints/v1
 hard[]
-preferences[]
-unresolved[]
-conflicts[]
-provenance[]
+preferences
 ```
 
 ### DestinationProfile
@@ -68,16 +70,15 @@ execution_modes
 
 ### Plan
 ```text
-id
-planner_version
-input_hash
-constraints_hash
+schema: fitifact.plan/v1
+planner_version: 0.1.0
 steps[]
-expected_state
-cost
-reasons[]
 warnings[]
 ```
+
+Steps carry typed provider-neutral operations and targets, reasons, expected
+post-step facts, preservation claims, and warnings. Provider commands and argv
+are execution details and never part of the plan contract.
 
 ### ExecutionResult
 ```text

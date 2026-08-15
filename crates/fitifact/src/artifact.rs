@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::contract::{ARTIFACT_SCHEMA, ArtifactSchema};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Family {
@@ -18,6 +20,18 @@ impl Family {
             Self::Unknown => "unknown",
         }
     }
+
+    pub fn parse_constraint(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "media" | "video" | "audio" => Some(Self::Media),
+            "image" | "picture" => Some(Self::Image),
+            _ => None,
+        }
+    }
+
+    pub fn from_str_loose(raw: &str) -> Self {
+        Self::parse_constraint(raw).unwrap_or(Self::Unknown)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,15 +45,25 @@ pub enum Container {
 }
 
 impl Container {
+    pub fn parse_constraint(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "mp4" => Some(Self::Mp4),
+            "mov" | "quicktime" | "qt" => Some(Self::Mov),
+            "webm" => Some(Self::Webm),
+            "mkv" | "matroska" => Some(Self::Mkv),
+            _ => None,
+        }
+    }
+
     pub fn parse_loose(raw: &str) -> Self {
         let lower = raw.to_ascii_lowercase();
-        if lower.split(',').any(|p| p.trim() == "mp4") || lower.contains("isom") {
+        if lower.split(',').any(|part| part.trim() == "mp4") || lower.contains("isom") {
             return Self::Mp4;
         }
         if lower.contains("webm") {
             return Self::Webm;
         }
-        if lower.contains("matroska") || lower.split(',').any(|p| p.trim() == "mkv") {
+        if lower.contains("matroska") || lower.split(',').any(|part| part.trim() == "mkv") {
             return Self::Mkv;
         }
         if lower.contains("mov") || lower.contains("quicktime") || lower.trim() == "qt" {
@@ -86,6 +110,16 @@ pub enum VideoCodec {
 }
 
 impl VideoCodec {
+    pub fn parse_constraint(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "h264" | "avc" | "avc1" | "avc3" => Some(Self::H264),
+            "hevc" | "h265" | "hvc1" | "hev1" => Some(Self::Hevc),
+            "vp9" | "vp09" => Some(Self::Vp9),
+            "av1" | "av01" => Some(Self::Av1),
+            _ => None,
+        }
+    }
+
     pub fn parse_loose(raw: &str) -> Self {
         match raw.to_ascii_lowercase().as_str() {
             "h264" | "avc" | "avc1" | "avc3" | "libx264" => Self::H264,
@@ -117,6 +151,15 @@ pub enum AudioCodec {
 }
 
 impl AudioCodec {
+    pub fn parse_constraint(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "aac" | "mp4a" => Some(Self::Aac),
+            "mp3" | "mp3float" => Some(Self::Mp3),
+            "opus" => Some(Self::Opus),
+            _ => None,
+        }
+    }
+
     pub fn parse_loose(raw: &str) -> Self {
         match raw.to_ascii_lowercase().as_str() {
             "aac" | "mp4a" => Self::Aac,
@@ -136,12 +179,42 @@ impl AudioCodec {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rational {
+    pub numerator: u32,
+    pub denominator: u32,
+}
+
+impl Rational {
+    pub fn new(numerator: u32, denominator: u32) -> Option<Self> {
+        (denominator != 0).then_some(Self {
+            numerator,
+            denominator,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HdrStatus {
+    Sdr,
+    Hdr,
+    Unknown,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VideoStream {
     pub codec: Option<VideoCodec>,
     pub width: Option<u32>,
     pub height: Option<u32>,
-    pub sample_rate: Option<u32>,
+    pub frame_rate: Option<Rational>,
+    pub pixel_format: Option<String>,
+    pub bit_depth: Option<u8>,
+    pub color_range: Option<String>,
+    pub color_space: Option<String>,
+    pub color_transfer: Option<String>,
+    pub color_primaries: Option<String>,
+    pub hdr: HdrStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +222,101 @@ pub struct AudioStream {
     pub codec: Option<AudioCodec>,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OtherStream {
+    pub codec: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StreamDetails {
+    Video {
+        #[serde(flatten)]
+        facts: VideoStream,
+    },
+    Audio {
+        #[serde(flatten)]
+        facts: AudioStream,
+    },
+    Subtitle {
+        #[serde(flatten)]
+        facts: OtherStream,
+    },
+    Data {
+        #[serde(flatten)]
+        facts: OtherStream,
+    },
+    Attachment {
+        #[serde(flatten)]
+        facts: OtherStream,
+    },
+    Unknown {
+        original_type: Option<String>,
+        #[serde(flatten)]
+        facts: OtherStream,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stream {
+    pub index: Option<u32>,
+    #[serde(flatten)]
+    pub details: StreamDetails,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamType {
+    Video,
+    Audio,
+    Subtitle,
+    Data,
+    Attachment,
+    Unknown(Option<String>),
+}
+
+impl Stream {
+    pub fn stream_type(&self) -> StreamType {
+        match &self.details {
+            StreamDetails::Video { .. } => StreamType::Video,
+            StreamDetails::Audio { .. } => StreamType::Audio,
+            StreamDetails::Subtitle { .. } => StreamType::Subtitle,
+            StreamDetails::Data { .. } => StreamType::Data,
+            StreamDetails::Attachment { .. } => StreamType::Attachment,
+            StreamDetails::Unknown { original_type, .. } => {
+                StreamType::Unknown(original_type.clone())
+            }
+        }
+    }
+
+    pub fn video(&self) -> Option<&VideoStream> {
+        match &self.details {
+            StreamDetails::Video { facts } => Some(facts),
+            _ => None,
+        }
+    }
+
+    pub fn video_mut(&mut self) -> Option<&mut VideoStream> {
+        match &mut self.details {
+            StreamDetails::Video { facts } => Some(facts),
+            _ => None,
+        }
+    }
+
+    pub fn audio(&self) -> Option<&AudioStream> {
+        match &self.details {
+            StreamDetails::Audio { facts } => Some(facts),
+            _ => None,
+        }
+    }
+
+    pub fn audio_mut(&mut self) -> Option<&mut AudioStream> {
+        match &mut self.details {
+            StreamDetails::Audio { facts } => Some(facts),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,12 +336,12 @@ pub enum Completeness {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Artifact {
+    pub schema: ArtifactSchema,
     pub path: Option<PathBuf>,
     pub family: Family,
     pub byte_length: u64,
     pub container: Option<Container>,
-    pub video: Option<VideoStream>,
-    pub audio: Option<AudioStream>,
+    pub streams: Vec<Stream>,
     pub duration_ms: Option<u64>,
     pub inspection: InspectionMeta,
 }
@@ -185,26 +353,50 @@ impl Artifact {
         audio: Option<AudioCodec>,
         bytes: u64,
     ) -> Self {
+        let mut streams = vec![Stream {
+            index: Some(0),
+            details: StreamDetails::Video {
+                facts: VideoStream {
+                    codec: Some(video),
+                    width: Some(1920),
+                    height: Some(1080),
+                    frame_rate: Some(Rational {
+                        numerator: 30,
+                        denominator: 1,
+                    }),
+                    pixel_format: Some("yuv420p".into()),
+                    bit_depth: Some(8),
+                    color_range: Some("tv".into()),
+                    color_space: Some("bt709".into()),
+                    color_transfer: Some("bt709".into()),
+                    color_primaries: Some("bt709".into()),
+                    hdr: HdrStatus::Sdr,
+                },
+            },
+        }];
+        if let Some(codec) = audio {
+            streams.push(Stream {
+                index: Some(1),
+                details: StreamDetails::Audio {
+                    facts: AudioStream {
+                        codec: Some(codec),
+                        channels: Some(2),
+                        sample_rate: Some(48_000),
+                    },
+                },
+            });
+        }
         Self {
+            schema: ArtifactSchema,
             path: None,
             family: Family::Media,
             byte_length: bytes,
             container: Some(container),
-            video: Some(VideoStream {
-                codec: Some(video),
-                width: Some(1920),
-                height: Some(1080),
-                sample_rate: None,
-            }),
-            audio: audio.map(|codec| AudioStream {
-                codec: Some(codec),
-                channels: Some(2),
-                sample_rate: Some(48_000),
-            }),
+            streams,
             duration_ms: Some(1_000),
             inspection: InspectionMeta {
                 provider: "fixture".into(),
-                provider_version: None,
+                provider_version: Some("test".into()),
                 completeness: Completeness::Full,
                 warnings: Vec::new(),
             },
@@ -213,20 +405,44 @@ impl Artifact {
 
     pub fn image_stub(bytes: u64) -> Self {
         Self {
+            schema: ArtifactSchema,
             path: None,
             family: Family::Image,
             byte_length: bytes,
             container: None,
-            video: None,
-            audio: None,
+            streams: Vec::new(),
             duration_ms: None,
             inspection: InspectionMeta {
                 provider: "fixture".into(),
-                provider_version: None,
+                provider_version: Some("test".into()),
                 completeness: Completeness::Full,
                 warnings: Vec::new(),
             },
         }
+    }
+
+    pub fn video_streams(&self) -> impl Iterator<Item = &VideoStream> {
+        self.streams.iter().filter_map(Stream::video)
+    }
+
+    pub fn audio_streams(&self) -> impl Iterator<Item = &AudioStream> {
+        self.streams.iter().filter_map(Stream::audio)
+    }
+
+    pub fn first_video(&self) -> Option<&VideoStream> {
+        self.video_streams().next()
+    }
+
+    pub fn first_video_mut(&mut self) -> Option<&mut VideoStream> {
+        self.streams.iter_mut().find_map(Stream::video_mut)
+    }
+
+    pub fn first_audio(&self) -> Option<&AudioStream> {
+        self.audio_streams().next()
+    }
+
+    pub fn first_audio_mut(&mut self) -> Option<&mut AudioStream> {
+        self.streams.iter_mut().find_map(Stream::audio_mut)
     }
 }
 

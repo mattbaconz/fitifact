@@ -243,9 +243,10 @@ pub struct SpawnLog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::artifact::Container;
     use crate::capability::TransformId;
-    use crate::constraints::Field;
-    use crate::plan::{PlanStep, StepParam};
+    use crate::contract::PlanSchema;
+    use crate::plan::{PLANNER_VERSION, PlanStep, StepTarget};
 
     struct ForbiddenSpawner;
 
@@ -263,16 +264,22 @@ mod tests {
     #[test]
     fn execute_refuses_overwrite() {
         let plan = Plan {
+            schema: PlanSchema,
+            planner_version: PLANNER_VERSION.into(),
             steps: vec![PlanStep {
                 id: "step-1".into(),
-                transform: TransformId::Remux,
-                params: vec![StepParam {
-                    field: Field::MediaContainer,
-                    value: "mp4".into(),
-                }],
-                reason: vec!["container".into()],
+                operation: TransformId::Remux,
+                target: StepTarget {
+                    container: Some(Container::Mp4),
+                    video_codec: None,
+                },
+                reasons: Vec::new(),
+                expected: Vec::new(),
+                preservation: Vec::new(),
+                warnings: Vec::new(),
             }],
             preserved: Vec::new(),
+            warnings: Vec::new(),
         };
         let provider = crate::ffmpeg::FfmpegProvider::new(ForbiddenSpawner);
         let err = execute(

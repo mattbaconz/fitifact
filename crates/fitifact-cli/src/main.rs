@@ -181,7 +181,7 @@ fn plan_cmd(
         }
     }
     match outcome {
-        PlanOutcome::Compatible => Ok(ExitCode::SUCCESS),
+        PlanOutcome::Compatible { .. } => Ok(ExitCode::SUCCESS),
         PlanOutcome::Planned { .. } => Ok(ExitCode::SUCCESS),
         PlanOutcome::CannotSatisfy { .. } => Ok(ExitCode::from(3)),
     }
@@ -289,7 +289,7 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
             "provide destination constraints via flags (e.g. --container mp4 --video-codec h264) or --constraints FILE.yaml",
         ));
     }
-    Ok(compile(ConstraintInput {
+    compile(ConstraintInput {
         container: target.container.clone().map(|v| vec![v]),
         video_codec: target.video_codec.clone().map(|v| vec![v]),
         audio_codec: target.audio_codec.clone().map(|v| vec![v]),
@@ -297,7 +297,8 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
         max_width: target.max_width,
         max_height: target.max_height,
         ..ConstraintInput::default()
-    }))
+    })
+    .map_err(CliError::engine)
 }
 
 fn print_inspect(artifact: &Artifact) {
@@ -319,8 +320,7 @@ fn print_inspect(artifact: &Artifact) {
     println!(
         "Video           {}",
         artifact
-            .video
-            .as_ref()
+            .first_video()
             .and_then(|v| v.codec.as_ref())
             .map(|c| c.as_str().to_ascii_uppercase())
             .unwrap_or_else(|| "none".into())
@@ -328,13 +328,12 @@ fn print_inspect(artifact: &Artifact) {
     println!(
         "Audio           {}",
         artifact
-            .audio
-            .as_ref()
+            .first_audio()
             .and_then(|a| a.codec.as_ref())
             .map(|c| c.as_str().to_ascii_uppercase())
             .unwrap_or_else(|| "none".into())
     );
-    if let Some(video) = &artifact.video
+    if let Some(video) = artifact.first_video()
         && let (Some(w), Some(h)) = (video.width, video.height)
     {
         println!("Resolution      {w}×{h}");
