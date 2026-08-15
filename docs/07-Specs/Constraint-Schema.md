@@ -13,7 +13,10 @@ tags:
 # Constraint schema
 
 The public v0.1 contract is `fitifact.constraints/v1`. YAML and JSON use the
-same hard-constraint shape:
+same hard-constraint shape. Callers must parse public input with
+`compile_from_yaml` or `compile_from_json`; direct
+`serde_json::from_str::<ConstraintSet>` only deserializes the Rust shape and is
+not a semantic-validation entry point.
 
 ```yaml
 schema: fitifact.constraints/v1
@@ -47,12 +50,13 @@ preferences:
 | `media.video.width` | `lte` | positive integer pixels |
 | `media.video.height` | `lte` | positive integer pixels |
 
-The parser rejects input over 1 MiB, a missing or wrong schema, an empty hard
+Both validating compiler functions reject input over 1 MiB, a missing or wrong schema, an empty hard
 target, blank or duplicate IDs, conflicting requirements, unknown keys or enum
 values, empty lists, zero limits, and every unsupported field/operator/value
 combination. Unknown extension fields are not ignored in v0.1.
 
-Programmatic CLI inputs compile into this same validated model. Size text may be
+Programmatic CLI inputs compile into this same validated model through
+`compile`. Size text may be
 whole unadorned bytes, decimal `MB`, or binary `MiB`; unit names are
 case-insensitive. Unitless fractions, fractional-byte results, ambiguous units,
 and overflow are rejected.

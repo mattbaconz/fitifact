@@ -22,7 +22,8 @@ pub use artifact::{Artifact, AudioCodec, AudioStream, Container, Family, VideoCo
 pub use capability::{CapabilityCatalog, TransformId, default_catalog};
 pub use check::{CheckResult, CompatibilityReport, check};
 pub use constraints::{
-    ConstraintInput, ConstraintSet, compile, compile_from_yaml, media_h264_mp4_aac,
+    ConstraintInput, ConstraintSet, compile, compile_from_json, compile_from_yaml,
+    media_h264_mp4_aac,
 };
 pub use error::{Error, ErrorCode};
 pub use ffmpeg::{FfmpegProvider, ffmpeg_args};

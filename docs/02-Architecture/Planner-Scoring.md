@@ -39,9 +39,12 @@ MOV/H.264/AAC selects remux; MP4/HEVC/AAC selects one video-transcode step.
 
 Before search, the planner rejects targets or inputs requiring non-MP4 output,
 audio transcode, resizing, size fitting, semantic/HDR conversion,
-greater-than-8-bit conversion, unsupported codecs/containers, or unsafe stream
-topology. A passing size constraint becomes uncertain after remux or transcode,
-so a mutation with any size limit is also refused.
+bit-depth conversion, pixel-format conversion, color conversion, unsupported
+codecs/containers, or unsafe stream topology. Same-field set requirements are
+intersected before feasibility checks, independent of source order. Selective
+transcode requires known 8-bit `yuv420p`, SDR, limited-range BT.709 facts. A
+passing size constraint becomes uncertain after remux or transcode, so a
+mutation with any size limit is also refused.
 
 `cannot_satisfy` returns stable machine-readable blocking codes, related hard
 constraint IDs, and readable messages. It never emits a speculative plan.

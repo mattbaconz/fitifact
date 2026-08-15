@@ -39,10 +39,14 @@ plan:
           value: mp4
       preservation:
         - video_dimensions
+        - video_pixel_format
+        - video_color_metadata
         - audio_stream_copied
       warnings: []
   preserved:
     - video_dimensions
+    - video_pixel_format
+    - video_color_metadata
     - audio_stream_copied
   warnings: []
 ```
@@ -59,10 +63,15 @@ video transcode to MP4 while copying already-valid AAC audio. Breadth-first
 search is bounded to depth 2 and candidates rank lexicographically by semantic
 loss, lossy steps, streams changed, then step count.
 
-The planner refuses unsafe stream topology, non-MP4 targets, audio transcode,
-resize, size fitting, unsupported codecs/containers, HDR or greater-than-8-bit
-conversion, unknown facts needed for safety, and any transform after which a
-size constraint would be uncertain. `cannot_satisfy.blocking[]` carries stable
+The planner intersects every same-field `in` constraint before deciding the
+effective target, so constraint order cannot change feasibility. It refuses
+unsafe stream topology, non-MP4 targets, audio transcode, resize, size fitting,
+unsupported codecs/containers, HDR or bit-depth conversion, pixel-format or
+color conversion, unknown facts needed for safety, and any transform after
+which a size constraint would be uncertain. Selective transcode is restricted
+to known 8-bit `yuv420p`, SDR, limited-range BT.709 input; other or unknown
+pixel/color facts return stable blocking reasons rather than allowing FFmpeg to
+force a semantic conversion. `cannot_satisfy.blocking[]` carries stable
 machine-readable codes, related constraint IDs, and a readable message.
 
 Task 03 makes `adapt` replan from inspected input and constraints rather than

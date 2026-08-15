@@ -202,6 +202,16 @@ pub enum HdrStatus {
     Unknown,
 }
 
+impl HdrStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sdr => "sdr",
+            Self::Hdr => "hdr",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VideoStream {
     pub codec: Option<VideoCodec>,

@@ -25,3 +25,5 @@ All notable changes to Fitifact are documented here.
   operations work as deferred.
 - Refused unsafe stream topology, unsupported mutation classes, HDR/bit-depth
   conversion, and uncertain post-transform size claims.
+- Made overlapping target sets order-independent, added strict public JSON
+  constraint compilation, and refused unproved pixel/color conversion.

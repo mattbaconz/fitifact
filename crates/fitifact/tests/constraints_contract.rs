@@ -1,4 +1,6 @@
-use fitifact::constraints::{CONSTRAINTS_SCHEMA, compile_from_yaml, parse_size_bytes};
+use fitifact::constraints::{
+    CONSTRAINTS_SCHEMA, compile_from_json, compile_from_yaml, parse_size_bytes,
+};
 use fitifact::error::ErrorCode;
 
 fn yaml(hard: &str) -> String {
@@ -116,4 +118,60 @@ fn size_parser_rejects_unitless_fractions_bad_units_fractional_bytes_and_overflo
     for value in ["1.5", "1 KB", "0.0000001 MB", "18446744073709551616"] {
         assert!(parse_size_bytes(value).is_err(), "accepted {value}");
     }
+}
+
+#[test]
+fn parses_valid_json_through_the_public_validating_compiler() {
+    let constraints = compile_from_json(
+        r#"{
+            "schema": "fitifact.constraints/v1",
+            "hard": [
+                {"id":"container","field":"media.container","op":"in","value":["mp4"]},
+                {"id":"video","field":"media.video.codec","op":"in","value":["h264"]}
+            ],
+            "preferences": {"preserve_audio":true,"preserve_resolution":true}
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(constraints.hard.len(), 2);
+    assert_eq!(
+        serde_json::to_value(constraints).unwrap()["schema"],
+        CONSTRAINTS_SCHEMA
+    );
+}
+
+#[test]
+fn json_compiler_rejects_size_schema_unknown_fields_and_semantic_errors() {
+    let oversized = "x".repeat(1024 * 1024 + 1);
+    assert_eq!(
+        compile_from_json(&oversized).unwrap_err().code,
+        ErrorCode::InputInvalid
+    );
+
+    for invalid in [
+        r#"{"hard":[{"id":"x","field":"file.bytes","op":"lte","value":1}]}"#,
+        r#"{"schema":"fitifact.constraints/v2","hard":[{"id":"x","field":"file.bytes","op":"lte","value":1}]}"#,
+        r#"{"schema":"fitifact.constraints/v1","hard":[{"id":"x","field":"file.bytes","op":"lte","value":1}],"unknown":true}"#,
+        r#"{"schema":"fitifact.constraints/v1","hard":[]}"#,
+        r#"{"schema":"fitifact.constraints/v1","hard":[{"id":"x","field":"file.bytes","op":"lte","value":0}]}"#,
+        r#"{"schema":"fitifact.constraints/v1","hard":[{"id":"x","field":"media.video.codec","op":"in","value":["theora"]}]}"#,
+    ] {
+        let error = compile_from_json(invalid).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InputInvalid, "{error}");
+    }
+}
+
+#[test]
+fn json_compiler_returns_the_stable_conflict_error() {
+    let error = compile_from_json(
+        r#"{
+            "schema":"fitifact.constraints/v1",
+            "hard":[
+                {"id":"mp4","field":"media.container","op":"in","value":["mp4"]},
+                {"id":"mov","field":"media.container","op":"in","value":["mov"]}
+            ]
+        }"#,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::RequirementsConflict);
 }
