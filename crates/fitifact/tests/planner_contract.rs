@@ -291,6 +291,40 @@ fn refuses_ambiguous_mov_family_containers_instead_of_no_op() {
 }
 
 #[test]
+fn refuses_every_source_outside_the_exact_v01_operation_matrix() {
+    for container in [
+        Container::Webm,
+        Container::Mkv,
+        Container::Unknown("ambiguous".into()),
+    ] {
+        for codec in [VideoCodec::H264, VideoCodec::Hevc] {
+            let artifact = Artifact::media(
+                container.clone(),
+                codec.clone(),
+                Some(AudioCodec::Aac),
+                1000,
+            );
+            assert_eq!(
+                blocking(&artifact, &media_h264_mp4_aac()),
+                vec![BlockingCode::UnsupportedContainer],
+                "source {container:?} with {codec:?} must refuse"
+            );
+        }
+    }
+
+    let mov_hevc = Artifact::media(
+        Container::Mov,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_eq!(
+        blocking(&mov_hevc, &media_h264_mp4_aac()),
+        vec![BlockingCode::UnsupportedContainer]
+    );
+}
+
+#[test]
 fn intersected_container_target_is_order_independent() {
     let artifact = Artifact::media(
         Container::Mp4,

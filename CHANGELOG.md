@@ -51,3 +51,6 @@ All notable changes to Fitifact are documented here.
   QuickTime brand, rejected mixed constraint-file/flag targets, bounded
   constraint-file reads to 1 MiB, and locked GitHub publication to one
   attestation-ordered release creation command.
+- Treated FFprobe's shared `matroska,webm` label as unknown, kept unknown
+  container facts from being reinterpreted during checks, and aligned planning
+  and execution to the exact MOV/H.264 remux and MP4/HEVC transcode sources.

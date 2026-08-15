@@ -51,8 +51,8 @@ and `fitifact-cli` binary. v0.1 is CLI-only, media-only, and uses system
 The executable adaptation catalog is deliberately small:
 
 - MP4/H.264/AAC that already satisfies the constraints is a no-op;
-- compatible media streams in the wrong container can be remuxed;
-- HEVC video can be transcoded to H.264 while compatible AAC audio is copied;
+- MOV/H.264/AAC can be remuxed to MP4 without re-encoding;
+- MP4/HEVC/AAC can be transcoded to MP4/H.264/AAC while AAC is copied;
 - every other requested mutation is refused explicitly.
 
 File-size and video-dimension constraints can be inspected and checked, but v0.1

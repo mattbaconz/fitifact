@@ -47,9 +47,10 @@ combining them is a structured usage error with exit 64. Constraint documents
 are read through a 1 MiB bounded reader before UTF-8 and YAML validation; one
 byte beyond the limit is rejected without reading or allocating the remainder.
 
-Container and HEVC-to-H.264 changes are executable within the D-020 matrix.
-File-size and dimension constraints are check-only in v0.1. Unsupported
-mutations return an unsatisfiable result rather than a misleading plan.
+Only MOV/H.264-to-MP4 remux and MP4/HEVC-to-H.264 transcode are executable
+within the D-020 matrix. File-size and dimension constraints are check-only in
+v0.1. Unsupported source containers or mutations return an unsatisfiable result
+rather than a misleading plan.
 
 Default adaptation output is a unique sibling such as `video.fitifact.mp4`,
 then `video.fitifact.2.mp4`. `-o` selects a different new output path. Existing

@@ -16,10 +16,11 @@ tags:
 
 Nodes are artifact states. Edges are transform capabilities.
 
-For v0.1 the graph contains only lossless remux to MP4 and selective
-HEVC-to-H.264 video transcode to MP4 with already-valid AAC copied. Size fitting,
-resizing, audio transcode, semantic/HDR conversion, and stream dropping have no
-edges and therefore produce explicit `cannot_satisfy` outcomes.
+For v0.1 the graph contains only MOV/H.264-to-MP4 lossless remux and selective
+MP4/HEVC-to-H.264 video transcode with already-valid AAC copied. Other source
+containers, size fitting, resizing, audio transcode, semantic/HDR conversion,
+and stream dropping have no edges and therefore produce explicit
+`cannot_satisfy` outcomes.
 
 ## Why graph search
 

@@ -27,9 +27,8 @@ Executable adaptation behavior is limited to:
 
 1. MP4/H.264/AAC that already satisfies the target: no-op without starting an
    encoder;
-2. acceptable media streams in the wrong container: remux without re-encoding;
-3. HEVC video targeting H.264 with compatible AAC audio: transcode video and
-   copy audio;
+2. MOV/H.264/AAC targeting MP4/H.264/AAC: remux without re-encoding;
+3. MP4/HEVC/AAC targeting MP4/H.264/AAC: transcode video and copy audio;
 4. all other requested mutations: explicit refusal.
 
 The CLI accepts file-size and video-dimension constraints for inspection and

@@ -281,7 +281,7 @@ jobs:
           # cargo-dist v0.32.0: HostingStyle::Github is "implemented in CI backend"; dist host only prepares the merged manifest.
           # Source: https://github.com/axodotdev/cargo-dist/blob/6886366640dd4da83d33ba55cc04aa58423cbad2/cargo-dist/src/host.rs#L19-L43
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          echo "artifacts uploaded and released successfully"
+          echo "dist manifest prepared successfully; GitHub publication has not started"
           cat dist-manifest.json
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"

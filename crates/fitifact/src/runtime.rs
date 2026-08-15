@@ -224,7 +224,7 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
             }
         }
         TransformId::TranscodeVideo => {
-            if !matches!(artifact.container, Some(Container::Mp4 | Container::Mov))
+            if artifact.container != Some(Container::Mp4)
                 || video.codec != Some(VideoCodec::Hevc)
                 || video.pixel_format.as_deref() != Some("yuv420p")
                 || video.bit_depth != Some(8)
@@ -595,6 +595,28 @@ mod tests {
             ExecutionContext::default().timeout,
             Duration::from_secs(30 * 60)
         );
+    }
+
+    #[test]
+    fn runtime_rejects_mov_for_the_mp4_only_transcode_capability() {
+        let mp4_hevc = crate::artifact::Artifact::media(
+            Container::Mp4,
+            crate::artifact::VideoCodec::Hevc,
+            Some(crate::artifact::AudioCodec::Aac),
+            10,
+        );
+        let plan = crate::plan::plan(
+            &mp4_hevc,
+            &crate::constraints::media_h264_mp4_aac(),
+            &crate::capability::default_catalog(),
+        )
+        .plan()
+        .unwrap()
+        .clone();
+        let mut mov_hevc = mp4_hevc;
+        mov_hevc.container = Some(Container::Mov);
+        let error = validate_plan_for_execution(&plan, &mov_hevc).unwrap_err();
+        assert_eq!(error.code, ErrorCode::SecurityBlocked);
     }
 
     #[cfg(windows)]

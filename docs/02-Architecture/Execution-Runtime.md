@@ -89,10 +89,12 @@ trusts other same-account processes. The random private workspace, atomic Unix
 permissions, Windows protected handles, and identity checks defend against
 accidental collisions and untrusted path replacement outside that boundary.
 
-Remux uses `-map 0 -c copy`. Selective transcode accepts only the planner-proven
-one-video/optional-one-AAC topology, maps those exact streams, encodes video
-with `libx264`, and copies audio. Provider entry points defensively reject plan
-version, target, expected-fact, preservation, or topology forgeries.
+Remux accepts only the planner-proven MOV/H.264/optional-AAC source and uses
+`-map 0 -c copy`. Selective transcode accepts only the planner-proven
+MP4/HEVC/optional-AAC source with one video stream, maps those exact streams,
+encodes video with `libx264`, and copies audio. Provider entry points
+defensively reject source-container, plan-version, target, expected-fact,
+preservation, or topology forgeries.
 
 ## Resource budgets
 
