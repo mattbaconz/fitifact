@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +45,8 @@ pub enum PreservationClaim {
     AllStreamsCopied,
     AudioStreamCopied,
     VideoDimensions,
+    VideoPixelFormat,
+    VideoColorMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +85,8 @@ pub enum BlockingCode {
     UnsupportedContainer,
     HdrConversionUnsupported,
     BitDepthConversionUnsupported,
+    PixelFormatConversionUnsupported,
+    ColorConversionUnsupported,
     UnknownRequiredFact,
     NoProvenPlan,
 }
@@ -325,55 +329,57 @@ fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
             "v0.1 supports only media targets",
         ));
     }
-    if let Some(constraint) = constraints
-        .hard
-        .iter()
-        .find(|constraint| constraint.field == Field::MediaContainer)
-        && !constraint
-            .value
-            .as_text_list()
-            .iter()
-            .any(|value| value == "mp4")
+    if let Some(values) = effective_values(constraints, Field::MediaContainer)
+        && !values.contains("mp4")
     {
         return Some(blocking(
             BlockingCode::NonMp4Target,
-            vec![constraint.id.clone()],
+            constraint_ids(constraints, Field::MediaContainer),
             "v0.1 can produce only MP4",
         ));
     }
-    if let Some(constraint) = constraints
-        .hard
-        .iter()
-        .find(|constraint| constraint.field == Field::MediaVideoCodec)
-        && !constraint
-            .value
-            .as_text_list()
-            .iter()
-            .any(|value| value == "h264")
+    if let Some(values) = effective_values(constraints, Field::MediaVideoCodec)
+        && !values.contains("h264")
     {
         return Some(blocking(
             BlockingCode::UnsupportedVideoTarget,
-            vec![constraint.id.clone()],
+            constraint_ids(constraints, Field::MediaVideoCodec),
             "v0.1 can target only H.264 video",
         ));
     }
-    if let Some(constraint) = constraints
-        .hard
-        .iter()
-        .find(|constraint| constraint.field == Field::MediaAudioCodec)
-        && !constraint
-            .value
-            .as_text_list()
-            .iter()
-            .any(|value| value == "aac")
+    if let Some(values) = effective_values(constraints, Field::MediaAudioCodec)
+        && !values.contains("aac")
     {
         return Some(blocking(
             BlockingCode::UnsupportedAudioTarget,
-            vec![constraint.id.clone()],
+            constraint_ids(constraints, Field::MediaAudioCodec),
             "v0.1 can preserve only already-valid AAC audio",
         ));
     }
     None
+}
+
+fn effective_values(constraints: &ConstraintSet, field: Field) -> Option<HashSet<String>> {
+    let mut matching = constraints
+        .hard
+        .iter()
+        .filter(|constraint| constraint.field == field);
+    let first = matching.next()?;
+    let mut effective: HashSet<String> = first.value.as_text_list().into_iter().collect();
+    for constraint in matching {
+        let allowed: HashSet<String> = constraint.value.as_text_list().into_iter().collect();
+        effective.retain(|value| allowed.contains(value));
+    }
+    Some(effective)
+}
+
+fn constraint_ids(constraints: &ConstraintSet, field: Field) -> Vec<String> {
+    constraints
+        .hard
+        .iter()
+        .filter(|constraint| constraint.field == field)
+        .map(|constraint| constraint.id.clone())
+        .collect()
 }
 
 fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
@@ -449,11 +455,25 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
                 "v0.1 does not perform or assume HDR semantic conversion",
             ));
         }
-        if video.bit_depth.is_none_or(|depth| depth > 8) {
+        if video.bit_depth != Some(8) {
             return Some(blocking(
                 BlockingCode::BitDepthConversionUnsupported,
                 vec![check.constraint_id.clone()],
-                "v0.1 does not perform or assume greater-than-8-bit conversion",
+                "v0.1 transcodes only known 8-bit video and does not assume bit-depth conversion",
+            ));
+        }
+        if video.pixel_format.as_deref() != Some("yuv420p") {
+            return Some(blocking(
+                BlockingCode::PixelFormatConversionUnsupported,
+                vec![check.constraint_id.clone()],
+                "v0.1 transcodes only known yuv420p video and will not force pixel-format conversion",
+            ));
+        }
+        if !approved_sdr_color(video) {
+            return Some(blocking(
+                BlockingCode::ColorConversionUnsupported,
+                vec![check.constraint_id.clone()],
+                "v0.1 transcodes only known limited-range BT.709 color and will not assume color conversion",
             ));
         }
     }
@@ -467,6 +487,13 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
         ));
     }
     None
+}
+
+fn approved_sdr_color(video: &crate::artifact::VideoStream) -> bool {
+    video.color_range.as_deref() == Some("tv")
+        && video.color_space.as_deref() == Some("bt709")
+        && video.color_transfer.as_deref() == Some("bt709")
+        && video.color_primaries.as_deref() == Some("bt709")
 }
 
 fn instantiate(
@@ -538,7 +565,41 @@ fn instantiate(
                     value: ExpectedValue::Integer(u64::from(height)),
                 });
             }
-            let mut preservation = vec![PreservationClaim::VideoDimensions];
+            expected.extend([
+                ExpectedFact {
+                    field: Field::MediaVideoPixelFormat,
+                    value: ExpectedValue::Text("yuv420p".into()),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoBitDepth,
+                    value: ExpectedValue::Integer(8),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoColorRange,
+                    value: ExpectedValue::Text("tv".into()),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoColorSpace,
+                    value: ExpectedValue::Text("bt709".into()),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoColorTransfer,
+                    value: ExpectedValue::Text("bt709".into()),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoColorPrimaries,
+                    value: ExpectedValue::Text("bt709".into()),
+                },
+                ExpectedFact {
+                    field: Field::MediaVideoHdr,
+                    value: ExpectedValue::Text("sdr".into()),
+                },
+            ]);
+            let mut preservation = vec![
+                PreservationClaim::VideoDimensions,
+                PreservationClaim::VideoPixelFormat,
+                PreservationClaim::VideoColorMetadata,
+            ];
             if artifact.first_audio().is_some() {
                 preservation.push(PreservationClaim::AudioStreamCopied);
             }

@@ -24,6 +24,20 @@ pub enum Field {
     MediaVideoWidth,
     #[serde(rename = "media.video.height")]
     MediaVideoHeight,
+    #[serde(rename = "media.video.pixel_format")]
+    MediaVideoPixelFormat,
+    #[serde(rename = "media.video.bit_depth")]
+    MediaVideoBitDepth,
+    #[serde(rename = "media.video.color_range")]
+    MediaVideoColorRange,
+    #[serde(rename = "media.video.color_space")]
+    MediaVideoColorSpace,
+    #[serde(rename = "media.video.color_transfer")]
+    MediaVideoColorTransfer,
+    #[serde(rename = "media.video.color_primaries")]
+    MediaVideoColorPrimaries,
+    #[serde(rename = "media.video.hdr")]
+    MediaVideoHdr,
 }
 
 impl Field {
@@ -36,6 +50,13 @@ impl Field {
             Self::MediaAudioCodec => "media.audio.codec",
             Self::MediaVideoWidth => "media.video.width",
             Self::MediaVideoHeight => "media.video.height",
+            Self::MediaVideoPixelFormat => "media.video.pixel_format",
+            Self::MediaVideoBitDepth => "media.video.bit_depth",
+            Self::MediaVideoColorRange => "media.video.color_range",
+            Self::MediaVideoColorSpace => "media.video.color_space",
+            Self::MediaVideoColorTransfer => "media.video.color_transfer",
+            Self::MediaVideoColorPrimaries => "media.video.color_primaries",
+            Self::MediaVideoHdr => "media.video.hdr",
         }
     }
 }
@@ -219,12 +240,7 @@ pub fn compile(input: ConstraintInput) -> Result<ConstraintSet> {
 }
 
 pub fn compile_from_yaml(text: &str) -> Result<ConstraintSet> {
-    if text.len() > MAX_CONSTRAINT_BYTES {
-        return Err(invalid(
-            "constraints.input_too_large",
-            "constraint input exceeds the 1 MiB limit",
-        ));
-    }
+    enforce_input_limit(text)?;
     let parsed: ConstraintSet = yaml_serde::from_str(text).map_err(|error| {
         invalid(
             "constraints.invalid_document",
@@ -232,6 +248,28 @@ pub fn compile_from_yaml(text: &str) -> Result<ConstraintSet> {
         )
     })?;
     validate_and_normalize(parsed)
+}
+
+/// Parse and semantically validate the public JSON constraint contract.
+pub fn compile_from_json(text: &str) -> Result<ConstraintSet> {
+    enforce_input_limit(text)?;
+    let parsed: ConstraintSet = serde_json::from_str(text).map_err(|error| {
+        invalid(
+            "constraints.invalid_document",
+            format!("constraint JSON is invalid: {error}"),
+        )
+    })?;
+    validate_and_normalize(parsed)
+}
+
+fn enforce_input_limit(text: &str) -> Result<()> {
+    if text.len() > MAX_CONSTRAINT_BYTES {
+        return Err(invalid(
+            "constraints.input_too_large",
+            "constraint input exceeds the 1 MiB limit",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_and_normalize(mut constraints: ConstraintSet) -> Result<ConstraintSet> {

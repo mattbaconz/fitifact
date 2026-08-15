@@ -166,6 +166,33 @@ fn fact(artifact: &Artifact, field: Field) -> Option<Fact> {
             .first_video()
             .and_then(|v| v.height)
             .map(|h| Fact::Int(u64::from(h))),
+        Field::MediaVideoPixelFormat => artifact
+            .first_video()
+            .and_then(|video| video.pixel_format.clone())
+            .map(Fact::Text),
+        Field::MediaVideoBitDepth => artifact
+            .first_video()
+            .and_then(|video| video.bit_depth)
+            .map(|depth| Fact::Int(u64::from(depth))),
+        Field::MediaVideoColorRange => artifact
+            .first_video()
+            .and_then(|video| video.color_range.clone())
+            .map(Fact::Text),
+        Field::MediaVideoColorSpace => artifact
+            .first_video()
+            .and_then(|video| video.color_space.clone())
+            .map(Fact::Text),
+        Field::MediaVideoColorTransfer => artifact
+            .first_video()
+            .and_then(|video| video.color_transfer.clone())
+            .map(Fact::Text),
+        Field::MediaVideoColorPrimaries => artifact
+            .first_video()
+            .and_then(|video| video.color_primaries.clone())
+            .map(Fact::Text),
+        Field::MediaVideoHdr => artifact
+            .first_video()
+            .map(|video| Fact::Text(video.hdr.as_str().into())),
     }
 }
 
