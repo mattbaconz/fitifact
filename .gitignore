@@ -4,6 +4,4 @@
 **/*.rs.bk
 .DS_Store
 Thumbs.db
-fixtures/media/*.mp4
-fixtures/media/*.mov
-!fixtures/media/README.md
+fixtures/media/.generate-*

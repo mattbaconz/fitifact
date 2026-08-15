@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Strict Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Workspace tests
+        run: cargo test --locked --workspace --all-targets
+      - name: Fixture integrity
+        shell: pwsh
+        run: ./scripts/check-fixtures.ps1
+      - name: Documentation links
+        shell: pwsh
+        run: ./scripts/check-doc-links.ps1
+      - name: Workflow syntax and pins
+        shell: pwsh
+        run: ./scripts/check-workflows.ps1
+
+  platform:
+    name: platform (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install FFmpeg 7.1.1 on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ffmpeg-full --version=7.1.1 --yes --no-progress
+      - name: Install Ubuntu FFmpeg package
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Install versioned FFmpeg 7 formula on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg@7
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
+      - name: Record native toolchain and provider
+        shell: pwsh
+        run: |
+          rustc -vV
+          ffmpeg -version | Select-Object -First 1
+          ffprobe -version | Select-Object -First 1
+      - name: Add native Rust target
+        run: rustup target add ${{ matrix.target }}
+      - name: Build native target
+        run: cargo build --locked --workspace --target ${{ matrix.target }}
+      - name: Test native target
+        run: cargo test --locked --workspace --all-targets --target ${{ matrix.target }}
+      - name: Run live FFmpeg suite
+        run: cargo test --locked -p fitifact --test live_ffmpeg --target ${{ matrix.target }} -- --ignored --nocapture
+      - name: Doctor smoke
+        run: cargo run --locked -p fitifact-cli --target ${{ matrix.target }} -- doctor
+
+  msrv:
+    name: MSRV 1.85
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.85
+        run: rustup toolchain install 1.85.0 --profile minimal
+      - name: Check with MSRV
+        run: cargo +1.85.0 check --locked --workspace --all-targets
+      - name: Test with MSRV
+        run: cargo +1.85.0 test --locked --workspace --all-targets
+
+  supply-chain:
+    name: supply chain
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install pinned supply-chain tools
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-audit@0.22.2,cargo-deny@0.20.2
+          fallback: none
+      - name: Audit advisories
+        run: cargo audit
+      - name: Enforce dependency policy
+        run: cargo deny check
+      - name: Public-readiness scan
+        shell: pwsh
+        run: ./scripts/check-public-readiness.ps1 -RequireDependencyTools

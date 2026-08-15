@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use fitifact::artifact::{AudioCodec, VideoCodec};
-use fitifact::capability::TransformId;
+use fitifact::artifact::{AudioCodec, HdrStatus, VideoCodec};
+use fitifact::capability::{TransformId, default_catalog};
 use fitifact::constraints::media_h264_mp4_aac;
+use fitifact::error::ErrorCode;
 use fitifact::ffmpeg::FfmpegProvider;
-use fitifact::inspect::FfprobeInspector;
+use fitifact::inspect::{FfprobeInspector, Inspector};
+use fitifact::plan::{BlockingCode, plan as create_plan};
 use fitifact::runtime::{ExecutionContext, RecordingSpawner, SystemSpawner};
 use fitifact::{AdaptRequest, AdaptationStatus, adapt};
 
@@ -25,6 +27,43 @@ fn require_tools() {
     assert!(
         tool_ok("ffmpeg") && tool_ok("ffprobe"),
         "ffmpeg/ffprobe not on PATH; install them to run live tests"
+    );
+}
+
+fn canonical_fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("fixtures/media")
+        .join(name)
+}
+
+#[test]
+#[ignore]
+fn canonical_happy_path_fixtures_select_minimal_outcomes() {
+    require_tools();
+    let inspector = FfprobeInspector::default();
+    let target = media_h264_mp4_aac();
+    let catalog = default_catalog();
+
+    let compatible = inspector
+        .inspect(&canonical_fixture("compatible-h264-aac.mp4"))
+        .unwrap();
+    assert!(create_plan(&compatible, &target, &catalog).is_compatible());
+
+    let mismatch = inspector
+        .inspect(&canonical_fixture("mismatch-hevc-aac.mp4"))
+        .unwrap();
+    assert_eq!(
+        create_plan(&mismatch, &target, &catalog).steps()[0].operation,
+        TransformId::TranscodeVideo
+    );
+
+    let remux = inspector
+        .inspect(&canonical_fixture("remux-h264-aac.mov"))
+        .unwrap();
+    assert_eq!(
+        create_plan(&remux, &target, &catalog).steps()[0].operation,
+        TransformId::Remux
     );
 }
 
@@ -207,4 +246,49 @@ fn live_mov_remuxes_without_transcode() {
     assert_eq!(out.container.as_ref().unwrap().as_str(), "mp4");
     assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn canonical_corrupt_fixture_is_rejected() {
+    require_tools();
+    let inspector = FfprobeInspector::default();
+    let error = inspector
+        .inspect(&canonical_fixture("corrupt-truncated.mp4"))
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InputInvalid);
+}
+
+#[test]
+#[ignore]
+fn canonical_extra_stream_fixture_is_refused() {
+    require_tools();
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector
+        .inspect(&canonical_fixture("unsupported-extra-video.mp4"))
+        .unwrap();
+    assert_eq!(artifact.video_streams().count(), 2);
+    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::UnsafeStreamTopology]
+    );
+}
+
+#[test]
+#[ignore]
+fn canonical_hdr10_fixture_is_refused_without_conversion() {
+    require_tools();
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector
+        .inspect(&canonical_fixture("refusal-hdr10-hevc-aac.mp4"))
+        .unwrap();
+    let video = artifact.first_video().unwrap();
+    assert_eq!(video.bit_depth, Some(10));
+    assert_eq!(video.hdr, HdrStatus::Hdr);
+    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
 }

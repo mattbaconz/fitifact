@@ -42,6 +42,25 @@ the tested baseline; older majors warn but are not rejected solely for age.
 Fitifact has no telemetry and performs no network activity. FFmpeg and ffprobe
 are system dependencies and are not bundled.
 
+Install FFmpeg from its official project or an operating-system package source:
+[FFmpeg's download page](https://ffmpeg.org/download.html) links official source
+code and compiled-package providers.
+
+```console
+# Ubuntu/Debian
+sudo apt update && sudo apt install ffmpeg
+
+# macOS (Homebrew)
+brew install ffmpeg
+
+# Windows (WinGet)
+winget install --id Gyan.FFmpeg -e
+```
+
+Confirm both `ffmpeg -version` and `ffprobe -version`, then run
+`fitifact doctor`. FFmpeg remains external software under the license terms of
+the build you install.
+
 ## Build and use
 
 ```console
@@ -72,12 +91,59 @@ Typed constraints can also be loaded from YAML:
 cargo run -p fitifact-cli -- check video.mp4 --constraints fixtures/constraints/mp4-h264-aac.yaml
 ```
 
+## Prepared release installation and verification
+
+No release assets exist yet. After owner/legal approval and publication, the
+prepared GitHub release workflow is configured to produce ZIP or tar.gz
+archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
+`sha256.sum`, per-archive SHA-256 files, and a CycloneDX
+`fitifact-cli.cdx.xml` SBOM.
+
+Release checksums can then be verified before extraction:
+
+```console
+# Linux
+sha256sum --check sha256.sum
+
+# macOS
+shasum --algorithm 256 --check sha256.sum
+```
+
+On Windows, compare the expected entry in `sha256.sum` with:
+
+```powershell
+Get-FileHash .\fitifact-cli-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+```
+
+GitHub artifact attestations can be verified with GitHub CLI after replacing
+`<archive>` with the downloaded release filename:
+
+```console
+gh attestation verify <archive> --repo mattbaconz/fitifact
+```
+
+The CycloneDX XML describes the resolved Cargo dependency graph and is released
+alongside the archives. Windows binaries are not Authenticode-signed, and macOS
+binaries are not code-signed or notarized in v0.1; users should expect platform
+warnings and rely on the checksum, SBOM, attestation, and source/tag provenance.
+
+If no prebuilt archive is suitable, the exact prepared source fallback is:
+
+```console
+cargo install --git https://github.com/mattbaconz/fitifact --locked fitifact-cli
+```
+
+This command becomes usable only after the public repository exists.
+
 ## Project status and distribution
 
 The intended public home is
 [`mattbaconz/fitifact`](https://github.com/mattbaconz/fitifact). v0.1
 distribution is GitHub-only; the Cargo packages are not published. Public
 publication remains blocked until owner/legal sign-off on the Fitifact name.
+
+The release procedure and clean-machine acceptance gates are documented in
+[`docs/04-Engineering/Release-Checklist.md`](docs/04-Engineering/Release-Checklist.md).
 
 See [`docs/README.md`](docs/README.md) for the documentation status model and
 [`AGENTS.md`](AGENTS.md) for canonical project constraints.

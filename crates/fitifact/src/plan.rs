@@ -321,7 +321,7 @@ fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
         .hard
         .iter()
         .find(|constraint| constraint.field == Field::FileFamily)
-        && constraint.value != ConstraintValue::Text("media".into())
+        .filter(|constraint| constraint.value != ConstraintValue::Text("media".into()))
     {
         return Some(blocking(
             BlockingCode::NonMediaUnsupported,
@@ -329,8 +329,8 @@ fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
             "v0.1 supports only media targets",
         ));
     }
-    if let Some(values) = effective_values(constraints, Field::MediaContainer)
-        && !values.contains("mp4")
+    if effective_values(constraints, Field::MediaContainer)
+        .is_some_and(|values| !values.contains("mp4"))
     {
         return Some(blocking(
             BlockingCode::NonMp4Target,
@@ -338,8 +338,8 @@ fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
             "v0.1 can produce only MP4",
         ));
     }
-    if let Some(values) = effective_values(constraints, Field::MediaVideoCodec)
-        && !values.contains("h264")
+    if effective_values(constraints, Field::MediaVideoCodec)
+        .is_some_and(|values| !values.contains("h264"))
     {
         return Some(blocking(
             BlockingCode::UnsupportedVideoTarget,
@@ -347,8 +347,8 @@ fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
             "v0.1 can target only H.264 video",
         ));
     }
-    if let Some(values) = effective_values(constraints, Field::MediaAudioCodec)
-        && !values.contains("aac")
+    if effective_values(constraints, Field::MediaAudioCodec)
+        .is_some_and(|values| !values.contains("aac"))
     {
         return Some(blocking(
             BlockingCode::UnsupportedAudioTarget,
@@ -477,8 +477,9 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
             ));
         }
     }
-    if let Some(check) = report.failing_or_unknown(Field::MediaContainer)
-        && matches!(artifact.container, None | Some(Container::Unknown(_)))
+    if let Some(check) = report
+        .failing_or_unknown(Field::MediaContainer)
+        .filter(|_| matches!(artifact.container, None | Some(Container::Unknown(_))))
     {
         return Some(blocking(
             BlockingCode::UnsupportedContainer,
@@ -624,9 +625,7 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
     if let Some(container) = &step.target.container {
         next.container = Some(container.clone());
     }
-    if let Some(codec) = &step.target.video_codec
-        && let Some(video) = next.first_video_mut()
-    {
+    if let (Some(codec), Some(video)) = (&step.target.video_codec, next.first_video_mut()) {
         video.codec = Some(codec.clone());
     }
     next

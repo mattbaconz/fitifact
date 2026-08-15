@@ -385,8 +385,9 @@ fn print_inspect(artifact: &Artifact) {
             .map(|c| c.as_str().to_ascii_uppercase())
             .unwrap_or_else(|| "none".into())
     );
-    if let Some(video) = artifact.first_video()
-        && let (Some(w), Some(h)) = (video.width, video.height)
+    if let Some((w, h)) = artifact
+        .first_video()
+        .and_then(|video| video.width.zip(video.height))
     {
         println!("Resolution      {w}×{h}");
     }
