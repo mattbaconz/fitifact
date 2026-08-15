@@ -273,6 +273,24 @@ fn refuses_a_missing_video_codec_as_an_unknown_required_fact() {
 }
 
 #[test]
+fn refuses_ambiguous_mov_family_containers_instead_of_no_op() {
+    for evidence in ["missing-brand", "3gp4", "unrecognized-brand"] {
+        let artifact = Artifact::media(
+            Container::Unknown(format!("mov-family:{evidence}")),
+            VideoCodec::H264,
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert!(!outcome.is_compatible());
+        assert_eq!(
+            outcome.blocking_codes(),
+            vec![BlockingCode::UnsupportedContainer]
+        );
+    }
+}
+
+#[test]
 fn intersected_container_target_is_order_independent() {
     let artifact = Artifact::media(
         Container::Mp4,

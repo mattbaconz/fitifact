@@ -74,18 +74,32 @@ impl Container {
 
     pub fn from_probe(format_name: &str, major_brand: Option<&str>) -> Self {
         if let Some(brand) = major_brand.map(str::trim) {
-            let brand = brand.trim_end_matches('\0').trim();
+            let brand = brand.trim_end_matches('\0').trim().to_ascii_lowercase();
             if brand == "qt" || brand.starts_with("qt") {
                 return Self::Mov;
             }
             if matches!(
-                brand,
+                brand.as_str(),
                 "isom" | "iso2" | "iso5" | "iso6" | "mp41" | "mp42" | "mp71" | "avc1" | "msdh"
             ) {
                 return Self::Mp4;
             }
         }
-        Self::parse_loose(format_name)
+        let normalized = format_name.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "mp4" => Self::Mp4,
+            "mov" | "quicktime" | "qt" => Self::Mov,
+            "webm" => Self::Webm,
+            "matroska" | "mkv" => Self::Mkv,
+            _ if normalized.split(',').any(|name| name.trim() == "webm") => Self::Webm,
+            _ if normalized
+                .split(',')
+                .any(|name| matches!(name.trim(), "matroska" | "mkv")) =>
+            {
+                Self::Mkv
+            }
+            _ => Self::Unknown(format_name.to_string()),
+        }
     }
 
     pub fn as_str(&self) -> &str {
@@ -470,6 +484,30 @@ mod tests {
             Container::from_probe("mov,mp4,m4a,3gp,3g2,mj2", Some("isom")),
             Container::Mp4
         );
+    }
+
+    #[test]
+    fn ambiguous_mov_family_probe_requires_a_recognized_brand() {
+        let label = "mov,mp4,m4a,3gp,3g2,mj2";
+        for brand in [None, Some("3gp4"), Some("mystery")] {
+            assert_eq!(
+                Container::from_probe(label, brand),
+                Container::Unknown(label.into()),
+                "brand {brand:?} must not imply MP4"
+            );
+        }
+    }
+
+    #[test]
+    fn unique_probe_labels_remain_affirmative_container_evidence() {
+        assert_eq!(Container::from_probe("mp4", None), Container::Mp4);
+        assert_eq!(Container::from_probe("mov", None), Container::Mov);
+        assert_eq!(Container::from_probe("webm", None), Container::Webm);
+        assert_eq!(
+            Container::from_probe("matroska,webm", None),
+            Container::Webm
+        );
+        assert_eq!(Container::from_probe("matroska", None), Container::Mkv);
     }
 
     #[test]

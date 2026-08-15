@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use fitifact::artifact::{ARTIFACT_SCHEMA, HdrStatus, Rational, StreamType, VideoCodec};
+use fitifact::artifact::{ARTIFACT_SCHEMA, Container, HdrStatus, Rational, StreamType, VideoCodec};
 use fitifact::inspect::artifact_from_ffprobe_json;
 
 #[test]
@@ -104,4 +104,22 @@ fn derives_bit_depth_from_common_pixel_format_when_probe_omits_it() {
     }"#;
     let artifact = artifact_from_ffprobe_json(Path::new("video.mp4"), 1, json).unwrap();
     assert_eq!(artifact.first_video().unwrap().bit_depth, Some(10));
+}
+
+#[test]
+fn ambiguous_mov_family_inspection_never_claims_mp4() {
+    for tags in [
+        String::new(),
+        r#", "tags": {"major_brand": "3gp4"}"#.into(),
+        r#", "tags": {"major_brand": "unknown"}"#.into(),
+    ] {
+        let json = format!(
+            r#"{{
+                "streams": [{{"codec_type": "video", "codec_name": "h264"}}],
+                "format": {{"format_name": "mov,mp4,m4a,3gp,3g2,mj2"{tags}}}
+            }}"#
+        );
+        let artifact = artifact_from_ffprobe_json(Path::new("ambiguous.bin"), 1, &json).unwrap();
+        assert!(matches!(artifact.container, Some(Container::Unknown(_))));
+    }
 }

@@ -172,7 +172,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 &artifact,
                 &request.execution,
             ) {
-                let cleanup = staged.cleanup_owned();
+                let cleanup = staged.cleanup_after_provider_failure();
                 return Ok(with_cleanup_warning(
                     failed(
                         original,
@@ -773,6 +773,35 @@ impl StageWorkspace {
         Ok(())
     }
 
+    fn cleanup_after_provider_failure(&mut self) -> CleanupOutcome {
+        match std::fs::symlink_metadata(&self.path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => self.cleanup_owned(),
+            Err(_) => self.preserve_workspace(
+                "The provider output could not be identified safely; the private workspace was intentionally preserved."
+                    .into(),
+            ),
+            Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => self
+                .preserve_workspace(
+                    "The provider left an ambiguous staging object; the private workspace was intentionally preserved."
+                        .into(),
+                ),
+            Ok(_) => match self.claim_created_file() {
+                Ok(()) => self.cleanup_owned(),
+                Err(error) => self.preserve_workspace(format!(
+                    "The provider partial could not be claimed by identity; the private workspace was intentionally preserved ({error})."
+                )),
+            },
+        }
+    }
+
+    fn preserve_workspace(&mut self, message: String) -> CleanupOutcome {
+        self.file_identity = None;
+        self.protection.take();
+        self.directory_handle.take();
+        self.deletion_ready = false;
+        CleanupOutcome::warning(self.directory.clone(), message)
+    }
+
     fn verify_claim(&self) -> Result<()> {
         self.verify_directory()?;
         let expected = self.file_identity.ok_or_else(|| {
@@ -916,13 +945,20 @@ impl StageWorkspace {
             );
         }
         if path_is_occupied(&self.path) {
-            let Some(_expected) = self.file_identity else {
+            let Some(expected) = self.file_identity else {
                 return CleanupOutcome::warning(
                     self.directory.clone(),
                     "The provider left an unclaimed staging object; the private workspace was intentionally preserved."
                         .into(),
                 );
             };
+            if path_identity(&self.path, false) != Some(expected) {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The staging path no longer names the claimed file; the replacement was intentionally preserved."
+                        .into(),
+                );
+            }
             // Unix workspaces are atomically created mode 0700. Under the
             // documented same-account trust boundary, a still-claimed name
             // inside this private directory is owned by this operation.
@@ -1281,7 +1317,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_failure_preserves_ambiguous_partial_and_reports_cleanup_path() {
+    fn provider_failure_removes_regular_partial_from_private_workspace() {
         let dir = test_dir("stage-cleanup");
         let input = dir.join("input.mov");
         let output = dir.join("requested.mp4");
@@ -1310,17 +1346,111 @@ mod tests {
                 .to_string_lossy()
                 .starts_with(".fitifact-stage-")
         );
-        assert_eq!(std::fs::read(&staged).unwrap(), b"partial");
-        assert_eq!(
-            result.cleanup_warning.as_ref().unwrap().path,
-            staged.parent().unwrap()
-        );
-        assert_eq!(
-            result.error.as_ref().unwrap().details["cleanup_warning"]["path"],
-            serde_json::to_value(staged.parent().unwrap()).unwrap()
+        assert!(!staged.exists());
+        assert!(!staged.parent().unwrap().exists());
+        assert!(result.cleanup_warning.is_none());
+        assert!(
+            !result
+                .error
+                .as_ref()
+                .unwrap()
+                .details
+                .contains_key("cleanup_warning")
         );
         assert!(!output.exists());
         assert_eq!(std::fs::read(&input).unwrap(), b"original");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    struct AmbiguousPartialFailProvider;
+
+    impl TransformProvider for AmbiguousPartialFailProvider {
+        fn execute(
+            &self,
+            _in: &Path,
+            out: &Path,
+            _plan: &Plan,
+            _ctx: &ExecutionContext,
+        ) -> Result<()> {
+            std::fs::create_dir(out).unwrap();
+            Err(Error::new(
+                ErrorCode::ExecutionFailed,
+                "simulated ambiguous provider output",
+            ))
+        }
+    }
+
+    #[test]
+    fn provider_failure_preserves_ambiguous_partial_with_warning() {
+        let dir = test_dir("ambiguous-partial");
+        let input = dir.join("input.mov");
+        let output = dir.join("requested.mp4");
+        std::fs::write(&input, b"original").unwrap();
+        let artifact = Artifact::media(Container::Mov, VideoCodec::H264, Some(AudioCodec::Aac), 8);
+        let result = adapt(AdaptRequest {
+            input: &input,
+            constraints: media_h264_mp4_aac(),
+            output: Some(output),
+            catalog: None,
+            inspector: &FakeInspector(artifact),
+            provider: &AmbiguousPartialFailProvider,
+            execution: ExecutionContext::default(),
+        })
+        .unwrap();
+        let warning = result.cleanup_warning.unwrap();
+        assert!(warning.path.is_dir());
+        assert!(warning.path.join("artifact.mp4").is_dir());
+        assert!(
+            result.error.unwrap().details["cleanup_warning"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("intentionally preserved")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    struct PollutingPartialFailProvider;
+
+    impl TransformProvider for PollutingPartialFailProvider {
+        fn execute(
+            &self,
+            _in: &Path,
+            out: &Path,
+            _plan: &Plan,
+            _ctx: &ExecutionContext,
+        ) -> Result<()> {
+            std::fs::write(out, b"partial").unwrap();
+            std::fs::write(out.parent().unwrap().join("foreign"), b"keep").unwrap();
+            Err(Error::new(
+                ErrorCode::ExecutionFailed,
+                "simulated provider failure with workspace pollution",
+            ))
+        }
+    }
+
+    #[test]
+    fn provider_failure_reports_cleanup_warning_when_workspace_is_not_empty() {
+        let dir = test_dir("polluting-partial");
+        let input = dir.join("input.mov");
+        let output = dir.join("requested.mp4");
+        std::fs::write(&input, b"original").unwrap();
+        let artifact = Artifact::media(Container::Mov, VideoCodec::H264, Some(AudioCodec::Aac), 8);
+        let result = adapt(AdaptRequest {
+            input: &input,
+            constraints: media_h264_mp4_aac(),
+            output: Some(output),
+            catalog: None,
+            inspector: &FakeInspector(artifact),
+            provider: &PollutingPartialFailProvider,
+            execution: ExecutionContext::default(),
+        })
+        .unwrap();
+        let warning = result.cleanup_warning.unwrap();
+        assert_eq!(
+            std::fs::read(warning.path.join("foreign")).unwrap(),
+            b"keep"
+        );
+        assert!(!warning.path.join("artifact.mp4").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1471,6 +1601,27 @@ mod tests {
         assert!(second.directory().is_dir());
         assert!(first.cleanup_owned().warning.is_none());
         assert!(second.cleanup_owned().warning.is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn cleanup_never_deletes_a_replacement_at_the_claimed_path() {
+        let dir = test_dir("stage-replacement");
+        let output = dir.join("output.mp4");
+        let workspace_path;
+        {
+            let mut workspace = StageWorkspace::new(&output).unwrap();
+            workspace_path = workspace.directory().to_path_buf();
+            std::fs::write(workspace.path(), b"owned-partial").unwrap();
+            workspace.claim_created_file().unwrap();
+            std::fs::rename(workspace.path(), workspace.directory().join("moved-owned")).unwrap();
+            std::fs::write(workspace.path(), b"replacement").unwrap();
+
+            let cleanup = workspace.cleanup_owned();
+            assert!(cleanup.warning.is_some());
+            assert_eq!(std::fs::read(workspace.path()).unwrap(), b"replacement");
+        }
+        std::fs::remove_dir_all(workspace_path).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 
