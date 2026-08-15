@@ -1,7 +1,12 @@
+use std::collections::{HashMap, HashSet};
+
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::{AudioCodec, Container, Family, VideoCodec};
+pub use crate::contract::{CONSTRAINTS_SCHEMA, ConstraintsSchema};
 use crate::error::{Error, ErrorCode, Result};
+
+const MAX_CONSTRAINT_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Field {
@@ -71,6 +76,7 @@ impl ConstraintValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Constraint {
     pub id: String,
     pub field: Field,
@@ -78,20 +84,36 @@ pub struct Constraint {
     pub value: ConstraintValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Preferences {
+    #[serde(default = "default_true")]
     pub preserve_audio: bool,
+    #[serde(default = "default_true")]
     pub preserve_resolution: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            preserve_audio: true,
+            preserve_resolution: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConstraintSet {
+    pub schema: ConstraintsSchema,
     pub hard: Vec<Constraint>,
+    #[serde(default)]
     pub preferences: Preferences,
 }
 
-/// Structured flags / YAML input. Not natural-language parsing.
+/// Structured CLI input. Natural-language parsing is intentionally out of scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConstraintInput {
     pub container: Option<Vec<String>>,
     pub video_codec: Option<Vec<String>>,
@@ -126,7 +148,7 @@ impl Default for ConstraintInput {
     }
 }
 
-pub fn compile(input: ConstraintInput) -> ConstraintSet {
+pub fn compile(input: ConstraintInput) -> Result<ConstraintSet> {
     let mut hard = Vec::new();
 
     if let Some(family) = input.family {
@@ -134,46 +156,31 @@ pub fn compile(input: ConstraintInput) -> ConstraintSet {
             id: "family".into(),
             field: Field::FileFamily,
             op: Operator::Eq,
-            value: ConstraintValue::Text(normalize_family(&family)),
+            value: ConstraintValue::Text(family),
         });
     }
-    if let Some(values) = input.container.filter(|v| !v.is_empty()) {
+    if let Some(values) = input.container {
         hard.push(Constraint {
             id: "container".into(),
             field: Field::MediaContainer,
             op: Operator::In,
-            value: ConstraintValue::List(
-                values
-                    .iter()
-                    .map(|v| Container::parse_loose(v).as_str().to_string())
-                    .collect(),
-            ),
+            value: ConstraintValue::List(values),
         });
     }
-    if let Some(values) = input.video_codec.filter(|v| !v.is_empty()) {
+    if let Some(values) = input.video_codec {
         hard.push(Constraint {
             id: "video-codec".into(),
             field: Field::MediaVideoCodec,
             op: Operator::In,
-            value: ConstraintValue::List(
-                values
-                    .iter()
-                    .map(|v| VideoCodec::parse_loose(v).as_str().to_string())
-                    .collect(),
-            ),
+            value: ConstraintValue::List(values),
         });
     }
-    if let Some(values) = input.audio_codec.filter(|v| !v.is_empty()) {
+    if let Some(values) = input.audio_codec {
         hard.push(Constraint {
             id: "audio-codec".into(),
             field: Field::MediaAudioCodec,
             op: Operator::In,
-            value: ConstraintValue::List(
-                values
-                    .iter()
-                    .map(|v| AudioCodec::parse_loose(v).as_str().to_string())
-                    .collect(),
-            ),
+            value: ConstraintValue::List(values),
         });
     }
     if let Some(max_bytes) = input.max_bytes {
@@ -201,59 +208,264 @@ pub fn compile(input: ConstraintInput) -> ConstraintSet {
         });
     }
 
-    ConstraintSet {
+    validate_and_normalize(ConstraintSet {
+        schema: ConstraintsSchema,
         hard,
         preferences: Preferences {
             preserve_audio: input.preserve_audio,
             preserve_resolution: input.preserve_resolution,
         },
-    }
-}
-
-fn normalize_family(raw: &str) -> String {
-    match Family::from_str_loose(raw) {
-        Family::Media => "media".into(),
-        Family::Image => "image".into(),
-        Family::Unknown => raw.to_ascii_lowercase(),
-    }
-}
-
-impl Family {
-    pub fn from_str_loose(raw: &str) -> Self {
-        match raw.to_ascii_lowercase().as_str() {
-            "media" | "video" | "audio" => Self::Media,
-            "image" | "picture" => Self::Image,
-            _ => Self::Unknown,
-        }
-    }
+    })
 }
 
 pub fn compile_from_yaml(text: &str) -> Result<ConstraintSet> {
-    let yaml: serde_yaml::Value = serde_yaml::from_str(text).map_err(|err| {
-        Error::new(
-            ErrorCode::RequirementsAmbiguous,
-            format!("constraints yaml could not be parsed: {err}"),
+    if text.len() > MAX_CONSTRAINT_BYTES {
+        return Err(invalid(
+            "constraints.input_too_large",
+            "constraint input exceeds the 1 MiB limit",
+        ));
+    }
+    let parsed: ConstraintSet = yaml_serde::from_str(text).map_err(|error| {
+        invalid(
+            "constraints.invalid_document",
+            format!("constraint YAML is invalid: {error}"),
         )
     })?;
-    if yaml.get("hard").is_some() {
-        serde_yaml::from_value(yaml).map_err(|err| {
-            Error::new(
-                ErrorCode::RequirementsAmbiguous,
-                format!("constraint set yaml was invalid: {err}"),
-            )
-        })
-    } else {
-        let input: ConstraintInput = serde_yaml::from_value(yaml).map_err(|err| {
-            Error::new(
-                ErrorCode::RequirementsAmbiguous,
-                format!("constraint input yaml was invalid: {err}"),
+    validate_and_normalize(parsed)
+}
+
+fn validate_and_normalize(mut constraints: ConstraintSet) -> Result<ConstraintSet> {
+    if constraints.hard.is_empty() {
+        return Err(invalid(
+            "constraints.empty_target",
+            "at least one hard constraint is required",
+        ));
+    }
+
+    let mut ids = HashSet::new();
+    for constraint in &mut constraints.hard {
+        let normalized_id = constraint.id.trim();
+        if normalized_id.is_empty() {
+            return Err(invalid(
+                "constraints.blank_id",
+                "constraint IDs cannot be blank",
+            ));
+        }
+        if !ids.insert(normalized_id.to_string()) {
+            return Err(invalid(
+                "constraints.duplicate_id",
+                format!("duplicate constraint ID: {normalized_id}"),
+            ));
+        }
+        constraint.id = normalized_id.to_string();
+        normalize_constraint(constraint)?;
+    }
+    reject_conflicts(&constraints.hard)?;
+    Ok(constraints)
+}
+
+fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
+    match (constraint.field, constraint.op, &mut constraint.value) {
+        (Field::FileFamily, Operator::Eq, ConstraintValue::Text(value)) => {
+            let normalized = Family::parse_constraint(value).ok_or_else(|| {
+                invalid(
+                    "constraints.unknown_family",
+                    format!("unknown family: {value}"),
+                )
+            })?;
+            *value = normalized.as_str().to_string();
+        }
+        (Field::MediaContainer, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "container", |value| {
+                Container::parse_constraint(value).map(|value| value.as_str().to_string())
+            })?;
+        }
+        (Field::MediaVideoCodec, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "video codec", |value| {
+                VideoCodec::parse_constraint(value).map(|value| value.as_str().to_string())
+            })?;
+        }
+        (Field::MediaAudioCodec, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "audio codec", |value| {
+                AudioCodec::parse_constraint(value).map(|value| value.as_str().to_string())
+            })?;
+        }
+        (
+            Field::FileBytes | Field::MediaVideoWidth | Field::MediaVideoHeight,
+            Operator::Lte,
+            ConstraintValue::Integer(value),
+        ) if *value > 0 => {}
+        _ => {
+            return Err(invalid(
+                "constraints.invalid_combination",
+                format!(
+                    "invalid operator or value for {}",
+                    constraint.field.as_str()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_list(
+    values: &mut Vec<String>,
+    label: &str,
+    normalize: impl Fn(&str) -> Option<String>,
+) -> Result<()> {
+    if values.is_empty() {
+        return Err(invalid(
+            "constraints.empty_list",
+            format!("{label} list cannot be empty"),
+        ));
+    }
+    for value in values.iter_mut() {
+        let normalized = normalize(value).ok_or_else(|| {
+            invalid(
+                "constraints.unknown_enum_value",
+                format!("unknown {label}: {value}"),
             )
         })?;
-        Ok(compile(input))
+        *value = normalized;
+    }
+    values.sort();
+    values.dedup();
+    Ok(())
+}
+
+fn reject_conflicts(constraints: &[Constraint]) -> Result<()> {
+    let mut by_field: HashMap<Field, Vec<&Constraint>> = HashMap::new();
+    for constraint in constraints {
+        by_field
+            .entry(constraint.field)
+            .or_default()
+            .push(constraint);
+    }
+    for (field, group) in by_field {
+        if group.len() < 2 {
+            continue;
+        }
+        let conflict = match group[0].op {
+            Operator::Eq => group.windows(2).any(|pair| pair[0].value != pair[1].value),
+            Operator::In => {
+                let mut allowed: HashSet<String> =
+                    group[0].value.as_text_list().into_iter().collect();
+                for constraint in &group[1..] {
+                    let next: HashSet<String> =
+                        constraint.value.as_text_list().into_iter().collect();
+                    allowed.retain(|value| next.contains(value));
+                }
+                allowed.is_empty()
+            }
+            Operator::Lte | Operator::Gte => false,
+        };
+        if conflict {
+            return Err(Error::new(
+                ErrorCode::RequirementsConflict,
+                format!(
+                    "constraints.conflict: hard constraints conflict for {}",
+                    field.as_str()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Parse exact byte counts plus decimal MB and binary MiB values.
+pub fn parse_size_bytes(raw: &str) -> Result<u64> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(invalid("size.invalid", "size cannot be empty"));
+    }
+    let lower = value.to_ascii_lowercase();
+    let (number, multiplier) = if lower.ends_with("mib") {
+        (&value[..value.len() - 3], Some(1_048_576_u64))
+    } else if lower.ends_with("mb") {
+        (&value[..value.len() - 2], Some(1_000_000_u64))
+    } else {
+        (value, None)
+    };
+    let number = number.trim();
+    match multiplier {
+        None => {
+            if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(invalid(
+                    "size.invalid",
+                    "unadorned sizes must be whole bytes",
+                ));
+            }
+            number
+                .parse()
+                .map_err(|_| invalid("size.overflow", "size exceeds the byte range"))
+        }
+        Some(multiplier) => parse_scaled_decimal(number, multiplier),
     }
 }
 
-/// Common demo target: MP4 / H.264 / AAC.
+fn parse_scaled_decimal(number: &str, multiplier: u64) -> Result<u64> {
+    let (whole, fraction) = match number.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (number, None),
+    };
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction.is_some_and(|fraction| {
+            fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+        })
+    {
+        return Err(invalid("size.invalid", "size has an invalid decimal value"));
+    }
+    let whole: u128 = whole
+        .parse()
+        .map_err(|_| invalid("size.overflow", "size exceeds the byte range"))?;
+    let (numerator, denominator) = if let Some(fraction) = fraction {
+        let exponent = u32::try_from(fraction.len()).map_err(|_| {
+            invalid(
+                "size.overflow",
+                "size precision exceeds the supported range",
+            )
+        })?;
+        let denominator = 10_u128.checked_pow(exponent).ok_or_else(|| {
+            invalid(
+                "size.overflow",
+                "size precision exceeds the supported range",
+            )
+        })?;
+        let fraction: u128 = fraction
+            .parse()
+            .map_err(|_| invalid("size.overflow", "size exceeds the byte range"))?;
+        (
+            whole
+                .checked_mul(denominator)
+                .and_then(|value| value.checked_add(fraction))
+                .ok_or_else(|| invalid("size.overflow", "size exceeds the byte range"))?,
+            denominator,
+        )
+    } else {
+        (whole, 1)
+    };
+    let scaled = numerator
+        .checked_mul(u128::from(multiplier))
+        .ok_or_else(|| invalid("size.overflow", "size exceeds the byte range"))?;
+    if scaled % denominator != 0 {
+        return Err(invalid(
+            "size.fractional_byte",
+            "size does not resolve to a whole byte",
+        ));
+    }
+    u64::try_from(scaled / denominator)
+        .map_err(|_| invalid("size.overflow", "size exceeds the byte range"))
+}
+
+fn invalid(reason: &str, message: impl Into<String>) -> Error {
+    Error::new(
+        ErrorCode::InputInvalid,
+        format!("{reason}: {}", message.into()),
+    )
+}
+
+/// Common v0.1 target: MP4 / H.264 / AAC.
 pub fn media_h264_mp4_aac() -> ConstraintSet {
     compile(ConstraintInput {
         container: Some(vec!["mp4".into()]),
@@ -263,6 +475,7 @@ pub fn media_h264_mp4_aac() -> ConstraintSet {
         preserve_resolution: true,
         ..ConstraintInput::default()
     })
+    .expect("built-in constraints are valid")
 }
 
 #[cfg(test)]
@@ -274,21 +487,12 @@ mod tests {
         let set = compile(ConstraintInput {
             video_codec: Some(vec!["avc1".into()]),
             ..ConstraintInput::default()
-        });
+        })
+        .unwrap();
         assert_eq!(set.hard[0].id, "video-codec");
         assert_eq!(
             set.hard[0].value,
             ConstraintValue::List(vec!["h264".into()])
         );
-    }
-
-    #[test]
-    fn compile_from_yaml_flags_shape() {
-        let set = compile_from_yaml("container: [mp4]\nvideo_codec: [h264]\n").unwrap();
-        assert_eq!(
-            set.hard.iter().find(|c| c.id == "container").unwrap().field,
-            Field::MediaContainer
-        );
-        assert!(set.preferences.preserve_audio);
     }
 }

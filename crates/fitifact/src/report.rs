@@ -45,19 +45,33 @@ pub fn explain_plan(
     outcome: &PlanOutcome,
 ) -> Explanation {
     match outcome {
-        PlanOutcome::Compatible => explain_check(artifact, report),
-        PlanOutcome::CannotSatisfy { blocking } => Explanation {
+        PlanOutcome::Compatible { .. } => explain_check(artifact, report),
+        PlanOutcome::CannotSatisfy { blocking, .. } => Explanation {
             summary: "I can't meet all requirements without breaking your priorities.".into(),
-            details: vec![format!("Blocking constraints: {}", blocking.join(", "))],
+            details: vec![format!(
+                "Blocking constraints: {}",
+                blocking
+                    .iter()
+                    .map(|reason| reason.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )],
         },
-        PlanOutcome::Planned { plan } => {
+        PlanOutcome::Planned { plan, .. } => {
             let mismatch = mismatch_summary(artifact, report);
             let mut details = Vec::new();
             for step in &plan.steps {
                 details.push(step_line(step));
             }
             if !plan.preserved.is_empty() {
-                details.push(format!("Keeping: {}", plan.preserved.join(", ")));
+                details.push(format!(
+                    "Keeping: {}",
+                    plan.preserved
+                        .iter()
+                        .map(|claim| format!("{claim:?}").to_ascii_lowercase())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
             }
             Explanation {
                 summary: format!("{} {}", mismatch, plan_summary(plan)),
@@ -133,17 +147,17 @@ fn mismatch_line(
 }
 
 fn plan_summary(plan: &Plan) -> String {
-    if plan.steps.len() == 1 && plan.steps[0].transform == TransformId::TranscodeVideo {
+    if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::TranscodeVideo {
         return "I can change only the video stream.".into();
     }
-    if plan.steps.len() == 1 && plan.steps[0].transform == TransformId::Remux {
+    if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::Remux {
         return "I can remux the container without re-encoding.".into();
     }
     format!("I need to change {} things.", plan.steps.len())
 }
 
 fn step_line(step: &PlanStep) -> String {
-    match step.transform {
+    match step.operation {
         TransformId::Remux => "Remux to the required container (stream copy).".into(),
         TransformId::TranscodeVideo => "Transcode video; copy audio if present.".into(),
     }

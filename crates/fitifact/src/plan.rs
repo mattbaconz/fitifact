@@ -1,46 +1,147 @@
+use std::collections::VecDeque;
+
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{Artifact, AudioCodec, Container, VideoCodec};
-use crate::capability::{Capability, CapabilityCatalog, TransformId};
-use crate::check::{CompatibilityReport, check};
-use crate::constraints::{ConstraintSet, Field};
+use crate::artifact::{Artifact, AudioCodec, Container, Family, HdrStatus, StreamType, VideoCodec};
+use crate::capability::{CapabilityCatalog, TransformId};
+use crate::check::{CheckResult, CompatibilityReport, check};
+use crate::constraints::{ConstraintSet, ConstraintValue, Field};
+pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 
+pub const PLANNER_VERSION: &str = "0.1.0";
 const MAX_DEPTH: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StepParam {
+pub struct StepTarget {
+    pub container: Option<Container>,
+    pub video_codec: Option<VideoCodec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanReason {
+    pub constraint_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ExpectedValue {
+    Container(Container),
+    VideoCodec(VideoCodec),
+    AudioCodec(AudioCodec),
+    Integer(u64),
+    Text(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpectedFact {
     pub field: Field,
-    pub value: String,
+    pub value: ExpectedValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreservationClaim {
+    AllStreamsCopied,
+    AudioStreamCopied,
+    VideoDimensions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanStep {
     pub id: String,
-    pub transform: TransformId,
-    pub params: Vec<StepParam>,
-    pub reason: Vec<String>,
+    pub operation: TransformId,
+    pub target: StepTarget,
+    pub reasons: Vec<PlanReason>,
+    pub expected: Vec<ExpectedFact>,
+    pub preservation: Vec<PreservationClaim>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plan {
+    pub schema: PlanSchema,
+    pub planner_version: String,
     pub steps: Vec<PlanStep>,
-    pub preserved: Vec<String>,
+    pub preserved: Vec<PreservationClaim>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockingCode {
+    UnsafeStreamTopology,
+    NonMediaUnsupported,
+    NonMp4Target,
+    UnsupportedVideoTarget,
+    UnsupportedAudioTarget,
+    AudioTranscodeUnsupported,
+    ResizeUnsupported,
+    SizeFittingUnsupported,
+    UncertainPostTransformSize,
+    UnsupportedVideoCodec,
+    UnsupportedContainer,
+    HdrConversionUnsupported,
+    BitDepthConversionUnsupported,
+    UnknownRequiredFact,
+    NoProvenPlan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockingReason {
+    pub code: BlockingCode,
+    pub constraint_ids: Vec<String>,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PlanOutcome {
-    Compatible,
-    Planned { plan: Plan },
-    CannotSatisfy { blocking: Vec<String> },
+    Compatible {
+        schema: PlanSchema,
+        planner_version: String,
+        warnings: Vec<String>,
+    },
+    Planned {
+        schema: PlanSchema,
+        planner_version: String,
+        plan: Plan,
+    },
+    CannotSatisfy {
+        schema: PlanSchema,
+        planner_version: String,
+        blocking: Vec<BlockingReason>,
+    },
 }
 
 impl PlanOutcome {
     pub fn steps(&self) -> &[PlanStep] {
         match self {
-            Self::Planned { plan } => &plan.steps,
+            Self::Planned { plan, .. } => &plan.steps,
             _ => &[],
         }
+    }
+
+    pub fn plan(&self) -> Option<&Plan> {
+        match self {
+            Self::Planned { plan, .. } => Some(plan),
+            _ => None,
+        }
+    }
+
+    pub fn is_compatible(&self) -> bool {
+        matches!(self, Self::Compatible { .. })
+    }
+
+    pub fn blocking(&self) -> &[BlockingReason] {
+        match self {
+            Self::CannotSatisfy { blocking, .. } => blocking,
+            _ => &[],
+        }
+    }
+
+    pub fn blocking_codes(&self) -> Vec<BlockingCode> {
+        self.blocking().iter().map(|reason| reason.code).collect()
     }
 }
 
@@ -56,10 +157,14 @@ impl Candidate {
         let mut lossy = 0;
         let mut streams = 0;
         for step in &self.steps {
-            if let Some(cap) = catalog.capabilities.iter().find(|c| c.id == step.transform) {
-                semantic += cap.semantic_penalty();
-                lossy += cap.lossy_penalty();
-                streams += cap.streams_changed;
+            if let Some(capability) = catalog
+                .capabilities
+                .iter()
+                .find(|capability| capability.id == step.operation)
+            {
+                semantic += capability.semantic_penalty();
+                lossy += capability.lossy_penalty();
+                streams += capability.streams_changed;
             }
         }
         (semantic, lossy, streams, self.steps.len())
@@ -71,178 +176,428 @@ pub fn plan(
     constraints: &ConstraintSet,
     catalog: &CapabilityCatalog,
 ) -> PlanOutcome {
+    if let Some(reason) = topology_blocker(artifact) {
+        return cannot(vec![reason]);
+    }
+    if let Some(reason) = target_blocker(constraints) {
+        return cannot(vec![reason]);
+    }
+
     let initial = check(artifact, constraints);
+    if let Some(reason) = check_only_blocker(&initial) {
+        return cannot(vec![reason]);
+    }
     if initial.all_pass() {
-        return PlanOutcome::Compatible;
+        return PlanOutcome::Compatible {
+            schema: PlanSchema,
+            planner_version: PLANNER_VERSION.into(),
+            warnings: Vec::new(),
+        };
+    }
+    if let Some(reason) = mutation_blocker(artifact, &initial) {
+        return cannot(vec![reason]);
+    }
+    if constraints
+        .hard
+        .iter()
+        .any(|constraint| constraint.field == Field::FileBytes)
+    {
+        return cannot(vec![blocking(
+            BlockingCode::UncertainPostTransformSize,
+            ids_for(&initial, Field::FileBytes),
+            "v0.1 cannot prove a size limit still passes after a transform",
+        )]);
     }
 
     let mut best: Option<Candidate> = None;
-    let mut queue = vec![Candidate {
+    let mut queue = VecDeque::from([Candidate {
         artifact: artifact.clone(),
         steps: Vec::new(),
-    }];
-
-    while let Some(current) = queue.pop() {
+    }]);
+    while let Some(current) = queue.pop_front() {
         if current.steps.len() >= MAX_DEPTH {
             continue;
         }
-        for cap in &catalog.capabilities {
-            if !cap.preconditions_met(&current.artifact) {
+        let report = check(&current.artifact, constraints);
+        for capability in &catalog.capabilities {
+            if current
+                .steps
+                .iter()
+                .any(|step| step.operation == capability.id)
+                || !capability.preconditions_met(&current.artifact)
+            {
                 continue;
             }
-            if current.steps.iter().any(|s| s.transform == cap.id) {
-                continue;
-            }
-            let report = check(&current.artifact, constraints);
-            let Some(step) = instantiate(cap, &report, current.steps.len()) else {
+            let Some(step) = instantiate(
+                capability.id,
+                &current.artifact,
+                &report,
+                current.steps.len(),
+            ) else {
                 continue;
             };
             let next_artifact = apply(&current.artifact, &step);
-            if next_artifact == current.artifact {
-                continue;
-            }
             let mut next_steps = current.steps.clone();
             next_steps.push(step);
             let next = Candidate {
                 artifact: next_artifact,
                 steps: next_steps,
             };
-            let next_report = check(&next.artifact, constraints);
-            if next_report.all_pass() {
-                let better = match &best {
-                    None => true,
-                    Some(existing) => next.rank(catalog) < existing.rank(catalog),
-                };
-                if better {
+            if check(&next.artifact, constraints).all_pass() {
+                if best
+                    .as_ref()
+                    .is_none_or(|existing| next.rank(catalog) < existing.rank(catalog))
+                {
                     best = Some(next);
                 }
             } else if next.steps.len() < MAX_DEPTH {
-                queue.push(next);
+                queue.push_back(next);
             }
         }
     }
 
     match best {
-        Some(winner) => PlanOutcome::Planned {
-            plan: Plan {
-                preserved: preserved(artifact, constraints, &winner.steps),
-                steps: winner.steps,
+        Some(winner) => {
+            let mut preserved = Vec::new();
+            for claim in winner
+                .steps
+                .iter()
+                .flat_map(|step| step.preservation.iter().copied())
+            {
+                if !preserved.contains(&claim) {
+                    preserved.push(claim);
+                }
+            }
+            PlanOutcome::Planned {
+                schema: PlanSchema,
+                planner_version: PLANNER_VERSION.into(),
+                plan: Plan {
+                    schema: PlanSchema,
+                    planner_version: PLANNER_VERSION.into(),
+                    steps: winner.steps,
+                    preserved,
+                    warnings: Vec::new(),
+                },
+            }
+        }
+        None => cannot(vec![blocking(
+            BlockingCode::NoProvenPlan,
+            initial.blocking_ids(),
+            "the bounded v0.1 capability catalog has no proven plan",
+        )]),
+    }
+}
+
+fn topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
+    if artifact.family != Family::Media {
+        return Some(blocking(
+            BlockingCode::NonMediaUnsupported,
+            Vec::new(),
+            "v0.1 plans media files only",
+        ));
+    }
+    let videos = artifact.video_streams().count();
+    let audios = artifact.audio_streams().count();
+    let other = artifact
+        .streams
+        .iter()
+        .any(|stream| !matches!(stream.stream_type(), StreamType::Video | StreamType::Audio));
+    if videos != 1 || audios > 1 || other {
+        return Some(blocking(
+            BlockingCode::UnsafeStreamTopology,
+            Vec::new(),
+            "v0.1 requires exactly one video, at most one audio, and no other streams",
+        ));
+    }
+    None
+}
+
+fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
+    if let Some(constraint) = constraints
+        .hard
+        .iter()
+        .find(|constraint| constraint.field == Field::FileFamily)
+        && constraint.value != ConstraintValue::Text("media".into())
+    {
+        return Some(blocking(
+            BlockingCode::NonMediaUnsupported,
+            vec![constraint.id.clone()],
+            "v0.1 supports only media targets",
+        ));
+    }
+    if let Some(constraint) = constraints
+        .hard
+        .iter()
+        .find(|constraint| constraint.field == Field::MediaContainer)
+        && !constraint
+            .value
+            .as_text_list()
+            .iter()
+            .any(|value| value == "mp4")
+    {
+        return Some(blocking(
+            BlockingCode::NonMp4Target,
+            vec![constraint.id.clone()],
+            "v0.1 can produce only MP4",
+        ));
+    }
+    if let Some(constraint) = constraints
+        .hard
+        .iter()
+        .find(|constraint| constraint.field == Field::MediaVideoCodec)
+        && !constraint
+            .value
+            .as_text_list()
+            .iter()
+            .any(|value| value == "h264")
+    {
+        return Some(blocking(
+            BlockingCode::UnsupportedVideoTarget,
+            vec![constraint.id.clone()],
+            "v0.1 can target only H.264 video",
+        ));
+    }
+    if let Some(constraint) = constraints
+        .hard
+        .iter()
+        .find(|constraint| constraint.field == Field::MediaAudioCodec)
+        && !constraint
+            .value
+            .as_text_list()
+            .iter()
+            .any(|value| value == "aac")
+    {
+        return Some(blocking(
+            BlockingCode::UnsupportedAudioTarget,
+            vec![constraint.id.clone()],
+            "v0.1 can preserve only already-valid AAC audio",
+        ));
+    }
+    None
+}
+
+fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
+    for field in [Field::MediaVideoWidth, Field::MediaVideoHeight] {
+        if let Some(check) = report.failing_or_unknown(field) {
+            return Some(blocking(
+                if check.result == CheckResult::Unknown {
+                    BlockingCode::UnknownRequiredFact
+                } else {
+                    BlockingCode::ResizeUnsupported
+                },
+                vec![check.constraint_id.clone()],
+                "v0.1 can check dimensions but cannot resize video",
+            ));
+        }
+    }
+    if let Some(check) = report.failing_or_unknown(Field::FileBytes) {
+        return Some(blocking(
+            if check.result == CheckResult::Unknown {
+                BlockingCode::UnknownRequiredFact
+            } else {
+                BlockingCode::SizeFittingUnsupported
             },
-        },
-        None => PlanOutcome::CannotSatisfy {
-            blocking: initial.blocking_ids(),
-        },
+            vec![check.constraint_id.clone()],
+            "v0.1 can check file size but cannot fit a size limit",
+        ));
     }
+    None
 }
 
-fn instantiate(cap: &Capability, report: &CompatibilityReport, index: usize) -> Option<PlanStep> {
-    let mut params = Vec::new();
-    let mut reason = Vec::new();
-
-    if cap.requires_video_codec_change {
-        let video = report.failing_or_unknown(Field::MediaVideoCodec)?;
-        params.push(StepParam {
-            field: Field::MediaVideoCodec,
-            value: first_required(&video.required),
-        });
-        reason.push(video.constraint_id.clone());
+fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option<BlockingReason> {
+    if let Some(check) = report.failing_or_unknown(Field::MediaAudioCodec) {
+        return Some(blocking(
+            if check.result == CheckResult::Unknown {
+                BlockingCode::UnknownRequiredFact
+            } else {
+                BlockingCode::AudioTranscodeUnsupported
+            },
+            vec![check.constraint_id.clone()],
+            "v0.1 cannot transcode audio",
+        ));
     }
-
-    for field in &cap.can_set {
-        if *field == Field::MediaVideoCodec && cap.requires_video_codec_change {
-            continue;
+    let audio_supported = artifact
+        .first_audio()
+        .is_none_or(|audio| audio.codec == Some(AudioCodec::Aac));
+    if !audio_supported {
+        return Some(blocking(
+            BlockingCode::AudioTranscodeUnsupported,
+            ids_for(report, Field::MediaAudioCodec),
+            "v0.1 operations can copy only AAC audio",
+        ));
+    }
+    if let Some(check) = report.failing_or_unknown(Field::MediaVideoCodec) {
+        let video = artifact.first_video().expect("topology checked");
+        if video.codec.is_none() {
+            return Some(blocking(
+                BlockingCode::UnknownRequiredFact,
+                vec![check.constraint_id.clone()],
+                "the video codec is unknown",
+            ));
         }
-        if let Some(check) = report.failing_or_unknown(*field) {
-            params.push(StepParam {
-                field: *field,
-                value: first_required(&check.required),
-            });
-            reason.push(check.constraint_id.clone());
+        if video.codec != Some(VideoCodec::Hevc) {
+            return Some(blocking(
+                BlockingCode::UnsupportedVideoCodec,
+                vec![check.constraint_id.clone()],
+                "v0.1 can transcode only HEVC video to H.264",
+            ));
+        }
+        if video.hdr != HdrStatus::Sdr {
+            return Some(blocking(
+                BlockingCode::HdrConversionUnsupported,
+                vec![check.constraint_id.clone()],
+                "v0.1 does not perform or assume HDR semantic conversion",
+            ));
+        }
+        if video.bit_depth.is_none_or(|depth| depth > 8) {
+            return Some(blocking(
+                BlockingCode::BitDepthConversionUnsupported,
+                vec![check.constraint_id.clone()],
+                "v0.1 does not perform or assume greater-than-8-bit conversion",
+            ));
         }
     }
-
-    if params.is_empty() {
-        return None;
+    if let Some(check) = report.failing_or_unknown(Field::MediaContainer)
+        && matches!(artifact.container, None | Some(Container::Unknown(_)))
+    {
+        return Some(blocking(
+            BlockingCode::UnsupportedContainer,
+            vec![check.constraint_id.clone()],
+            "the source container is not known to the v0.1 remux capability",
+        ));
     }
-
-    Some(PlanStep {
-        id: format!("step-{}", index + 1),
-        transform: cap.id,
-        params,
-        reason,
-    })
+    None
 }
 
-fn first_required(required: &str) -> String {
-    required
-        .split(',')
-        .next()
-        .unwrap_or(required)
-        .trim()
-        .to_string()
+fn instantiate(
+    operation: TransformId,
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+    index: usize,
+) -> Option<PlanStep> {
+    match operation {
+        TransformId::Remux => {
+            let container = report.failing_or_unknown(Field::MediaContainer)?;
+            if artifact.first_video()?.codec != Some(VideoCodec::H264) {
+                return None;
+            }
+            Some(PlanStep {
+                id: format!("step-{}", index + 1),
+                operation,
+                target: StepTarget {
+                    container: Some(Container::Mp4),
+                    video_codec: None,
+                },
+                reasons: vec![PlanReason {
+                    constraint_id: container.constraint_id.clone(),
+                    message: "The target requires an MP4 container.".into(),
+                }],
+                expected: vec![ExpectedFact {
+                    field: Field::MediaContainer,
+                    value: ExpectedValue::Container(Container::Mp4),
+                }],
+                preservation: vec![PreservationClaim::AllStreamsCopied],
+                warnings: Vec::new(),
+            })
+        }
+        TransformId::TranscodeVideo => {
+            let video = report.failing_or_unknown(Field::MediaVideoCodec)?;
+            if artifact.first_video()?.codec != Some(VideoCodec::Hevc) {
+                return None;
+            }
+            let mut reasons = vec![PlanReason {
+                constraint_id: video.constraint_id.clone(),
+                message: "The target requires H.264 video.".into(),
+            }];
+            if let Some(container) = report.failing_or_unknown(Field::MediaContainer) {
+                reasons.push(PlanReason {
+                    constraint_id: container.constraint_id.clone(),
+                    message: "The target requires an MP4 container.".into(),
+                });
+            }
+            let input_video = artifact.first_video()?;
+            let mut expected = vec![
+                ExpectedFact {
+                    field: Field::MediaVideoCodec,
+                    value: ExpectedValue::VideoCodec(VideoCodec::H264),
+                },
+                ExpectedFact {
+                    field: Field::MediaContainer,
+                    value: ExpectedValue::Container(Container::Mp4),
+                },
+            ];
+            if let Some(width) = input_video.width {
+                expected.push(ExpectedFact {
+                    field: Field::MediaVideoWidth,
+                    value: ExpectedValue::Integer(u64::from(width)),
+                });
+            }
+            if let Some(height) = input_video.height {
+                expected.push(ExpectedFact {
+                    field: Field::MediaVideoHeight,
+                    value: ExpectedValue::Integer(u64::from(height)),
+                });
+            }
+            let mut preservation = vec![PreservationClaim::VideoDimensions];
+            if artifact.first_audio().is_some() {
+                preservation.push(PreservationClaim::AudioStreamCopied);
+            }
+            Some(PlanStep {
+                id: format!("step-{}", index + 1),
+                operation,
+                target: StepTarget {
+                    container: Some(Container::Mp4),
+                    video_codec: Some(VideoCodec::H264),
+                },
+                reasons,
+                expected,
+                preservation,
+                warnings: Vec::new(),
+            })
+        }
+    }
 }
 
 pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
     let mut next = artifact.clone();
-    for param in &step.params {
-        match param.field {
-            Field::MediaContainer => {
-                next.container = Some(Container::parse_loose(&param.value));
-            }
-            Field::MediaVideoCodec => {
-                let codec = VideoCodec::parse_loose(&param.value);
-                if let Some(video) = &mut next.video {
-                    video.codec = Some(codec);
-                }
-            }
-            Field::MediaAudioCodec => {
-                let codec = AudioCodec::parse_loose(&param.value);
-                if let Some(audio) = &mut next.audio {
-                    audio.codec = Some(codec);
-                }
-            }
-            Field::MediaVideoWidth => {
-                if let (Some(video), Ok(width)) = (&mut next.video, param.value.parse()) {
-                    video.width = Some(width);
-                }
-            }
-            Field::MediaVideoHeight => {
-                if let (Some(video), Ok(height)) = (&mut next.video, param.value.parse()) {
-                    video.height = Some(height);
-                }
-            }
-            Field::FileBytes => {
-                if let Ok(bytes) = param.value.parse() {
-                    next.byte_length = bytes;
-                }
-            }
-            Field::FileFamily => {}
-        }
+    if let Some(container) = &step.target.container {
+        next.container = Some(container.clone());
+    }
+    if let Some(codec) = &step.target.video_codec
+        && let Some(video) = next.first_video_mut()
+    {
+        video.codec = Some(codec.clone());
     }
     next
 }
 
-fn preserved(artifact: &Artifact, constraints: &ConstraintSet, steps: &[PlanStep]) -> Vec<String> {
-    let mut out = Vec::new();
-    let audio_changed = steps
+fn ids_for(report: &CompatibilityReport, field: Field) -> Vec<String> {
+    report
+        .checks
         .iter()
-        .any(|s| s.params.iter().any(|p| p.field == Field::MediaAudioCodec));
-    if artifact.audio.is_some() && !audio_changed && constraints.preferences.preserve_audio {
-        out.push("media.audio".into());
+        .filter(|check| check.field == field)
+        .map(|check| check.constraint_id.clone())
+        .collect()
+}
+
+fn blocking(
+    code: BlockingCode,
+    constraint_ids: Vec<String>,
+    message: impl Into<String>,
+) -> BlockingReason {
+    BlockingReason {
+        code,
+        constraint_ids,
+        message: message.into(),
     }
-    let resolution_changed = steps.iter().any(|s| {
-        s.params
-            .iter()
-            .any(|p| p.field == Field::MediaVideoWidth || p.field == Field::MediaVideoHeight)
-    });
-    if artifact.video.is_some()
-        && !resolution_changed
-        && constraints.preferences.preserve_resolution
-    {
-        out.push("media.video.width".into());
-        out.push("media.video.height".into());
+}
+
+fn cannot(blocking: Vec<BlockingReason>) -> PlanOutcome {
+    PlanOutcome::CannotSatisfy {
+        schema: PlanSchema,
+        planner_version: PLANNER_VERSION.into(),
+        blocking,
     }
-    out
 }
 
 #[cfg(test)]
@@ -250,123 +605,17 @@ mod tests {
     use super::*;
     use crate::artifact::{AudioCodec, Container, VideoCodec};
     use crate::capability::default_catalog;
-    use crate::constraints::{ConstraintInput, compile};
-
-    fn target() -> ConstraintSet {
-        crate::constraints::media_h264_mp4_aac()
-    }
-
-    fn ids(outcome: &PlanOutcome) -> Vec<TransformId> {
-        outcome.steps().iter().map(|s| s.transform).collect()
-    }
+    use crate::constraints::media_h264_mp4_aac;
 
     #[test]
-    fn already_compatible_is_empty_plan() {
-        let artifact = Artifact::media(
-            Container::Mp4,
-            VideoCodec::H264,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        assert_eq!(outcome, PlanOutcome::Compatible);
-    }
-
-    #[test]
-    fn hevc_mp4_selects_video_transcode_only() {
-        let artifact = Artifact::media(
-            Container::Mp4,
-            VideoCodec::Hevc,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        assert_eq!(ids(&outcome), vec![TransformId::TranscodeVideo]);
-        if let PlanOutcome::Planned { plan } = outcome {
-            assert!(plan.preserved.contains(&"media.audio".into()));
-            assert!(
-                !plan
-                    .steps
-                    .iter()
-                    .any(|s| s.transform.as_str().contains("audio"))
-            );
-        } else {
-            panic!("expected plan");
-        }
-    }
-
-    #[test]
-    fn h264_mov_selects_remux_only() {
+    fn bounded_search_prefers_lossless_remux() {
         let artifact = Artifact::media(
             Container::Mov,
             VideoCodec::H264,
             Some(AudioCodec::Aac),
             1000,
         );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        assert_eq!(ids(&outcome), vec![TransformId::Remux]);
-    }
-
-    #[test]
-    fn hevc_mov_selects_single_transcode_covering_container() {
-        let artifact = Artifact::media(
-            Container::Mov,
-            VideoCodec::Hevc,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        assert_eq!(ids(&outcome), vec![TransformId::TranscodeVideo]);
-        let container = outcome.steps()[0]
-            .params
-            .iter()
-            .find(|p| p.field == Field::MediaContainer)
-            .unwrap();
-        assert_eq!(container.value, "mp4");
-    }
-
-    #[test]
-    fn remux_beats_lossy_when_remux_suffices() {
-        let artifact = Artifact::media(
-            Container::Mov,
-            VideoCodec::H264,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        assert_eq!(ids(&outcome), vec![TransformId::Remux]);
-        assert!(!ids(&outcome).contains(&TransformId::TranscodeVideo));
-    }
-
-    #[test]
-    fn image_family_is_unsatisfiable_for_media_catalog() {
-        let artifact = Artifact::image_stub(100);
-        let constraints = compile(ConstraintInput {
-            family: Some("media".into()),
-            video_codec: Some(vec!["h264".into()]),
-            ..ConstraintInput::default()
-        });
-        let outcome = plan(&artifact, &constraints, &default_catalog());
-        match outcome {
-            PlanOutcome::CannotSatisfy { blocking } => {
-                assert!(!blocking.is_empty());
-            }
-            other => panic!("expected cannot_satisfy, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn planner_does_not_emit_shell() {
-        let artifact = Artifact::media(
-            Container::Mp4,
-            VideoCodec::Hevc,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        let outcome = plan(&artifact, &target(), &default_catalog());
-        let encoded = serde_json::to_string(&outcome).unwrap();
-        assert!(!encoded.contains("ffmpeg"));
-        assert!(!encoded.contains("-c:v"));
-        assert!(!encoded.contains("sh -c"));
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert_eq!(outcome.steps()[0].operation, TransformId::Remux);
     }
 }

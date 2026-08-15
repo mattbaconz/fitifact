@@ -1,3 +1,17 @@
-container: [mp4]
-video_codec: [h264]
-audio_codec: [aac]
+schema: fitifact.constraints/v1
+hard:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+preferences:
+  preserve_audio: true
+  preserve_resolution: true

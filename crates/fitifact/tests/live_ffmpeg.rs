@@ -96,10 +96,10 @@ fn live_hevc_transcodes_video_only() {
     assert_eq!(result.status, AdaptationStatus::Adapted);
     let plan = result.plan.expect("plan");
     assert_eq!(plan.steps.len(), 1);
-    assert_eq!(plan.steps[0].transform, TransformId::TranscodeVideo);
+    assert_eq!(plan.steps[0].operation, TransformId::TranscodeVideo);
     let out = result.validation.expect("validation").artifact;
-    assert_eq!(out.video.unwrap().codec, Some(VideoCodec::H264));
-    assert_eq!(out.audio.unwrap().codec, Some(AudioCodec::Aac));
+    assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
+    assert_eq!(out.first_audio().unwrap().codec, Some(AudioCodec::Aac));
     assert_eq!(std::fs::metadata(&input).unwrap().len(), original_bytes);
     assert!(output.exists());
     let _ = std::fs::remove_dir_all(dir);
@@ -170,9 +170,9 @@ fn live_mov_remuxes_without_transcode() {
     })
     .unwrap();
     assert_eq!(result.status, AdaptationStatus::Adapted);
-    assert_eq!(result.plan.unwrap().steps[0].transform, TransformId::Remux);
+    assert_eq!(result.plan.unwrap().steps[0].operation, TransformId::Remux);
     let out = result.validation.unwrap().artifact;
-    assert_eq!(out.container.unwrap().as_str(), "mp4");
-    assert_eq!(out.video.unwrap().codec, Some(VideoCodec::H264));
+    assert_eq!(out.container.as_ref().unwrap().as_str(), "mp4");
+    assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
     let _ = std::fs::remove_dir_all(dir);
 }

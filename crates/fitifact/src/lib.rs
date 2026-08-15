@@ -7,6 +7,8 @@ pub mod artifact;
 pub mod capability;
 pub mod check;
 pub mod constraints;
+pub mod contract;
+pub mod doctor;
 pub mod error;
 pub mod ffmpeg;
 pub mod inspect;

@@ -4,8 +4,8 @@ use std::time::Duration;
 use serde::Deserialize;
 
 use crate::artifact::{
-    Artifact, AudioCodec, AudioStream, Completeness, Container, Family, InspectionMeta, VideoCodec,
-    VideoStream,
+    Artifact, ArtifactSchema, AudioCodec, AudioStream, Completeness, Container, Family, HdrStatus,
+    InspectionMeta, OtherStream, Rational, Stream, StreamDetails, VideoCodec, VideoStream,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::runtime::{ProcessSpawner, SystemSpawner};
@@ -56,6 +56,7 @@ impl<S: ProcessSpawner> Inspector for FfprobeInspector<S> {
             "json".into(),
             "-show_format".into(),
             "-show_streams".into(),
+            "-show_program_version".into(),
             "-protocol_whitelist".into(),
             "file,crypto,data".into(),
             path_str.into(),
@@ -96,7 +97,13 @@ pub fn inspect(path: &Path, inspector: &dyn Inspector) -> Result<Artifact> {
 struct Probe {
     streams: Option<Vec<ProbeStream>>,
     format: Option<ProbeFormat>,
+    program_version: Option<ProbeProgramVersion>,
     error: Option<ProbeError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProbeProgramVersion {
+    version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,10 +113,19 @@ struct ProbeError {
 
 #[derive(Debug, Deserialize)]
 struct ProbeStream {
+    index: Option<u32>,
     codec_type: Option<String>,
     codec_name: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
+    avg_frame_rate: Option<String>,
+    r_frame_rate: Option<String>,
+    pix_fmt: Option<String>,
+    bits_per_raw_sample: Option<serde_json::Value>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_transfer: Option<String>,
+    color_primaries: Option<String>,
     channels: Option<u32>,
     sample_rate: Option<serde_json::Value>,
 }
@@ -155,24 +171,7 @@ pub fn artifact_from_ffprobe_json(path: &Path, byte_length: u64, json: &str) -> 
         .as_deref()
         .map(|name| Container::from_probe(name, major_brand));
 
-    let video = streams
-        .iter()
-        .find(|s| s.codec_type.as_deref() == Some("video"));
-    let audio = streams
-        .iter()
-        .find(|s| s.codec_type.as_deref() == Some("audio"));
-
-    let video = video.map(|stream| VideoStream {
-        codec: stream.codec_name.as_deref().map(VideoCodec::parse_loose),
-        width: stream.width,
-        height: stream.height,
-        sample_rate: None,
-    });
-    let audio = audio.map(|stream| AudioStream {
-        codec: stream.codec_name.as_deref().map(AudioCodec::parse_loose),
-        channels: stream.channels,
-        sample_rate: stream.sample_rate.as_ref().and_then(json_u32),
-    });
+    let streams = streams.into_iter().map(normalize_stream).collect();
 
     let duration_ms = format.duration.as_deref().and_then(|d| {
         d.parse::<f64>()
@@ -181,20 +180,117 @@ pub fn artifact_from_ffprobe_json(path: &Path, byte_length: u64, json: &str) -> 
     });
 
     Ok(Artifact {
+        schema: ArtifactSchema,
         path: Some(path.to_path_buf()),
         family: Family::Media,
         byte_length,
         container,
-        video,
-        audio,
+        streams,
         duration_ms,
         inspection: InspectionMeta {
             provider: "ffprobe".into(),
-            provider_version: None,
+            provider_version: probe.program_version.and_then(|version| version.version),
             completeness: Completeness::Full,
             warnings: Vec::new(),
         },
     })
+}
+
+fn normalize_stream(stream: ProbeStream) -> Stream {
+    let index = stream.index;
+    let codec = stream.codec_name.clone();
+    let details = match stream.codec_type.as_deref() {
+        Some("video") => {
+            let bit_depth = stream
+                .bits_per_raw_sample
+                .as_ref()
+                .and_then(json_u32)
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| *value > 0)
+                .or_else(|| {
+                    stream
+                        .pix_fmt
+                        .as_deref()
+                        .and_then(bit_depth_from_pixel_format)
+                });
+            let frame_rate = stream
+                .avg_frame_rate
+                .as_deref()
+                .and_then(parse_rational)
+                .or_else(|| stream.r_frame_rate.as_deref().and_then(parse_rational));
+            let hdr = hdr_status(stream.color_transfer.as_deref());
+            StreamDetails::Video {
+                facts: VideoStream {
+                    codec: stream.codec_name.as_deref().map(VideoCodec::parse_loose),
+                    width: stream.width,
+                    height: stream.height,
+                    frame_rate,
+                    pixel_format: stream.pix_fmt,
+                    bit_depth,
+                    color_range: stream.color_range,
+                    color_space: stream.color_space,
+                    color_transfer: stream.color_transfer,
+                    color_primaries: stream.color_primaries,
+                    hdr,
+                },
+            }
+        }
+        Some("audio") => StreamDetails::Audio {
+            facts: AudioStream {
+                codec: stream.codec_name.as_deref().map(AudioCodec::parse_loose),
+                channels: stream.channels,
+                sample_rate: stream.sample_rate.as_ref().and_then(json_u32),
+            },
+        },
+        Some("subtitle") => StreamDetails::Subtitle {
+            facts: OtherStream { codec },
+        },
+        Some("data") => StreamDetails::Data {
+            facts: OtherStream { codec },
+        },
+        Some("attachment") => StreamDetails::Attachment {
+            facts: OtherStream { codec },
+        },
+        other => StreamDetails::Unknown {
+            original_type: other.map(str::to_string),
+            facts: OtherStream { codec },
+        },
+    };
+    Stream { index, details }
+}
+
+fn parse_rational(value: &str) -> Option<Rational> {
+    let (numerator, denominator) = value.split_once('/')?;
+    Rational::new(numerator.parse().ok()?, denominator.parse().ok()?)
+}
+
+fn bit_depth_from_pixel_format(value: &str) -> Option<u8> {
+    let after_planar = value.rsplit_once('p').map(|(_, suffix)| suffix)?;
+    let digits: String = after_planar
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    if digits.is_empty() {
+        return Some(8);
+    }
+    digits.parse().ok()
+}
+
+fn hdr_status(transfer: Option<&str>) -> HdrStatus {
+    match transfer.map(|value| value.to_ascii_lowercase()) {
+        Some(value) if matches!(value.as_str(), "smpte2084" | "arib-std-b67" | "hlg" | "pq") => {
+            HdrStatus::Hdr
+        }
+        Some(value)
+            if matches!(
+                value.as_str(),
+                "bt709" | "bt601" | "smpte170m" | "gamma22" | "gamma28" | "iec61966-2-1"
+            ) =>
+        {
+            HdrStatus::Sdr
+        }
+        _ => HdrStatus::Unknown,
+    }
 }
 
 fn json_u32(value: &serde_json::Value) -> Option<u32> {
@@ -227,7 +323,7 @@ mod tests {
         let artifact = artifact_from_ffprobe_json(Path::new("video.mp4"), 1000, HEVC_MP4).unwrap();
         assert_eq!(artifact.container, Some(Container::Mp4));
         assert_eq!(
-            artifact.video.as_ref().and_then(|v| v.codec.clone()),
+            artifact.first_video().and_then(|v| v.codec.clone()),
             Some(VideoCodec::Hevc)
         );
         assert_eq!(artifact.family, Family::Media);

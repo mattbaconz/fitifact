@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use crate::artifact::{Container, VideoCodec};
 use crate::capability::TransformId;
-use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
 use crate::plan::{Plan, PlanStep};
 use crate::runtime::{
@@ -109,7 +108,7 @@ fn check_ffmpeg_status(output: SpawnOutput, step: &PlanStep) -> Result<()> {
         ErrorCode::ExecutionFailed,
         format!(
             "ffmpeg failed on {} (exit {}). {}",
-            step.transform.as_str(),
+            step.operation.as_str(),
             output.status,
             tail
         ),
@@ -128,7 +127,7 @@ pub fn ffmpeg_args(step: &PlanStep, input: &Path, output: &Path) -> Result<Vec<S
         path_arg(input)?,
     ];
 
-    match step.transform {
+    match step.operation {
         TransformId::Remux => {
             let container = required_container(step)?;
             args.extend(["-map".into(), "0".into(), "-c".into(), "copy".into()]);
@@ -176,10 +175,7 @@ fn append_movflags(args: &mut Vec<String>, container: &Container) {
 }
 
 fn container_from_step(step: &PlanStep) -> Option<Container> {
-    step.params
-        .iter()
-        .find(|p| p.field == Field::MediaContainer)
-        .map(|p| Container::parse_loose(&p.value))
+    step.target.container.clone()
 }
 
 fn required_container(step: &PlanStep) -> Result<Container> {
@@ -192,18 +188,12 @@ fn required_container(step: &PlanStep) -> Result<Container> {
 }
 
 fn required_video_codec(step: &PlanStep) -> Result<VideoCodec> {
-    let raw = step
-        .params
-        .iter()
-        .find(|p| p.field == Field::MediaVideoCodec)
-        .map(|p| p.value.as_str())
-        .ok_or_else(|| {
-            Error::new(
-                ErrorCode::ExecutionFailed,
-                "transcode_video step is missing a codec param",
-            )
-        })?;
-    Ok(VideoCodec::parse_loose(raw))
+    step.target.video_codec.clone().ok_or_else(|| {
+        Error::new(
+            ErrorCode::ExecutionFailed,
+            "transcode_video step is missing a codec param",
+        )
+    })
 }
 
 fn path_arg(path: &Path) -> Result<String> {
@@ -248,23 +238,20 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::StepParam;
+    use crate::plan::StepTarget;
 
     fn transcode_step() -> PlanStep {
         PlanStep {
             id: "step-1".into(),
-            transform: TransformId::TranscodeVideo,
-            params: vec![
-                StepParam {
-                    field: Field::MediaVideoCodec,
-                    value: "h264".into(),
-                },
-                StepParam {
-                    field: Field::MediaContainer,
-                    value: "mp4".into(),
-                },
-            ],
-            reason: vec!["video-codec".into()],
+            operation: TransformId::TranscodeVideo,
+            target: StepTarget {
+                video_codec: Some(VideoCodec::H264),
+                container: Some(Container::Mp4),
+            },
+            reasons: Vec::new(),
+            expected: Vec::new(),
+            preservation: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -272,12 +259,15 @@ mod tests {
     fn remux_args_are_stream_copy_without_encoder() {
         let step = PlanStep {
             id: "step-1".into(),
-            transform: TransformId::Remux,
-            params: vec![StepParam {
-                field: Field::MediaContainer,
-                value: "mp4".into(),
-            }],
-            reason: vec!["container".into()],
+            operation: TransformId::Remux,
+            target: StepTarget {
+                video_codec: None,
+                container: Some(Container::Mp4),
+            },
+            reasons: Vec::new(),
+            expected: Vec::new(),
+            preservation: Vec::new(),
+            warnings: Vec::new(),
         };
         let args = ffmpeg_args(&step, Path::new("in.mov"), Path::new("out.mp4")).unwrap();
         assert!(args.windows(2).any(|w| w == ["-c", "copy"]));
@@ -301,7 +291,7 @@ mod tests {
     #[test]
     fn transcode_rejects_non_h264_target() {
         let mut step = transcode_step();
-        step.params[0].value = "hevc".into();
+        step.target.video_codec = Some(VideoCodec::Hevc);
         let err = ffmpeg_args(&step, Path::new("in.mp4"), Path::new("out.mp4")).unwrap_err();
         assert_eq!(err.code, ErrorCode::ExecutionFailed);
     }
