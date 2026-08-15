@@ -63,7 +63,42 @@ try {
         $failures.Add("license-content inventory")
     }
     else {
-        Write-Host "Tracked license/notice inventory: PASS (Apache-2.0 root LICENSE only)"
+        $licenseOk = $true
+        $licenseText = [IO.File]::ReadAllText((Join-Path $root "LICENSE"))
+        $requiredLicenseMarkers = @(
+            "Apache License",
+            "Version 2.0, January 2004",
+            "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
+            "END OF TERMS AND CONDITIONS"
+        )
+        if ($licenseText.Length -lt 10000) {
+            Write-Error "Root LICENSE is unexpectedly short for the Apache-2.0 terms"
+            $licenseOk = $false
+        }
+        foreach ($marker in $requiredLicenseMarkers) {
+            if (-not $licenseText.Contains($marker)) {
+                Write-Error "Root LICENSE is missing a required Apache-2.0 legal marker"
+                $licenseOk = $false
+            }
+        }
+
+        $cargoManifest = [IO.File]::ReadAllText((Join-Path $root "Cargo.toml"))
+        if ($cargoManifest -notmatch '(?m)^license\s*=\s*"Apache-2\.0"\s*$') {
+            Write-Error "Cargo workspace metadata is missing the Apache-2.0 SPDX expression"
+            $licenseOk = $false
+        }
+        $readme = [IO.File]::ReadAllText((Join-Path $root "README.md"))
+        if (-not $readme.Contains("[Apache License 2.0](LICENSE)")) {
+            Write-Error "README is missing the root Apache-2.0 license link"
+            $licenseOk = $false
+        }
+
+        if ($licenseOk) {
+            Write-Host "Tracked license content, Apache-2.0 SPDX metadata, and legal markers: PASS"
+        }
+        else {
+            $failures.Add("license content/SPDX/legal-marker scan")
+        }
     }
 
     $requiredReleaseInputs = @(

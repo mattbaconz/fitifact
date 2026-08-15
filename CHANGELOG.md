@@ -2,7 +2,7 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased]
+## [0.1.0-rc.1] - unpublished candidate
 
 ### [added]
 

@@ -17,12 +17,12 @@ fn json_stderr(output: &Output) -> serde_json::Value {
 }
 
 #[test]
-fn version_is_automatic_and_stable() {
+fn version_is_automatic_and_matches_candidate() {
     let output = run(&["--version"]);
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "fitifact 0.1.0"
+        "fitifact 0.1.0-rc.1"
     );
 }
 
