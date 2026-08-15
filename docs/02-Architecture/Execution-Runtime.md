@@ -72,14 +72,22 @@ cleanup
 
 Every changed final is first written inside an atomically reserved, random
 hidden workspace beside the destination. Fitifact records stable directory and
-file identity (volume/file ID on Windows, device/inode on Unix), holds a
-protective file handle where the OS supports it, and removes only paths whose
-identity still matches an object it claimed. A validated stage is persisted
-with a same-filesystem hard-link create-if-absent operation. The published path
-is then freshly hashed, inspected, and validated before success. If cleanup is
-blocked, the validated final is retained with a cleanup warning; it is never
-removed merely because the staging link could not be unlinked. If the atomic
-no-clobber primitive or stable identity is unavailable, execution refuses.
+file identity (volume/file ID on Windows, device/inode on Unix) and holds
+protective handles. Unix creates the workspace atomically with mode `0700`;
+Windows deletes owned objects by handle disposition rather than by pathname.
+A stage is fully hashed, inspected, and validated before a same-filesystem
+hard-link create-if-absent publishes it. Hard-link creation is the last fallible
+publication operation. The final link is immediately identity-checked against
+the still-held stage; an unconfirmed final is preserved and reported with its
+path, never rolled back. Cleanup failure similarly retains the published final
+and emits a structured warning. If the atomic no-clobber primitive or stable
+identity is unavailable, execution refuses.
+
+Portable filesystem APIs cannot defend against a malicious process running as
+the same OS account and controlling the same directory. Fitifact therefore
+trusts other same-account processes. The random private workspace, atomic Unix
+permissions, Windows protected handles, and identity checks defend against
+accidental collisions and untrusted path replacement outside that boundary.
 
 Remux uses `-map 0 -c copy`. Selective transcode accepts only the planner-proven
 one-video/optional-one-AAC topology, maps those exact streams, encodes video

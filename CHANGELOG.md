@@ -37,5 +37,9 @@ All notable changes to Fitifact are documented here.
   loss, raw provider diagnostic leakage, and false adaptation success by fresh
   topology/fact/duration checks plus SHA-256 copied-stream provenance.
 - Bound staging and cleanup to atomically reserved workspaces and stable file
-  identities, reject post-validation replacement, revalidate the published
-  path, and preserve validated finals when staging cleanup cannot complete.
+  identities, reject post-validation replacement, identity-confirm the
+  published hard link, and preserve validated finals when cleanup cannot
+  complete.
+- Removed pathname rollback deletion: Windows cleanup is handle-bound, Unix
+  workspaces are atomically mode-0700, ambiguous provider partials are retained,
+  and publication/cleanup uncertainty returns structured warning paths.

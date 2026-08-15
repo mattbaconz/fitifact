@@ -49,10 +49,15 @@ cloud worker       isolation boundary
 - Changed output remains in an atomically reserved random hidden workspace
   until fresh constraint, integrity, expected-fact, and SHA-256 copied-stream
   validation passes. Stable file identity binds the stage to the no-clobber
-  hard link; the published path is freshly validated before success.
-- Cleanup removes only identity-verified files and workspaces. A mismatched or
-  unclaimed path is preserved, and staging cleanup failure never rolls back a
-  validated final by name.
+  hard link, which is the last fallible publication operation.
+- Windows cleanup uses deletion by a held identity handle. Unix staging
+  workspaces are atomically created mode `0700`; claimed paths are cleaned only
+  inside that private workspace. A mismatched, unclaimed, or ambiguous path is
+  preserved with a structured warning, and a published final is never rolled
+  back by name.
+- Other processes running under the same OS account are trusted. No portable
+  filesystem API can protect a directory from a malicious same-account process
+  with equivalent access; this boundary is explicit rather than approximated.
 - Probe/process output and time are bounded; external diagnostics shown to
   users are redacted stable messages.
 
