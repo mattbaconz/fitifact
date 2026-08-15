@@ -16,8 +16,8 @@ This release is intentionally narrow:
 | Input and requested result | v0.1 behavior |
 | --- | --- |
 | MP4 with H.264 video and AAC audio already satisfying the target | No-op; no encoder starts |
-| Supported video/audio streams in the wrong container | Remux without re-encoding |
-| HEVC video with compatible AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
+| MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding |
+| MP4 with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
 | Any other mutation | Refuse explicitly |
 
 File-size and video-dimension constraints are supported by `inspect` and

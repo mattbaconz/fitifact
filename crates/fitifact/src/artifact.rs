@@ -91,13 +91,6 @@ impl Container {
             "mov" | "quicktime" | "qt" => Self::Mov,
             "webm" => Self::Webm,
             "matroska" | "mkv" => Self::Mkv,
-            _ if normalized.split(',').any(|name| name.trim() == "webm") => Self::Webm,
-            _ if normalized
-                .split(',')
-                .any(|name| matches!(name.trim(), "matroska" | "mkv")) =>
-            {
-                Self::Mkv
-            }
             _ => Self::Unknown(format_name.to_string()),
         }
     }
@@ -505,7 +498,7 @@ mod tests {
         assert_eq!(Container::from_probe("webm", None), Container::Webm);
         assert_eq!(
             Container::from_probe("matroska,webm", None),
-            Container::Webm
+            Container::Unknown("matroska,webm".into())
         );
         assert_eq!(Container::from_probe("matroska", None), Container::Mkv);
     }

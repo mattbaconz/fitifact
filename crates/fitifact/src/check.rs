@@ -203,11 +203,11 @@ fn matches_eq(field: Field, actual: &Fact, expected: &ConstraintValue) -> bool {
         ConstraintValue::List(items) if items.len() == 1 => canonicalize(field, &items[0]),
         ConstraintValue::List(_) => return false,
     };
-    canonicalize(field, &actual.as_text()) == expected_text
+    actual.as_text() == expected_text
 }
 
 fn matches_in(field: Field, actual: &Fact, expected: &ConstraintValue) -> bool {
-    let actual_text = canonicalize(field, &actual.as_text());
+    let actual_text = actual.as_text();
     expected
         .as_text_list()
         .iter()

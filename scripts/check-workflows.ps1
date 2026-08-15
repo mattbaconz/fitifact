@@ -42,6 +42,7 @@ $releaseRequirements = @(
     @{ Name = "protected release environment"; Pattern = '(?m)^      name: public-release\s*$' },
     @{ Name = "tag planning without release creation"; Pattern = '(?m)^\s+dist plan .*--output-format=json' },
     @{ Name = "cargo-dist 0.32 GitHub host source evidence"; Pattern = 'cargo-dist v0\.32\.0.*implemented in CI backend' },
+    @{ Name = "non-publication host status"; Pattern = 'dist manifest prepared successfully; GitHub publication has not started' },
     @{ Name = "single-binary-package CycloneDX invocation"; Pattern = 'cargo cyclonedx -v --format xml --describe binaries --manifest-path crates/fitifact-cli/Cargo\.toml' },
     @{ Name = "single-SBOM assertion"; Pattern = 'expected exactly one uploaded CycloneDX XML file' }
 )

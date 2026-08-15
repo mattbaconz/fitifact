@@ -1,6 +1,8 @@
 use std::path::Path;
 
 use fitifact::artifact::{ARTIFACT_SCHEMA, Container, HdrStatus, Rational, StreamType, VideoCodec};
+use fitifact::check;
+use fitifact::constraints::{ConstraintInput, compile};
 use fitifact::inspect::artifact_from_ffprobe_json;
 
 #[test]
@@ -121,5 +123,29 @@ fn ambiguous_mov_family_inspection_never_claims_mp4() {
         );
         let artifact = artifact_from_ffprobe_json(Path::new("ambiguous.bin"), 1, &json).unwrap();
         assert!(matches!(artifact.container, Some(Container::Unknown(_))));
+    }
+}
+
+#[test]
+fn shared_matroska_webm_probe_is_unknown_and_never_webm_compatible() {
+    let target = compile(ConstraintInput {
+        container: Some(vec!["webm".into()]),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    for format_name in ["matroska,webm", "matroska"] {
+        let json = format!(
+            r#"{{
+                "streams": [{{"codec_type": "video", "codec_name": "h264"}}],
+                "format": {{"format_name": "{format_name}"}}
+            }}"#
+        );
+        let artifact = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, &json).unwrap();
+        if format_name.contains(',') {
+            assert!(matches!(artifact.container, Some(Container::Unknown(_))));
+        } else {
+            assert_eq!(artifact.container, Some(Container::Mkv));
+        }
+        assert!(!check(&artifact, &target).compatible);
     }
 }

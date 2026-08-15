@@ -448,6 +448,13 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
                 "v0.1 can transcode only HEVC video to H.264",
             ));
         }
+        if artifact.container != Some(Container::Mp4) {
+            return Some(blocking(
+                BlockingCode::UnsupportedContainer,
+                ids_for(report, Field::MediaContainer),
+                "the v0.1 video-transcode capability accepts only MP4 source containers",
+            ));
+        }
         if video.hdr != HdrStatus::Sdr {
             return Some(blocking(
                 BlockingCode::HdrConversionUnsupported,
@@ -479,12 +486,12 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
     }
     if let Some(check) = report
         .failing_or_unknown(Field::MediaContainer)
-        .filter(|_| matches!(artifact.container, None | Some(Container::Unknown(_))))
+        .filter(|_| artifact.container != Some(Container::Mov))
     {
         return Some(blocking(
             BlockingCode::UnsupportedContainer,
             vec![check.constraint_id.clone()],
-            "the source container is not known to the v0.1 remux capability",
+            "the v0.1 remux capability accepts only MOV source containers",
         ));
     }
     None
@@ -506,7 +513,9 @@ fn instantiate(
     match operation {
         TransformId::Remux => {
             let container = report.failing_or_unknown(Field::MediaContainer)?;
-            if artifact.first_video()?.codec != Some(VideoCodec::H264) {
+            if artifact.container != Some(Container::Mov)
+                || artifact.first_video()?.codec != Some(VideoCodec::H264)
+            {
                 return None;
             }
             Some(PlanStep {
@@ -530,7 +539,9 @@ fn instantiate(
         }
         TransformId::TranscodeVideo => {
             let video = report.failing_or_unknown(Field::MediaVideoCodec)?;
-            if artifact.first_video()?.codec != Some(VideoCodec::Hevc) {
+            if artifact.container != Some(Container::Mp4)
+                || artifact.first_video()?.codec != Some(VideoCodec::Hevc)
+            {
                 return None;
             }
             let mut reasons = vec![PlanReason {
