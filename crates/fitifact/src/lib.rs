@@ -17,7 +17,7 @@ pub mod report;
 pub mod runtime;
 pub mod validate;
 
-pub use adapt::{AdaptRequest, AdaptationResult, AdaptationStatus, adapt};
+pub use adapt::{AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, adapt};
 pub use artifact::{Artifact, AudioCodec, AudioStream, Container, Family, VideoCodec, VideoStream};
 pub use capability::{CapabilityCatalog, TransformId, default_catalog};
 pub use check::{CheckResult, CompatibilityReport, check};

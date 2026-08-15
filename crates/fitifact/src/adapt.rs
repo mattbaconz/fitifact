@@ -46,6 +46,14 @@ pub struct AdaptationResult {
     pub validation: Option<ValidationReport>,
     pub explanation: Explanation,
     pub error: Option<ErrorEnvelope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanup_warning: Option<CleanupWarning>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CleanupWarning {
+    pub path: PathBuf,
+    pub message: String,
 }
 
 pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
@@ -68,6 +76,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
             validation: None,
             explanation,
             error: None,
+            cleanup_warning: None,
         }),
         PlanOutcome::CannotSatisfy { blocking, .. } => Ok(AdaptationResult {
             schema: AdaptationSchema,
@@ -106,6 +115,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 );
                 envelope
             }),
+            cleanup_warning: None,
         }),
         PlanOutcome::Planned { plan, .. } => {
             let explicit_output = request.output.is_some();
@@ -162,26 +172,33 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 &artifact,
                 &request.execution,
             ) {
-                let _ = staged.claim_created_file();
-                return Ok(failed(
-                    original,
-                    artifact,
-                    report,
-                    Some(plan),
-                    explanation,
-                    err,
-                    None,
+                let cleanup = staged.cleanup_owned();
+                return Ok(with_cleanup_warning(
+                    failed(
+                        original,
+                        artifact,
+                        report,
+                        Some(plan),
+                        explanation,
+                        err,
+                        None,
+                    ),
+                    cleanup,
                 ));
             }
             if let Err(err) = staged.claim_created_file() {
-                return Ok(failed(
-                    original,
-                    artifact,
-                    report,
-                    Some(plan),
-                    explanation,
-                    err,
-                    None,
+                let cleanup = staged.cleanup_owned();
+                return Ok(with_cleanup_warning(
+                    failed(
+                        original,
+                        artifact,
+                        report,
+                        Some(plan),
+                        explanation,
+                        err,
+                        None,
+                    ),
+                    cleanup,
                 ));
             }
             let source_hashes =
@@ -191,14 +208,18 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 {
                     Ok(hashes) => hashes,
                     Err(err) => {
-                        return Ok(failed(
-                            original,
-                            artifact,
-                            report,
-                            Some(plan),
-                            explanation,
-                            err,
-                            None,
+                        let cleanup = staged.cleanup_owned();
+                        return Ok(with_cleanup_warning(
+                            failed(
+                                original,
+                                artifact,
+                                report,
+                                Some(plan),
+                                explanation,
+                                err,
+                                None,
+                            ),
+                            cleanup,
                         ));
                     }
                 };
@@ -209,14 +230,18 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 {
                     Ok(hashes) => hashes,
                     Err(err) => {
-                        return Ok(failed(
-                            original,
-                            artifact,
-                            report,
-                            Some(plan),
-                            explanation,
-                            err,
-                            None,
+                        let cleanup = staged.cleanup_owned();
+                        return Ok(with_cleanup_warning(
+                            failed(
+                                original,
+                                artifact,
+                                report,
+                                Some(plan),
+                                explanation,
+                                err,
+                                None,
+                            ),
+                            cleanup,
                         ));
                     }
                 };
@@ -230,30 +255,12 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 &output_hashes,
             ) {
                 Ok(staged_validation) if staged_validation.status == ValidationStatus::Pass => {
-                    let mut published = match staged.publish(&output) {
-                        Ok(published) => published,
+                    let identity_confirmed = match staged.publish(&output) {
+                        Ok(confirmed) => confirmed,
                         Err(err) => {
-                            return Ok(failed(
-                                original,
-                                artifact,
-                                report,
-                                Some(plan),
-                                explanation,
-                                err,
-                                Some(staged_validation),
-                            ));
-                        }
-                    };
-                    let final_hashes =
-                        match request
-                            .provider
-                            .stream_hashes(&output, &artifact, &request.execution)
-                        {
-                            Ok(hashes) => hashes,
-                            Err(err) => {
-                                staged.release_protection();
-                                let _ = published.remove_if_owned();
-                                return Ok(failed(
+                            let cleanup = staged.cleanup_owned();
+                            return Ok(with_cleanup_warning(
+                                failed(
                                     original,
                                     artifact,
                                     report,
@@ -261,112 +268,96 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                                     explanation,
                                     err,
                                     Some(staged_validation),
-                                ));
-                            }
-                        };
-                    let final_validation = validate_adaptation(
-                        &output,
-                        &request.constraints,
-                        request.inspector,
-                        &artifact,
-                        &plan,
-                        &source_hashes,
-                        &final_hashes,
-                    );
-                    let identity_check = published.verify();
-                    match (final_validation, identity_check) {
-                        (Ok(validation), Ok(())) if validation.status == ValidationStatus::Pass => {
-                            published.release_protection();
-                            let cleanup = staged.cleanup_owned();
-                            let mut explanation = explanation;
-                            if !cleanup.complete {
-                                explanation.details.push(
-                                    "The validated output was published, but its private staging workspace could not be fully removed; no published or unverified path was deleted."
-                                        .into(),
+                                ),
+                                cleanup,
+                            ));
+                        }
+                    };
+                    let cleanup = staged.cleanup_owned();
+                    if !identity_confirmed {
+                        let mut result = failed(
+                            original,
+                            artifact,
+                            report,
+                            Some(plan),
+                            explanation,
+                            Error::new(
+                                ErrorCode::SecurityBlocked,
+                                "the published output identity could not be confirmed; it was preserved",
+                            ),
+                            Some(staged_validation),
+                        );
+                        result.output = Some(output.clone());
+                        let publication_warning = CleanupOutcome::warning(
+                            output,
+                            "The published path could not be identity-confirmed and was intentionally preserved."
+                                .into(),
+                        );
+                        if let Some(staging_warning) = cleanup.warning {
+                            result
+                                .explanation
+                                .details
+                                .push(staging_warning.message.clone());
+                            if let Some(error) = result.error.as_mut() {
+                                error.details.insert(
+                                    "staging_cleanup_warning".into(),
+                                    serde_json::to_value(staging_warning)
+                                        .unwrap_or(serde_json::Value::Null),
                                 );
                             }
-                            Ok(AdaptationResult {
-                                schema: AdaptationSchema,
-                                status: AdaptationStatus::Adapted,
-                                original,
-                                output: Some(output),
-                                artifact,
-                                report,
-                                plan: Some(plan),
-                                validation: Some(validation),
-                                explanation,
-                                error: None,
-                            })
                         }
-                        (Ok(validation), identity) => {
-                            staged.release_protection();
-                            let removed = published.remove_if_owned();
-                            let err = identity.err().unwrap_or_else(|| {
-                                Error::new(
-                                    ErrorCode::ValidationFailed,
-                                    "the published output failed fresh validation",
-                                )
-                            });
-                            let mut explanation = explanation;
-                            if !removed {
-                                explanation.details.push(
-                                    "The untrusted published path was left in place because its identity could not be proven for safe cleanup."
-                                        .into(),
-                                );
-                            }
-                            Ok(failed(
-                                original,
-                                artifact,
-                                report,
-                                Some(plan),
-                                explanation,
-                                err,
-                                Some(validation),
-                            ))
-                        }
-                        (Err(err), _) => {
-                            staged.release_protection();
-                            let removed = published.remove_if_owned();
-                            let mut explanation = explanation;
-                            if !removed {
-                                explanation.details.push(
-                                    "The untrusted published path was left in place because its identity could not be proven for safe cleanup."
-                                        .into(),
-                                );
-                            }
-                            Ok(failed(
-                                original,
-                                artifact,
-                                report,
-                                Some(plan),
-                                explanation,
-                                err,
-                                None,
-                            ))
-                        }
+                        return Ok(with_cleanup_warning(result, publication_warning));
                     }
+                    Ok(with_cleanup_warning(
+                        AdaptationResult {
+                            schema: AdaptationSchema,
+                            status: AdaptationStatus::Adapted,
+                            original,
+                            output: Some(output),
+                            artifact,
+                            report,
+                            plan: Some(plan),
+                            validation: Some(staged_validation),
+                            explanation,
+                            error: None,
+                            cleanup_warning: None,
+                        },
+                        cleanup,
+                    ))
                 }
-                Ok(validation) => Ok(failed(
-                    original,
-                    artifact,
-                    report,
-                    Some(plan),
-                    explanation,
-                    Error::new(
-                        ErrorCode::ValidationFailed,
-                        "output did not satisfy the same hard constraints",
-                    ),
-                    Some(validation),
-                )),
-                Err(err) => Ok(failed(
-                    original,
-                    artifact,
-                    report,
-                    Some(plan),
-                    explanation,
-                    err,
-                    None,
-                )),
+                Ok(validation) => {
+                    let cleanup = staged.cleanup_owned();
+                    Ok(with_cleanup_warning(
+                        failed(
+                            original,
+                            artifact,
+                            report,
+                            Some(plan),
+                            explanation,
+                            Error::new(
+                                ErrorCode::ValidationFailed,
+                                "output did not satisfy the same hard constraints",
+                            ),
+                            Some(validation),
+                        ),
+                        cleanup,
+                    ))
+                }
+                Err(err) => {
+                    let cleanup = staged.cleanup_owned();
+                    Ok(with_cleanup_warning(
+                        failed(
+                            original,
+                            artifact,
+                            report,
+                            Some(plan),
+                            explanation,
+                            err,
+                            None,
+                        ),
+                        cleanup,
+                    ))
+                }
             }
         }
     }
@@ -392,7 +383,23 @@ fn failed(
         validation,
         explanation,
         error: Some(ErrorEnvelope::from(err)),
+        cleanup_warning: None,
     }
+}
+
+fn with_cleanup_warning(mut result: AdaptationResult, cleanup: CleanupOutcome) -> AdaptationResult {
+    let Some(warning) = cleanup.warning else {
+        return result;
+    };
+    result.explanation.details.push(warning.message.clone());
+    if let Some(error) = result.error.as_mut() {
+        error.details.insert(
+            "cleanup_warning".into(),
+            serde_json::to_value(&warning).unwrap_or(serde_json::Value::Null),
+        );
+    }
+    result.cleanup_warning = Some(warning);
+    result
 }
 
 fn default_output(input: &Path, plan: &Plan, current: Option<&Container>) -> Result<PathBuf> {
@@ -446,6 +453,19 @@ fn path_is_occupied(path: &Path) -> bool {
         Ok(_) => true,
         Err(error) => error.kind() != std::io::ErrorKind::NotFound,
     }
+}
+
+#[cfg(unix)]
+fn create_private_workspace(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    let mut builder = std::fs::DirBuilder::new();
+    builder.mode(0o700).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_private_workspace(path: &Path) -> std::io::Result<()> {
+    std::fs::create_dir(path)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -520,6 +540,25 @@ fn identity_read(path: &Path, directory: bool) -> std::io::Result<File> {
     options.open(path)
 }
 
+#[cfg(windows)]
+fn open_workspace_handle(path: &Path) -> std::io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{DELETE, FILE_GENERIC_READ};
+
+    const FILE_SHARE_READ_WRITE: u32 = 0x0000_0001 | 0x0000_0002;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    OpenOptions::new()
+        .access_mode(FILE_GENERIC_READ | DELETE)
+        .share_mode(FILE_SHARE_READ_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
+#[cfg(not(windows))]
+fn open_workspace_handle(path: &Path) -> std::io::Result<File> {
+    identity_read(path, true)
+}
+
 #[cfg(not(windows))]
 fn identity_read(path: &Path, _directory: bool) -> std::io::Result<File> {
     OpenOptions::new().read(true).open(path)
@@ -557,10 +596,10 @@ fn open_protected_file(path: &Path) -> Result<(File, FileIdentity)> {
 fn protected_read(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt;
 
-    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_READ_DELETE: u32 = 0x0000_0001 | 0x0000_0004;
     OpenOptions::new()
         .read(true)
-        .share_mode(FILE_SHARE_READ)
+        .share_mode(FILE_SHARE_READ_DELETE)
         .open(path)
 }
 
@@ -569,45 +608,54 @@ fn protected_read(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().read(true).open(path)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[cfg(windows)]
+fn deletion_read(path: &Path) -> std::io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{DELETE, FILE_GENERIC_READ};
+
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    OpenOptions::new()
+        .access_mode(FILE_GENERIC_READ | DELETE)
+        .share_mode(FILE_SHARE_READ)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn delete_held(handle: File) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_DISPOSITION_INFO, FileDispositionInfo, SetFileInformationByHandle,
+    };
+
+    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+    // SAFETY: `handle` is live and was opened with DELETE access. The input
+    // pointer and byte count describe an initialized FILE_DISPOSITION_INFO.
+    let marked = unsafe {
+        SetFileInformationByHandle(
+            handle.as_raw_handle(),
+            FileDispositionInfo,
+            std::ptr::from_ref(&disposition).cast(),
+            std::mem::size_of::<FILE_DISPOSITION_INFO>() as u32,
+        )
+    } != 0;
+    drop(handle);
+    marked
+}
+
+#[derive(Debug, Clone)]
 struct CleanupOutcome {
-    complete: bool,
+    warning: Option<CleanupWarning>,
 }
 
-#[derive(Debug)]
-struct PublishedOutput {
-    path: PathBuf,
-    identity: FileIdentity,
-    protection: Option<File>,
-}
-
-impl PublishedOutput {
-    fn verify(&self) -> Result<()> {
-        let handle_identity = self.protection.as_ref().and_then(file_identity);
-        if handle_identity != Some(self.identity)
-            || path_identity(&self.path, false) != Some(self.identity)
-        {
-            return Err(Error::new(
-                ErrorCode::SecurityBlocked,
-                "the published output changed during validation",
-            ));
-        }
-        Ok(())
+impl CleanupOutcome {
+    fn complete() -> Self {
+        Self { warning: None }
     }
 
-    fn release_protection(&mut self) {
-        self.protection.take();
-    }
-
-    fn remove_if_owned(&mut self) -> bool {
-        if self.verify().is_err() {
-            return false;
+    fn warning(path: PathBuf, message: String) -> Self {
+        Self {
+            warning: Some(CleanupWarning { path, message }),
         }
-        self.release_protection();
-        if path_identity(&self.path, false) != Some(self.identity) {
-            return false;
-        }
-        std::fs::remove_file(&self.path).is_ok()
     }
 }
 
@@ -615,9 +663,11 @@ impl PublishedOutput {
 struct StageWorkspace {
     directory: PathBuf,
     directory_identity: FileIdentity,
+    directory_handle: Option<File>,
     path: PathBuf,
     file_identity: Option<FileIdentity>,
     protection: Option<File>,
+    deletion_ready: bool,
 }
 
 impl StageWorkspace {
@@ -652,17 +702,15 @@ impl StageWorkspace {
             })?;
             let token = u128::from_ne_bytes(random);
             let directory = parent.join(format!(".fitifact-stage-{token:032x}"));
-            match std::fs::create_dir(&directory) {
+            match create_private_workspace(&directory) {
                 Ok(()) => {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        let _ = std::fs::set_permissions(
-                            &directory,
-                            std::fs::Permissions::from_mode(0o700),
-                        );
-                    }
-                    let directory_identity = path_identity(&directory, true).ok_or_else(|| {
+                    let directory_handle = open_workspace_handle(&directory).map_err(|_| {
+                        Error::new(
+                            ErrorCode::SecurityBlocked,
+                            "the staging workspace could not be held safely",
+                        )
+                    })?;
+                    let directory_identity = file_identity(&directory_handle).ok_or_else(|| {
                         Error::new(
                             ErrorCode::SecurityBlocked,
                             "the staging workspace identity could not be established",
@@ -672,9 +720,11 @@ impl StageWorkspace {
                     return Ok(Self {
                         directory,
                         directory_identity,
+                        directory_handle: Some(directory_handle),
                         path,
                         file_identity: None,
                         protection: None,
+                        deletion_ready: false,
                     });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -719,6 +769,7 @@ impl StageWorkspace {
         let (file, identity) = open_protected_file(&self.path)?;
         self.file_identity = Some(identity);
         self.protection = Some(file);
+        self.deletion_ready = false;
         Ok(())
     }
 
@@ -740,12 +791,47 @@ impl StageWorkspace {
         Ok(())
     }
 
-    fn release_protection(&mut self) {
-        self.protection.take();
+    #[cfg(windows)]
+    fn prepare_for_publication(&mut self) -> Result<()> {
+        if self.deletion_ready {
+            return self.verify_claim();
+        }
+        self.verify_claim()?;
+        let expected = self.file_identity.expect("verified claim has identity");
+        let deletion_handle = deletion_read(&self.path).map_err(|_| {
+            Error::new(
+                ErrorCode::SecurityBlocked,
+                "the staging output could not be bound to an owned deletion handle",
+            )
+        })?;
+        if file_identity(&deletion_handle) != Some(expected)
+            || path_identity(&self.path, false) != Some(expected)
+        {
+            self.file_identity = None;
+            self.protection.take();
+            self.deletion_ready = false;
+            return Err(Error::new(
+                ErrorCode::SecurityBlocked,
+                "the staging output changed before publication",
+            ));
+        }
+        self.protection = Some(deletion_handle);
+        self.deletion_ready = true;
+        Ok(())
     }
 
-    fn publish(&self, destination: &Path) -> Result<PublishedOutput> {
-        self.verify_claim()?;
+    #[cfg(not(windows))]
+    fn prepare_for_publication(&mut self) -> Result<()> {
+        self.verify_claim()
+    }
+
+    fn publish(&mut self, destination: &Path) -> Result<bool> {
+        if let Err(error) = self.prepare_for_publication() {
+            self.file_identity = None;
+            self.protection.take();
+            self.deletion_ready = false;
+            return Err(error);
+        }
         std::fs::hard_link(&self.path, destination).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 Error::new(
@@ -759,58 +845,122 @@ impl StageWorkspace {
                 )
             }
         })?;
-        let (protection, identity) = open_protected_file(destination)?;
-        let expected = self.file_identity.ok_or_else(|| {
-            Error::new(
-                ErrorCode::SecurityBlocked,
-                "the staging output has not been claimed",
-            )
-        })?;
-        if identity != expected || path_identity(&self.path, false) != Some(expected) {
-            return Err(Error::new(
-                ErrorCode::SecurityBlocked,
-                "the published output was not the validated staging file",
-            ));
-        }
-        Ok(PublishedOutput {
-            path: destination.to_path_buf(),
-            identity,
-            protection: Some(protection),
-        })
+        let expected = self.file_identity.expect("verified claim has identity");
+        Ok(path_identity(destination, false) == Some(expected)
+            && self.protection.as_ref().and_then(file_identity) == Some(expected))
     }
 
+    #[cfg(windows)]
     fn cleanup_owned(&mut self) -> CleanupOutcome {
         if self.verify_directory().is_err() {
-            return CleanupOutcome { complete: false };
+            return CleanupOutcome::warning(
+                self.directory.clone(),
+                "The staging workspace identity changed; it was intentionally preserved.".into(),
+            );
         }
-        if self.path.exists() {
-            let Some(expected) = self.file_identity else {
-                return CleanupOutcome { complete: false };
+        if path_is_occupied(&self.path) {
+            if self.file_identity.is_none() {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The provider left an unclaimed staging object; the private workspace was intentionally preserved."
+                        .into(),
+                );
+            }
+            if let Err(error) = self.prepare_for_publication() {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    format!(
+                        "The staging file could not be bound to its owned deletion handle; it was intentionally preserved ({error})."
+                    ),
+                );
+            }
+            let Some(handle) = self.protection.take() else {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The owned staging handle was unavailable; the workspace was intentionally preserved."
+                        .into(),
+                );
             };
-            if path_identity(&self.path, false) != Some(expected) {
-                return CleanupOutcome { complete: false };
+            self.deletion_ready = false;
+            if !delete_held(handle) {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The owned staging file could not be deleted by handle; the published output was preserved."
+                        .into(),
+                );
             }
-            self.release_protection();
-            if path_identity(&self.path, false) != Some(expected)
-                || std::fs::remove_file(&self.path).is_err()
-            {
-                return CleanupOutcome { complete: false };
-            }
-        } else {
-            self.release_protection();
         }
+        let Some(directory_handle) = self.directory_handle.take() else {
+            return CleanupOutcome::warning(
+                self.directory.clone(),
+                "The owned workspace handle was unavailable; the workspace was intentionally preserved."
+                    .into(),
+            );
+        };
+        if !delete_held(directory_handle) {
+            return CleanupOutcome::warning(
+                self.directory.clone(),
+                "The owned staging workspace could not be deleted by handle; it was intentionally preserved."
+                    .into(),
+            );
+        }
+        CleanupOutcome::complete()
+    }
+
+    #[cfg(unix)]
+    fn cleanup_owned(&mut self) -> CleanupOutcome {
         if self.verify_directory().is_err() {
-            return CleanupOutcome { complete: false };
+            return CleanupOutcome::warning(
+                self.directory.clone(),
+                "The staging workspace identity changed; it was intentionally preserved.".into(),
+            );
         }
-        CleanupOutcome {
-            complete: std::fs::remove_dir(&self.directory).is_ok(),
+        if path_is_occupied(&self.path) {
+            let Some(_expected) = self.file_identity else {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The provider left an unclaimed staging object; the private workspace was intentionally preserved."
+                        .into(),
+                );
+            };
+            // Unix workspaces are atomically created mode 0700. Under the
+            // documented same-account trust boundary, a still-claimed name
+            // inside this private directory is owned by this operation.
+            if std::fs::remove_file(&self.path).is_err() {
+                return CleanupOutcome::warning(
+                    self.directory.clone(),
+                    "The claimed staging object could not be removed from the private workspace; it was intentionally preserved."
+                        .into(),
+                );
+            }
         }
+        self.protection.take();
+        self.directory_handle.take();
+        if std::fs::remove_dir(&self.directory).is_err() {
+            return CleanupOutcome::warning(
+                self.directory.clone(),
+                "The private staging workspace could not be removed; it was intentionally preserved."
+                    .into(),
+            );
+        }
+        CleanupOutcome::complete()
+    }
+
+    #[cfg(not(any(windows, unix)))]
+    fn cleanup_owned(&mut self) -> CleanupOutcome {
+        CleanupOutcome::warning(
+            self.directory.clone(),
+            "This platform has no identity-atomic cleanup primitive; the staging workspace was intentionally preserved."
+                .into(),
+        )
     }
 }
 
 impl Drop for StageWorkspace {
     fn drop(&mut self) {
-        let _ = self.cleanup_owned();
+        if self.directory_handle.is_some() || self.protection.is_some() {
+            let _ = self.cleanup_owned();
+        }
     }
 }
 
@@ -1095,7 +1245,7 @@ mod tests {
     }
 
     #[test]
-    fn adapted_status_requires_fresh_inspection_of_the_published_path() {
+    fn adapted_status_uses_freshly_validated_stage_for_identity_bound_publication() {
         let dir = test_dir("final-validation");
         let input = dir.join("input.mov");
         let output = dir.join("requested.mp4");
@@ -1118,19 +1268,20 @@ mod tests {
         .unwrap();
         assert_eq!(result.status, AdaptationStatus::Adapted);
         let calls = inspector.calls.lock().unwrap();
-        assert!(calls.iter().any(|path| path == &output));
         assert!(calls.iter().any(|path| {
             path.parent()
                 .and_then(Path::file_name)
                 .is_some_and(|name| name.to_string_lossy().starts_with(".fitifact-stage-"))
         }));
+        assert!(!calls.iter().any(|path| path == &output));
+        assert_eq!(std::fs::read(&output).unwrap(), b"valid-output");
         drop(calls);
         std::fs::remove_file(output).unwrap();
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn provider_failure_cleans_hidden_sibling_stage() {
+    fn provider_failure_preserves_ambiguous_partial_and_reports_cleanup_path() {
         let dir = test_dir("stage-cleanup");
         let input = dir.join("input.mov");
         let output = dir.join("requested.mp4");
@@ -1159,10 +1310,72 @@ mod tests {
                 .to_string_lossy()
                 .starts_with(".fitifact-stage-")
         );
-        assert!(!staged.exists());
-        assert!(!staged.parent().unwrap().exists());
+        assert_eq!(std::fs::read(&staged).unwrap(), b"partial");
+        assert_eq!(
+            result.cleanup_warning.as_ref().unwrap().path,
+            staged.parent().unwrap()
+        );
+        assert_eq!(
+            result.error.as_ref().unwrap().details["cleanup_warning"]["path"],
+            serde_json::to_value(staged.parent().unwrap()).unwrap()
+        );
         assert!(!output.exists());
         assert_eq!(std::fs::read(&input).unwrap(), b"original");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    struct PollutingInspector {
+        input: PathBuf,
+        source: Artifact,
+        output: Artifact,
+    }
+
+    impl Inspector for PollutingInspector {
+        fn inspect(&self, path: &Path) -> Result<Artifact> {
+            if path == self.input {
+                return Ok(self.source.clone());
+            }
+            if path
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|name| name.to_string_lossy().starts_with(".fitifact-stage-"))
+            {
+                std::fs::write(path.parent().unwrap().join("foreign"), b"keep").unwrap();
+            }
+            Ok(self.output.clone())
+        }
+    }
+
+    #[test]
+    fn post_link_cleanup_failure_returns_published_output_and_structured_warning() {
+        let dir = test_dir("post-link-cleanup");
+        let input = dir.join("input.mov");
+        let output = dir.join("requested.mp4");
+        std::fs::write(&input, b"original").unwrap();
+        let inspector = PollutingInspector {
+            input: input.clone(),
+            source: Artifact::media(Container::Mov, VideoCodec::H264, Some(AudioCodec::Aac), 8),
+            output: Artifact::media(Container::Mp4, VideoCodec::H264, Some(AudioCodec::Aac), 12),
+        };
+        let result = adapt(AdaptRequest {
+            input: &input,
+            constraints: media_h264_mp4_aac(),
+            output: Some(output.clone()),
+            catalog: None,
+            inspector: &inspector,
+            provider: &PassProvider,
+            execution: ExecutionContext::default(),
+        })
+        .unwrap();
+        assert_eq!(result.status, AdaptationStatus::Adapted);
+        assert_eq!(result.output, Some(output.clone()));
+        assert_eq!(std::fs::read(&output).unwrap(), b"valid-output");
+        let warning = result.cleanup_warning.unwrap();
+        assert!(warning.path.starts_with(&dir));
+        assert_eq!(
+            std::fs::read(warning.path.join("foreign")).unwrap(),
+            b"keep"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1256,8 +1469,8 @@ mod tests {
         assert_ne!(first.directory(), second.directory());
         assert!(first.directory().is_dir());
         assert!(second.directory().is_dir());
-        assert!(first.cleanup_owned().complete);
-        assert!(second.cleanup_owned().complete);
+        assert!(first.cleanup_owned().warning.is_none());
+        assert!(second.cleanup_owned().warning.is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1268,8 +1481,9 @@ mod tests {
         let mut stage = StageWorkspace::new(&output).unwrap();
         std::fs::write(stage.path(), b"foreign").unwrap();
         let cleanup = stage.cleanup_owned();
-        assert!(!cleanup.complete);
+        assert!(cleanup.warning.is_some());
         assert_eq!(std::fs::read(stage.path()).unwrap(), b"foreign");
+        drop(stage);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1287,14 +1501,13 @@ mod tests {
             assert_eq!(err.code, ErrorCode::SecurityBlocked);
             assert!(!output.exists());
             let cleanup = stage.cleanup_owned();
-            assert!(!cleanup.complete);
+            assert!(cleanup.warning.is_some());
             assert_eq!(std::fs::read(stage.path()).unwrap(), b"foreign");
+            drop(stage);
         } else {
-            let published = stage.publish(&output).unwrap();
-            published.verify().unwrap();
+            assert!(stage.publish(&output).unwrap());
             assert_eq!(std::fs::read(&output).unwrap(), b"validated");
-            drop(published);
-            assert!(stage.cleanup_owned().complete);
+            assert!(stage.cleanup_owned().warning.is_none());
             std::fs::remove_file(&output).unwrap();
         }
         std::fs::remove_dir_all(dir).unwrap();
@@ -1302,30 +1515,60 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn staging_unlink_failure_never_removes_published_final() {
-        let dir = test_dir("unlink-failure");
+    fn windows_handle_cleanup_removes_only_stage_link_and_owned_workspace() {
+        let dir = test_dir("handle-cleanup");
+        let output = dir.join("output.mp4");
+        let mut stage = StageWorkspace::new(&output).unwrap();
+        let workspace = stage.directory().to_path_buf();
+        std::fs::write(stage.path(), b"validated").unwrap();
+        stage.claim_created_file().unwrap();
+        assert!(stage.publish(&output).unwrap());
+        assert!(stage.cleanup_owned().warning.is_none());
+        assert_eq!(std::fs::read(&output).unwrap(), b"validated");
+        assert!(!workspace.exists());
+        std::fs::remove_file(output).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn claimed_stage_remains_readable_by_tools_that_do_not_share_delete_access() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let dir = test_dir("external-reader-sharing");
         let output = dir.join("output.mp4");
         let mut stage = StageWorkspace::new(&output).unwrap();
         std::fs::write(stage.path(), b"validated").unwrap();
         stage.claim_created_file().unwrap();
-        let published = stage.publish(&output).unwrap();
-        published.verify().unwrap();
-        let blocker = {
-            use std::os::windows::fs::OpenOptionsExt;
-            OpenOptions::new()
-                .read(true)
-                .share_mode(0x0000_0001)
-                .open(stage.path())
+        let reader = OpenOptions::new()
+            .read(true)
+            .share_mode(0x0000_0001)
+            .open(stage.path())
+            .unwrap();
+        drop(reader);
+        assert!(stage.cleanup_owned().warning.is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_workspace_is_created_mode_0700_and_owned_cleanup_completes() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = test_dir("unix-private-workspace");
+        let output = dir.join("output.mp4");
+        let mut stage = StageWorkspace::new(&output).unwrap();
+        assert_eq!(
+            std::fs::metadata(stage.directory())
                 .unwrap()
-        };
-        drop(published);
-        let cleanup = stage.cleanup_owned();
-        assert!(!cleanup.complete);
-        assert_eq!(std::fs::read(&output).unwrap(), b"validated");
-        drop(blocker);
-        assert!(stage.cleanup_owned().complete);
-        assert_eq!(std::fs::read(&output).unwrap(), b"validated");
-        std::fs::remove_file(output).unwrap();
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        std::fs::write(stage.path(), b"owned").unwrap();
+        stage.claim_created_file().unwrap();
+        assert!(stage.cleanup_owned().warning.is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
