@@ -20,6 +20,9 @@ Semantic version core/CLI. Profile revisions version separately.
 - beta;
 - nightly.
 
+The first prepared public sequence is narrower: `v0.1.0-rc.1` acceptance first,
+then immutable `v0.1.0`. See [[04-Engineering/Release-Checklist]].
+
 ## Before 1.0
 Schemas may evolve with migration notes.
 
@@ -59,3 +62,6 @@ Cloud must support app/provider/profile rollback.
 - critical parser vulnerability;
 - known false compatibility claim;
 - accidental original overwrite.
+- missing owner/legal Fitifact sign-off;
+- failed checksum, SBOM, attestation, or source/tag provenance verification;
+- a supported target that was not exercised on its native hosted runner.

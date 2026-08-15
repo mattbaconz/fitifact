@@ -12,6 +12,9 @@ All notable changes to Fitifact are documented here.
 - Stable JSON CLI/error/doctor envelopes, bounded transform timeouts, strict
   human-size flags, FFmpeg capability diagnostics, and structured validation
   provenance claims.
+- Deterministic synthetic media fixtures, native four-target CI, dependency
+  policy, and cargo-dist 0.32.0 release assets with checksums, CycloneDX SBOM,
+  installers, and GitHub artifact attestations.
 
 ### [changed]
 

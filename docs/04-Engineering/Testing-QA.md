@@ -20,6 +20,10 @@ Constraints, compatibility predicates, planner, profile resolution, schema valid
 ### Fixture integration
 Real tiny files with known properties.
 
+The tracked canonical media set is under `fixtures/media`; its generator,
+provider provenance, and SHA-256 manifest are committed with it. Generated-temp
+provider tests remain in addition to these canonical fixtures.
+
 ### Provider integration
 Execute actual providers.
 
@@ -65,6 +69,9 @@ Fuzz parsers, schema, profile parser, text normalization and archive readers if 
 ## Cross-platform
 
 Windows, macOS, Linux, browsers, ARM/x64 where relevant.
+
+v0.1 CI narrows that claim to native Windows x64, Linux GNU x64, macOS Intel,
+and macOS Apple Silicon runners. Browser testing remains deferred.
 
 ## Performance regressions
 

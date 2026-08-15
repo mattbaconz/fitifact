@@ -5,6 +5,10 @@
 Fitifact is pre-release software. Security fixes are applied to the latest code
 on the default branch and to the latest GitHub release when one exists.
 
+There is currently no public repository or published release. Until owner/legal
+approval creates the repository, GitHub private vulnerability reporting is not
+available and the repository-owner fallback below is the only prepared route.
+
 ## Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability. Use GitHub's private
@@ -26,3 +30,10 @@ refuses existing output paths, and validates generated output. It performs no
 telemetry, network access, or implicit upload. See
 [`docs/07-Specs/Security-Model.md`](docs/07-Specs/Security-Model.md) for the
 broader design; deferred cloud sections are not part of v0.1.
+
+Release automation uses least-privilege job permissions, full-SHA GitHub Action
+pins, SHA-256 manifests, CycloneDX SBOMs, and GitHub artifact attestations.
+Dependencies are checked against RustSec advisories and the repository's
+license/source policy. Windows and macOS binaries are intentionally unsigned in
+v0.1, and system FFmpeg is external and must be assessed under its own build
+configuration and licensing.

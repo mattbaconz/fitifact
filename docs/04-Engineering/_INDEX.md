@@ -17,6 +17,8 @@ tags:
 - [[04-Engineering/Performance]]
 - [[04-Engineering/Observability]]
 - [[04-Engineering/Release-Strategy]]
+- [[04-Engineering/Release-Checklist]]
+- [[04-Engineering/Repository-Rules]]
 - [[04-Engineering/Contribution-Guide]]
 - [[04-Engineering/Agent-Workflow]]
 - [[04-Engineering/Build-vs-Buy]]

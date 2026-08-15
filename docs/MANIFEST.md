@@ -13,7 +13,7 @@ tags:
 
 Updated: **2026-08-15**
 
-Markdown documents: **93**
+Markdown documents: **95**
 
 ## Latest architecture update
 
@@ -93,6 +93,8 @@ Fitifact now explicitly treats **extreme lightweightness** as a product and engi
 - `04-Engineering/Performance-Budgets.md`
 - `04-Engineering/Performance.md`
 - `04-Engineering/Release-Strategy.md`
+- `04-Engineering/Release-Checklist.md`
+- `04-Engineering/Repository-Rules.md`
 - `04-Engineering/Roadmap.md`
 - `04-Engineering/Security-Privacy.md`
 - `04-Engineering/Testing-QA.md`

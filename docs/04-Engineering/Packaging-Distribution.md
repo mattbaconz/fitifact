@@ -16,6 +16,19 @@ tags:
 
 Ship Fitifact as a small orchestrator with optional capability packs instead of one monolithic binary containing every transform engine.
 
+## Implemented v0.1 distribution preparation
+
+v0.1 is prepared for GitHub-only distribution of `fitifact-cli` with
+`cargo-dist` 0.32.0. The configured native targets are Windows x64, Linux GNU
+x64, macOS Intel, and macOS Apple Silicon. Windows uses ZIP; the other targets
+use tar.gz. Shell and PowerShell installers, per-archive and unified SHA-256
+checksums, a CycloneDX XML SBOM, a source archive, and GitHub artifact
+attestations are prepared release outputs.
+
+No assets have been published. Crates remain `publish = false`; crates.io,
+Homebrew/WinGet publication, bundled FFmpeg, native signing, and notarization
+are not configured. System FFmpeg remains an external runtime dependency.
+
 ## Distribution profiles
 
 ### Minimal CLI
@@ -89,6 +102,10 @@ Consumer trust requires:
 - checksums;
 - SBOM;
 - release provenance.
+
+For v0.1, code signing/notarization is explicitly deferred. The implemented
+controls are SHA-256 checksums, CycloneDX SBOMs, pinned release automation, and
+GitHub attestations; the unsigned status must remain visible to users.
 
 ## Installer transparency
 
