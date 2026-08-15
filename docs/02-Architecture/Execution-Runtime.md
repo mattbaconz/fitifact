@@ -70,12 +70,16 @@ cleanup
 - cleanup on failure;
 - retention only by explicit policy.
 
-Every changed final is first a unique hidden sibling in the destination
-directory. Failure, timeout, validation failure, provenance mismatch, or
-persistence failure removes it. A validated sibling is persisted with a
-same-filesystem hard-link create-if-absent operation and then unlinked from the
-staging name. If that atomic no-clobber primitive is unavailable, execution
-refuses instead of falling back to an overwrite-prone rename.
+Every changed final is first written inside an atomically reserved, random
+hidden workspace beside the destination. Fitifact records stable directory and
+file identity (volume/file ID on Windows, device/inode on Unix), holds a
+protective file handle where the OS supports it, and removes only paths whose
+identity still matches an object it claimed. A validated stage is persisted
+with a same-filesystem hard-link create-if-absent operation. The published path
+is then freshly hashed, inspected, and validated before success. If cleanup is
+blocked, the validated final is retained with a cleanup warning; it is never
+removed merely because the staging link could not be unlinked. If the atomic
+no-clobber primitive or stable identity is unavailable, execution refuses.
 
 Remux uses `-map 0 -c copy`. Selective transcode accepts only the planner-proven
 one-video/optional-one-AAC topology, maps those exact streams, encodes video

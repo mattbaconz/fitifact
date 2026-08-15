@@ -50,9 +50,13 @@ mutations return an unsatisfiable result rather than a misleading plan.
 Default adaptation output is a unique sibling such as `video.fitifact.mp4`,
 then `video.fitifact.2.mp4`. `-o` selects a different new output path. Existing
 paths are refused before FFmpeg starts; there is no overwrite option. Changed
-output is written to a unique hidden sibling, freshly validated, then persisted
-with an atomic create-if-absent operation. The default transform timeout is 1800
-seconds and `--timeout-seconds` is bounded to 1 through 86400 seconds.
+output is written inside an atomically reserved hidden sibling workspace,
+freshly validated, and persisted with an atomic create-if-absent operation. The
+published path itself is then freshly hashed, inspected, and provenance-checked
+before `adapted` is reported. Cleanup removes only identity-verified objects;
+cleanup failure retains the validated final and emits a warning. The default
+transform timeout is 1800 seconds and `--timeout-seconds` is bounded to 1
+through 86400 seconds.
 
 ## Exit codes — implemented
 

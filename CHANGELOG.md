@@ -36,3 +36,6 @@ All notable changes to Fitifact are documented here.
 - Prevented existing-output overwrite, partial-stage leakage, silent stream
   loss, raw provider diagnostic leakage, and false adaptation success by fresh
   topology/fact/duration checks plus SHA-256 copied-stream provenance.
+- Bound staging and cleanup to atomically reserved workspaces and stable file
+  identities, reject post-validation replacement, revalidate the published
+  path, and preserve validated finals when staging cleanup cannot complete.

@@ -46,8 +46,13 @@ cloud worker       isolation boundary
   network media protocols denied and only `file` allowed.
 - FFmpeg uses explicit no-clobber behavior. Originals and occupied outputs are
   never replaced, including persistence races.
-- Changed output remains a hidden destination sibling until fresh constraint,
-  integrity, expected-fact, and SHA-256 copied-stream validation passes.
+- Changed output remains in an atomically reserved random hidden workspace
+  until fresh constraint, integrity, expected-fact, and SHA-256 copied-stream
+  validation passes. Stable file identity binds the stage to the no-clobber
+  hard link; the published path is freshly validated before success.
+- Cleanup removes only identity-verified files and workspaces. A mismatched or
+  unclaimed path is preserved, and staging cleanup failure never rolls back a
+  validated final by name.
 - Probe/process output and time are bounded; external diagnostics shown to
   users are redacted stable messages.
 
