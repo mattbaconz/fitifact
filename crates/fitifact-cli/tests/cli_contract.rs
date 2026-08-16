@@ -161,3 +161,24 @@ fn constraint_file_read_accepts_exact_limit_and_rejects_one_byte_over() {
     std::fs::remove_file(exact).unwrap();
     std::fs::remove_file(over).unwrap();
 }
+
+#[test]
+#[ignore]
+fn bench_json_reports_canonical_proofs() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_fitifact"))
+        .current_dir(&root)
+        .args(["bench", "--json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "bench failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["schema"], "fitifact.bench/v1");
+    assert_eq!(value["proofs"]["noop_ffmpeg_spawns_zero"], true);
+    assert_eq!(value["proofs"]["check_plan_ffprobe_only"], true);
+    assert_eq!(value["proofs"]["all_outcomes_matched"], true);
+}

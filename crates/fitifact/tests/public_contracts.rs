@@ -1,9 +1,11 @@
+use std::path::Path;
+
 use fitifact::artifact::{Artifact, AudioCodec, Container, VideoCodec};
 use fitifact::check::check;
 use fitifact::constraints::media_h264_mp4_aac;
 use fitifact::contract::{
-    ADAPTATION_SCHEMA, ARTIFACT_SCHEMA, CHECK_SCHEMA, CONSTRAINTS_SCHEMA, DOCTOR_SCHEMA,
-    ERROR_SCHEMA, PLAN_SCHEMA,
+    ADAPTATION_SCHEMA, ARTIFACT_SCHEMA, BENCH_SCHEMA, CHECK_SCHEMA, CONSTRAINTS_SCHEMA,
+    DOCTOR_SCHEMA, ERROR_SCHEMA, PLAN_SCHEMA,
 };
 use fitifact::doctor::{DoctorReport, DoctorTool};
 use fitifact::error::{Error, ErrorCode, ErrorEnvelope};
@@ -17,6 +19,7 @@ fn public_schema_constants_are_exact() {
     assert_eq!(ADAPTATION_SCHEMA, "fitifact.adaptation/v1");
     assert_eq!(ERROR_SCHEMA, "fitifact.error/v1");
     assert_eq!(DOCTOR_SCHEMA, "fitifact.doctor/v1");
+    assert_eq!(BENCH_SCHEMA, "fitifact.bench/v1");
 }
 
 #[test]
@@ -40,5 +43,16 @@ fn reusable_error_and_doctor_envelopes_emit_their_schemas() {
     assert_eq!(
         serde_json::to_value(doctor).unwrap()["schema"],
         DOCTOR_SCHEMA
+    );
+}
+
+#[test]
+fn workspace_lockfile_has_no_http_or_async_runtime_crates() {
+    let lock =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock"))
+            .expect("Cargo.lock");
+    assert!(
+        fitifact::bench::network_crates_in_lockfile(&lock).is_empty(),
+        "v0.1 check/plan must not depend on HTTP clients or tokio"
     );
 }

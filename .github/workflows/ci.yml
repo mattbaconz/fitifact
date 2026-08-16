@@ -90,6 +90,8 @@ jobs:
         run: cargo test --locked -p fitifact --test live_ffmpeg --target ${{ matrix.target }} -- --ignored --nocapture
       - name: Doctor smoke
         run: cargo run --locked -p fitifact-cli --target ${{ matrix.target }} -- doctor
+      - name: Bench smoke
+        run: cargo run --locked -p fitifact-cli --target ${{ matrix.target }} -- bench --json
 
   msrv:
     name: MSRV 1.85

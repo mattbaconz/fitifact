@@ -7,10 +7,11 @@ use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use fitifact::artifact::Artifact;
 use fitifact::ffmpeg::FfmpegProvider;
 use fitifact::inspect::FfprobeInspector;
-use fitifact::runtime::{ExecutionContext, SystemSpawner};
+use fitifact::runtime::{ExecutionContext, SystemSpawner, TransformProvider};
 use fitifact::{
-    AdaptRequest, AdaptationStatus, ConstraintInput, ConstraintSet, PlanOutcome, adapt, check,
-    compile, compile_from_yaml, explain_check, explain_plan, inspect, plan,
+    AdaptRequest, AdaptationStatus, BenchOptions, ConstraintInput, ConstraintSet, PlanOutcome,
+    adapt, check, compile, compile_from_yaml, explain_check, explain_plan, find_lockfile, inspect,
+    plan, resolve_fixtures, run_bench,
 };
 
 #[derive(Parser)]
@@ -70,6 +71,15 @@ enum Command {
     Doctor {
         #[arg(long)]
         json: bool,
+    },
+    /// Time the canonical v0.1 demo scenarios and print a report.
+    Bench {
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        fixtures: Option<PathBuf>,
+        #[arg(long)]
+        keep: bool,
     },
 }
 
@@ -144,6 +154,11 @@ fn run(cli: Cli) -> Result<ExitCode, CliError> {
             }
         }
         Command::Doctor { json } => doctor_cmd(json),
+        Command::Bench {
+            json,
+            fixtures,
+            keep,
+        } => bench_cmd(json, fixtures, keep),
     }
 }
 
@@ -227,14 +242,19 @@ fn adapt_cmd(
 ) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
     let inspector = FfprobeInspector::default();
-    let provider = FfmpegProvider::<SystemSpawner>::default();
+    let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
+    let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
+    let loaded = matches!(outcome, PlanOutcome::Planned { .. })
+        .then(FfmpegProvider::<SystemSpawner>::default);
     let result = adapt(AdaptRequest {
         input: file,
         constraints,
         output,
         catalog: None,
         inspector: &inspector,
-        provider: &provider,
+        provider: loaded
+            .as_ref()
+            .map(|provider| provider as &dyn TransformProvider),
         execution: ExecutionContext {
             timeout: Duration::from_secs(timeout_seconds),
             temp_dir: None,
@@ -331,6 +351,114 @@ fn doctor_cmd(json: bool) -> Result<ExitCode, CliError> {
     }
 }
 
+fn bench_cmd(json: bool, fixtures: Option<PathBuf>, keep: bool) -> Result<ExitCode, CliError> {
+    let cwd = std::env::current_dir()
+        .map_err(|_| CliError::usage("cannot inspect the current working directory"))?;
+    let fixtures = resolve_fixtures(fixtures);
+    let fixtures = if fixtures.is_absolute() {
+        fixtures
+    } else {
+        cwd.join(fixtures)
+    };
+    let fixtures = fixtures.canonicalize().unwrap_or(fixtures);
+    let work_dir = std::env::temp_dir().join(format!("fitifact-bench-{}", std::process::id()));
+    let report = run_bench(BenchOptions {
+        fixtures,
+        keep,
+        work_dir,
+        cli_exe: std::env::current_exe().ok(),
+        lockfile: find_lockfile(&cwd),
+    })
+    .map_err(CliError::engine)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(CliError::json)?
+        );
+    } else {
+        print_bench(&report);
+    }
+    if !report.doctor_healthy {
+        return Ok(ExitCode::from(5));
+    }
+    let proofs_ok = report.proofs.noop_ffmpeg_spawns_zero
+        && report.proofs.check_plan_ffprobe_only
+        && report.proofs.all_outcomes_matched
+        && (report.proofs.no_network_crates || find_lockfile(&cwd).is_none());
+    if proofs_ok {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::FAILURE)
+    }
+}
+
+fn print_bench(report: &fitifact::BenchReport) {
+    println!("Fitifact bench  {}", report.version);
+    println!("Target          MP4 / H.264 / AAC");
+    println!("Fixtures        {}", report.fixtures.display());
+    println!(
+        "Doctor          {}",
+        if report.doctor_healthy {
+            "healthy"
+        } else {
+            "unhealthy"
+        }
+    );
+    match report.cold_start_ms {
+        Some(ms) => println!("Cold start      {ms:.1} ms  (fitifact inspect)"),
+        None => println!("Cold start      (not measured)"),
+    }
+    println!();
+    println!(
+        "{:<28} {:<12} {:>9} {:>9} {:>9} {:>9} {:>7} {:>8}",
+        "Scenario", "Result", "inspect", "check", "plan", "adapt", "ffmpeg", "provider"
+    );
+    for row in &report.scenarios {
+        println!(
+            "{:<28} {:<12} {:>7.1}ms {:>7.1}ms {:>7.1}ms {:>7.1}ms {:>7} {:>8}",
+            row.file,
+            row.actual,
+            row.inspect_ms,
+            row.check_ms,
+            row.plan_ms,
+            row.adapt_ms,
+            row.ffmpeg_spawns,
+            if row.transform_provider_loaded {
+                "yes"
+            } else {
+                "no"
+            }
+        );
+    }
+    println!();
+    for row in &report.scenarios {
+        println!("{}", row.file);
+        println!("  {}", row.summary);
+        println!();
+    }
+    println!("Proofs");
+    println!(
+        "  no-op did not spawn ffmpeg / load provider  {}",
+        proof_mark(report.proofs.noop_ffmpeg_spawns_zero)
+    );
+    println!(
+        "  check/plan spawned only ffprobe             {}",
+        proof_mark(report.proofs.check_plan_ffprobe_only)
+    );
+    println!(
+        "  no HTTP/tokio crates in Cargo.lock          {}",
+        proof_mark(report.proofs.no_network_crates)
+    );
+    println!(
+        "  canonical outcomes matched                  {}",
+        proof_mark(report.proofs.all_outcomes_matched)
+    );
+}
+
+fn proof_mark(ok: bool) -> &'static str {
+    if ok { "pass" } else { "FAIL" }
+}
+
 fn parse_size_arg(raw: &str) -> Result<u64, String> {
     fitifact::constraints::parse_size_bytes(raw).map_err(|error| error.message)
 }
@@ -404,7 +532,7 @@ fn print_inspect(artifact: &Artifact) {
         artifact
             .container
             .as_ref()
-            .map(|c| c.as_str().to_ascii_uppercase())
+            .map(|c| c.display_label())
             .unwrap_or_else(|| "unknown".into())
     );
     println!(

@@ -4,6 +4,7 @@
 
 pub mod adapt;
 pub mod artifact;
+pub mod bench;
 pub mod capability;
 pub mod check;
 pub mod constraints;
@@ -19,6 +20,10 @@ pub mod validate;
 
 pub use adapt::{AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, adapt};
 pub use artifact::{Artifact, AudioCodec, AudioStream, Container, Family, VideoCodec, VideoStream};
+pub use bench::{
+    BenchOptions, BenchReport, find_lockfile, network_crates_in_lockfile, resolve_fixtures,
+    run_bench,
+};
 pub use capability::{CapabilityCatalog, TransformId, default_catalog};
 pub use check::{CheckResult, CompatibilityReport, check};
 pub use constraints::{

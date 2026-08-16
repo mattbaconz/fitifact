@@ -144,7 +144,7 @@ fn live_hevc_transcodes_video_only() {
         output: Some(output.clone()),
         catalog: None,
         inspector: &inspector,
-        provider: &provider,
+        provider: Some(&provider),
         execution: ExecutionContext {
             timeout: Duration::from_secs(60),
             temp_dir: Some(dir.clone()),
@@ -193,7 +193,7 @@ fn live_h264_mp4_is_noop_without_ffmpeg() {
         output: None,
         catalog: None,
         inspector: &inspector,
-        provider: &provider,
+        provider: Some(&provider),
         execution: ExecutionContext::default(),
     })
     .unwrap();
@@ -201,6 +201,28 @@ fn live_h264_mp4_is_noop_without_ffmpeg() {
     assert_eq!(spawner.ffmpeg_spawn_count(), 0);
     assert!(spawner.ffprobe_spawn_count() >= 1);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_check_and_plan_spawn_only_ffprobe() {
+    require_tools();
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let inspector = FfprobeInspector::new(&spawner);
+    let artifact = inspector
+        .inspect(&canonical_fixture("compatible-h264-aac.mp4"))
+        .unwrap();
+    let target = media_h264_mp4_aac();
+    assert!(check(&artifact, &target).compatible);
+    assert!(create_plan(&artifact, &target, &default_catalog()).is_compatible());
+    assert_eq!(spawner.ffmpeg_spawn_count(), 0);
+    assert!(spawner.ffprobe_spawn_count() >= 1);
+    assert!(
+        spawner
+            .programs()
+            .iter()
+            .all(|program| fitifact::runtime::program_is_ffprobe(program))
+    );
 }
 
 #[test]
@@ -227,7 +249,7 @@ fn live_mov_remuxes_without_transcode() {
         output: Some(output.clone()),
         catalog: None,
         inspector: &inspector,
-        provider: &provider,
+        provider: Some(&provider),
         execution: ExecutionContext {
             timeout: Duration::from_secs(60),
             temp_dir: Some(dir.clone()),
@@ -322,5 +344,74 @@ fn live_matroska_is_not_webm_and_cannot_remux() {
         outcome.blocking_codes(),
         vec![BlockingCode::UnsupportedContainer]
     );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_webm_is_fail_closed_and_cannot_remux() {
+    require_tools();
+    assert!(
+        encoder_ok("libvpx-vp9") && encoder_ok("libopus"),
+        "need libvpx-vp9 and libopus to generate a live WebM"
+    );
+    let dir = std::env::temp_dir().join(format!("fitifact-live-webm-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate(
+        &dir,
+        "vp9-opus.webm",
+        &[
+            "-c:v",
+            "libvpx-vp9",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "64k",
+            "-f",
+            "webm",
+        ],
+    );
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector.inspect(&input).unwrap();
+    assert!(
+        !matches!(
+            artifact.container,
+            Some(Container::Mp4) | Some(Container::Mov)
+        ),
+        "live WebM must not be classified as MP4/MOV, got {:?}",
+        artifact.container
+    );
+    assert!(!check(&artifact, &media_h264_mp4_aac()).compatible);
+    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert!(
+        !outcome.is_compatible() && outcome.plan().is_none(),
+        "live WebM must be refused rather than remuxed or transcoded, got {:?}",
+        outcome.blocking_codes()
+    );
+    assert!(
+        !outcome.blocking_codes().is_empty(),
+        "refusal must carry a blocking code"
+    );
+    if let Some(Container::Unknown(label)) = &artifact.container {
+        assert!(
+            label.contains("matroska") || label.contains("webm"),
+            "unexpected unknown label {label}"
+        );
+        let webm_target = compile(ConstraintInput {
+            container: Some(vec!["webm".into()]),
+            ..ConstraintInput::default()
+        })
+        .unwrap();
+        assert!(
+            !check(&artifact, &webm_target).compatible,
+            "ambiguous probe {label} must not check as WebM"
+        );
+        assert_eq!(
+            artifact.container.as_ref().map(Container::display_label),
+            Some(format!("unknown ({label})"))
+        );
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
