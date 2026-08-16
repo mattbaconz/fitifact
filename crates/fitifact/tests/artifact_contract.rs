@@ -147,6 +147,7 @@ fn shared_matroska_webm_probe_is_unknown_and_never_webm_compatible() {
             assert_eq!(artifact.container, Some(Container::Mkv));
         }
         assert!(!check(&artifact, &target).compatible);
+        assert_ne!(Container::parse_loose(format_name).as_str(), "webm");
     }
 }
 

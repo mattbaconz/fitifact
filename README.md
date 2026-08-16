@@ -36,8 +36,9 @@ OS signing, and package-manager formulae are deferred.
 - `ffmpeg` on `PATH` for adaptations that require a change
 
 Run `fitifact doctor` (or `fitifact doctor --json`) to verify versions,
-`libx264`, MP4 muxing, and destination/temp write access. FFmpeg 6.1 or newer is
-the tested baseline; older majors warn but are not rejected solely for age.
+`libx264`, MP4 muxing, and destination/temp write access. Doctor warns when the
+FFmpeg major version is older than 6; CI currently tests FFmpeg 7.x. FFmpeg 6.x
+is accepted without an age warning and is not rejected solely for age.
 
 Fitifact has no telemetry and performs no network activity. FFmpeg and ffprobe
 are system dependencies and are not bundled.
@@ -70,10 +71,14 @@ cargo run -p fitifact-cli -- inspect video.mp4
 cargo run -p fitifact-cli -- check video.mp4 --container mp4 --video-codec h264 --audio-codec aac
 cargo run -p fitifact-cli -- plan video.mov --container mp4 --video-codec h264 --audio-codec aac
 cargo run -p fitifact-cli -- adapt video.mov --container mp4 --video-codec h264 --audio-codec aac
+cargo run -p fitifact-cli -- bench
 ```
 
 Use `--json` with every command for structured output; engine failures use
-`fitifact.error/v1`.
+`fitifact.error/v1`. `fitifact bench` (and `fitifact bench --json`) is the
+canonical demo: it times no-op, remux, and HEVC transcode on the tracked
+fixtures and prints spawn/provider proofs. Run it from the repository root so
+`fixtures/media` resolves.
 Use `adapt --dry-run` to plan without writing a file. By default, adaptation
 writes a unique sibling such as `video.fitifact.mp4` or
 `video.fitifact.2.mp4`; `-o` chooses another new path and existing paths are

@@ -30,7 +30,7 @@ pub struct AdaptRequest<'a> {
     pub output: Option<PathBuf>,
     pub catalog: Option<&'a CapabilityCatalog>,
     pub inspector: &'a dyn Inspector,
-    pub provider: &'a dyn TransformProvider,
+    pub provider: Option<&'a dyn TransformProvider>,
     pub execution: ExecutionContext,
 }
 
@@ -118,6 +118,20 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
             cleanup_warning: None,
         }),
         PlanOutcome::Planned { plan, .. } => {
+            let Some(provider) = request.provider else {
+                return Ok(failed(
+                    original,
+                    artifact,
+                    report,
+                    Some(plan),
+                    explanation,
+                    Error::new(
+                        ErrorCode::ProviderMissing,
+                        "a transform provider is required to execute a plan",
+                    ),
+                    None,
+                ));
+            };
             let explicit_output = request.output.is_some();
             let output = match request.output {
                 Some(path) => path,
@@ -165,7 +179,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 }
             };
             if let Err(err) = execute(
-                request.provider,
+                provider,
                 request.input,
                 staged.path(),
                 &plan,
@@ -202,10 +216,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 ));
             }
             let source_hashes =
-                match request
-                    .provider
-                    .stream_hashes(request.input, &artifact, &request.execution)
-                {
+                match provider.stream_hashes(request.input, &artifact, &request.execution) {
                     Ok(hashes) => hashes,
                     Err(err) => {
                         let cleanup = staged.cleanup_owned();
@@ -224,10 +235,7 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                     }
                 };
             let output_hashes =
-                match request
-                    .provider
-                    .stream_hashes(staged.path(), &artifact, &request.execution)
-                {
+                match provider.stream_hashes(staged.path(), &artifact, &request.execution) {
                     Ok(hashes) => hashes,
                     Err(err) => {
                         let cleanup = staged.cleanup_owned();
@@ -1052,13 +1060,51 @@ mod tests {
             output: None,
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &PanicProvider,
+            provider: Some(&PanicProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
         assert_eq!(result.status, AdaptationStatus::Compatible);
         assert!(result.output.is_none());
         assert!(result.plan.is_none());
+    }
+
+    #[test]
+    fn compatible_adapt_does_not_require_a_transform_provider() {
+        let artifact = Artifact::media(Container::Mp4, VideoCodec::H264, Some(AudioCodec::Aac), 10);
+        let result = adapt(AdaptRequest {
+            input: Path::new("already.mp4"),
+            constraints: media_h264_mp4_aac(),
+            output: None,
+            catalog: None,
+            inspector: &FakeInspector(artifact),
+            provider: None,
+            execution: ExecutionContext::default(),
+        })
+        .unwrap();
+        assert_eq!(result.status, AdaptationStatus::Compatible);
+        assert!(result.output.is_none());
+    }
+
+    #[test]
+    fn planned_adapt_without_provider_is_failed_not_adapted() {
+        let artifact = Artifact::media(Container::Mp4, VideoCodec::Hevc, Some(AudioCodec::Aac), 10);
+        let result = adapt(AdaptRequest {
+            input: Path::new("bad.mp4"),
+            constraints: media_h264_mp4_aac(),
+            output: Some(PathBuf::from("bad.adapted.mp4")),
+            catalog: None,
+            inspector: &FakeInspector(artifact),
+            provider: None,
+            execution: ExecutionContext::default(),
+        })
+        .unwrap();
+        assert_eq!(result.status, AdaptationStatus::Failed);
+        assert_eq!(
+            result.error.as_ref().unwrap().code,
+            ErrorCode::ProviderMissing
+        );
+        assert!(!PathBuf::from("bad.adapted.mp4").exists());
     }
 
     struct FailProvider;
@@ -1087,7 +1133,7 @@ mod tests {
             output: Some(PathBuf::from("bad.adapted.mp4")),
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &FailProvider,
+            provider: Some(&FailProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1207,7 +1253,7 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &PanicProvider,
+            provider: Some(&PanicProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1240,9 +1286,9 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &inspector,
-            provider: &RacingProvider {
+            provider: Some(&RacingProvider {
                 destination: output.clone(),
-            },
+            }),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1298,7 +1344,7 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &inspector,
-            provider: &PassProvider,
+            provider: Some(&PassProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1330,7 +1376,7 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &provider,
+            provider: Some(&provider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1393,7 +1439,7 @@ mod tests {
             output: Some(output),
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &AmbiguousPartialFailProvider,
+            provider: Some(&AmbiguousPartialFailProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1441,7 +1487,7 @@ mod tests {
             output: Some(output),
             catalog: None,
             inspector: &FakeInspector(artifact),
-            provider: &PollutingPartialFailProvider,
+            provider: Some(&PollutingPartialFailProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1493,7 +1539,7 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &inspector,
-            provider: &PassProvider,
+            provider: Some(&PassProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1530,7 +1576,7 @@ mod tests {
             output: None,
             catalog: None,
             inspector: &inspector,
-            provider: &PassProvider,
+            provider: Some(&PassProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();
@@ -1559,7 +1605,7 @@ mod tests {
             output: Some(output.clone()),
             catalog: None,
             inspector: &inspector,
-            provider: &PassProvider,
+            provider: Some(&PassProvider),
             execution: ExecutionContext::default(),
         })
         .unwrap();

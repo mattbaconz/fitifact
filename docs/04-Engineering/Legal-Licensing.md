@@ -3,7 +3,7 @@ title: "Legal and Licensing"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - legal
@@ -77,8 +77,13 @@ Profiles should store facts and source URLs, not copy entire copyrighted documen
 
 ## Brand/trademark
 
-“Fitifact” has current software collisions. Complete:
-- trademark search;
+Fitifact is the selected public name. Automated exact-name checks on 2026-08-15
+found no material collision signal; that is not legal clearance. USPTO, WIPO,
+and EUIPO human/legal review is still pending, and public publication remains
+blocked until owner/legal sign-off. See [[01-Product/Naming-Brand]] and D-023.
+
+Still complete before publication:
+- recorded USPTO/WIPO/EUIPO review and owner/legal sign-off;
 - domain search;
 - app-store/package search;
 - company/name conflict review.

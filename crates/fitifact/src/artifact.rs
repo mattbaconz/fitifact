@@ -56,20 +56,22 @@ impl Container {
     }
 
     pub fn parse_loose(raw: &str) -> Self {
-        let lower = raw.to_ascii_lowercase();
-        if lower.split(',').any(|part| part.trim() == "mp4") || lower.contains("isom") {
-            return Self::Mp4;
+        let mut found = None;
+        for part in raw.split(',') {
+            let token = part.trim();
+            if token.is_empty() {
+                continue;
+            }
+            let Some(parsed) = Self::parse_constraint(token) else {
+                return Self::Unknown(raw.to_string());
+            };
+            match &found {
+                None => found = Some(parsed),
+                Some(existing) if *existing == parsed => {}
+                Some(_) => return Self::Unknown(raw.to_string()),
+            }
         }
-        if lower.contains("webm") {
-            return Self::Webm;
-        }
-        if lower.contains("matroska") || lower.split(',').any(|part| part.trim() == "mkv") {
-            return Self::Mkv;
-        }
-        if lower.contains("mov") || lower.contains("quicktime") || lower.trim() == "qt" {
-            return Self::Mov;
-        }
-        Self::Unknown(raw.to_string())
+        found.unwrap_or_else(|| Self::Unknown(raw.to_string()))
     }
 
     pub fn from_probe(format_name: &str, major_brand: Option<&str>) -> Self {
@@ -107,6 +109,13 @@ impl Container {
             Self::Webm => "webm",
             Self::Mkv => "mkv",
             Self::Unknown(other) => other,
+        }
+    }
+
+    pub fn display_label(&self) -> String {
+        match self {
+            Self::Unknown(other) => format!("unknown ({other})"),
+            known => known.as_str().to_ascii_uppercase(),
         }
     }
 }
@@ -535,5 +544,36 @@ mod tests {
     fn video_codec_parse_does_not_treat_hevc_as_h264() {
         assert_eq!(VideoCodec::parse_loose("hvc1"), VideoCodec::Hevc);
         assert_eq!(VideoCodec::parse_loose("avc1"), VideoCodec::H264);
+    }
+
+    #[test]
+    fn parse_loose_uses_exact_tokens_and_keeps_ambiguous_soup_unknown() {
+        assert_eq!(Container::parse_loose("mp4"), Container::Mp4);
+        assert_eq!(Container::parse_loose("webm"), Container::Webm);
+        assert_eq!(Container::parse_loose("matroska"), Container::Mkv);
+        assert_eq!(Container::parse_loose("quicktime"), Container::Mov);
+        assert_eq!(
+            Container::parse_loose("matroska,webm"),
+            Container::Unknown("matroska,webm".into())
+        );
+        assert_eq!(
+            Container::parse_loose("mov,mp4,m4a,3gp,3g2,mj2"),
+            Container::Unknown("mov,mp4,m4a,3gp,3g2,mj2".into())
+        );
+        assert_eq!(
+            Container::parse_loose("isom"),
+            Container::Unknown("isom".into())
+        );
+        assert_ne!(Container::parse_loose("matroska,webm").as_str(), "webm");
+    }
+
+    #[test]
+    fn unknown_container_display_label_does_not_look_like_a_known_format() {
+        assert_eq!(Container::Mp4.display_label(), "MP4");
+        assert_eq!(Container::Mov.display_label(), "MOV");
+        assert_eq!(
+            Container::Unknown("matroska,webm".into()).display_label(),
+            "unknown (matroska,webm)"
+        );
     }
 }

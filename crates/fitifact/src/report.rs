@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{Artifact, VideoCodec};
+use crate::artifact::{Artifact, Container, VideoCodec};
 use crate::capability::TransformId;
 use crate::check::{CheckResult, CompatibilityReport};
 use crate::plan::{Plan, PlanOutcome, PlanStep};
@@ -93,9 +93,9 @@ fn mismatch_summary(artifact: &Artifact, report: &CompatibilityReport) -> String
         let actual = container
             .actual
             .as_deref()
-            .unwrap_or("unknown")
-            .to_ascii_uppercase();
-        let required = container.required.to_ascii_uppercase();
+            .map(pretty_container)
+            .unwrap_or_else(|| "unknown".into());
+        let required = pretty_container(&container.required);
         return format!("Your file is {actual}; this target needs {required}.");
     }
     "This file does not meet the target requirements.".into()
@@ -113,13 +113,17 @@ fn video_codec_summary(artifact: &Artifact, report: &CompatibilityReport) -> Opt
     let container = artifact
         .container
         .as_ref()
-        .map(|c| c.as_str().to_ascii_uppercase())
+        .map(Container::display_label)
         .unwrap_or_else(|| "this file".into());
     let required = pretty_codec(&video.required);
     let pretty_actual = pretty_codec(actual);
     Some(format!(
         "Your video is {container}, but it contains {pretty_actual} video. This target needs {required}."
     ))
+}
+
+fn pretty_container(raw: &str) -> String {
+    Container::parse_loose(raw).display_label()
 }
 
 fn pretty_codec(raw: &str) -> String {
@@ -247,5 +251,23 @@ mod tests {
         let report = check(&artifact, &constraints);
         let explanation = explain_check(&artifact, &report);
         assert!(explanation.summary.contains("already fits"));
+    }
+
+    #[test]
+    fn unknown_container_explanation_does_not_look_like_a_known_format() {
+        let artifact = Artifact::media(
+            Container::Unknown("matroska,webm".into()),
+            VideoCodec::Hevc,
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        let constraints = media_h264_mp4_aac();
+        let report = check(&artifact, &constraints);
+        let explanation = explain_check(&artifact, &report);
+        assert!(explanation.summary.contains("unknown (matroska,webm)"));
+        assert!(!explanation.summary.contains("MATROSKA,WEBM"));
+        let outcome = plan(&artifact, &constraints, &default_catalog());
+        let planned = explain_plan(&artifact, &report, &outcome);
+        assert!(!planned.summary.contains("MATROSKA,WEBM"));
     }
 }

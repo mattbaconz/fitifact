@@ -15,6 +15,9 @@ All notable changes to Fitifact are documented here.
 - Deterministic synthetic media fixtures, native four-target CI, dependency
   policy, and cargo-dist 0.32.0 release assets with checksums, CycloneDX SBOM,
   installers, and GitHub artifact attestations.
+- `fitifact bench` demo/benchmark report (`fitifact.bench/v1`) for the three
+  canonical fixtures, CLI inspect cold start, and lazy-provider / no-network
+  proofs.
 
 ### [changed]
 
@@ -61,3 +64,8 @@ All notable changes to Fitifact are documented here.
 - Quoted the public-readiness secret-scan pattern so Git does not treat PEM
   markers as options, and printed preservation claims as readable phrases
   instead of debug enum names.
+- Stopped container `parse_loose` from substring-matching probe soup, so
+  `matroska,webm` stays unknown instead of becoming WebM, and printed unknown
+  containers as `unknown (...)` rather than `MATROSKA,WEBM`.
+- Load the FFmpeg transform provider only when an adaptation plan needs
+  execution; compatible and unsatisfiable paths no longer construct it.

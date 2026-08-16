@@ -3,7 +3,7 @@ title: "CLI Specification"
 type: spec
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - cli
@@ -20,6 +20,7 @@ fitifact check <file> <typed constraints> [--json]
 fitifact plan <file> <typed constraints> [--json]
 fitifact adapt <file> <typed constraints> [-o <new-output>] [--json] [--dry-run] [--timeout-seconds <1..86400>]
 fitifact doctor [--json]
+fitifact bench [--json] [--fixtures DIR] [--keep]
 fitifact --version
 ```
 
@@ -47,10 +48,12 @@ combining them is a structured usage error with exit 64. Constraint documents
 are read through a 1 MiB bounded reader before UTF-8 and YAML validation; one
 byte beyond the limit is rejected without reading or allocating the remainder.
 
-Only MOV/H.264-to-MP4 remux and MP4/HEVC-to-H.264 transcode are executable
-within the D-020 matrix. File-size and dimension constraints are check-only in
-v0.1. Unsupported source containers or mutations return an unsatisfiable result
-rather than a misleading plan.
+Only MOV/H.264/AAC-to-MP4 remux and MP4/HEVC/AAC-to-MP4/H.264 transcode (video
+re-encoded, AAC copied) are executable within the D-020 matrix. The remux path
+requires a single compatible AAC audio stream and a safe stream topology.
+File-size and dimension constraints are check-only in v0.1. Unsupported source
+containers or mutations return an unsatisfiable result rather than a misleading
+plan.
 
 Default adaptation output is a unique sibling such as `video.fitifact.mp4`,
 then `video.fitifact.2.mp4`. `-o` selects a different new output path. Existing
@@ -75,11 +78,22 @@ default transform timeout is 1800 seconds and `--timeout-seconds` is bounded to
 - 5: provider or execution failure;
 - 6: validation failure;
 - 7: security/policy block;
-- 64: CLI usage or other unmapped error.
+- 64: CLI usage, `REQUIREMENTS_AMBIGUOUS` / `REQUIREMENTS_CONFLICT`, or any
+  other unmapped error.
 
 `doctor` checks system `ffprobe` and `ffmpeg` versions, `libx264`, the MP4 muxer,
-and destination/temp write health. Missing requirements fail with exit 5. An
-FFmpeg major older than the CI-tested 6.1 baseline emits a warning only.
+and destination/temp write health. Missing requirements fail with exit 5.
+Doctor warns when the detected FFmpeg **major version is older than 6**. CI
+currently installs FFmpeg 7.x. FFmpeg 6.x is accepted without an age warning
+and is not rejected solely for age.
+
+`bench` times the three canonical fixtures (no-op, remux, transcode), measures
+one CLI inspect cold start, and prints a human table or `fitifact.bench/v1`
+JSON. It constructs the FFmpeg transform provider only for remux/transcode.
+Exit 0 if outcomes and proofs pass; exit 5 if doctor is unhealthy; any other
+nonzero status means a proof or canonical outcome failed. `--fixtures` selects
+the media directory (default `fixtures/media` or `FITIFACT_FIXTURES`); `--keep`
+retains the temporary adaptation workspace.
 
 ## Deferred grammar
 

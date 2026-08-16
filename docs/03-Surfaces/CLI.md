@@ -23,11 +23,14 @@ fitifact check FILE CONSTRAINTS [--json]
 fitifact plan FILE CONSTRAINTS [--json]
 fitifact adapt FILE CONSTRAINTS [-o OUTPUT] [--json] [--dry-run] [--timeout-seconds]
 fitifact doctor [--json]
+fitifact bench [--json] [--fixtures DIR] [--keep]
 ```
 
 Constraints are typed flags (`--container`, `--video-codec`, `--audio-codec`,
 `--max-size`, `--max-width`, `--max-height`) or `--constraints FILE.yaml`.
 `adapt --dry-run` plans without writing.
+`fitifact bench` is the canonical demo/benchmark: no-op, remux, and HEVC
+transcode on tracked fixtures, with a human table or `fitifact.bench/v1` JSON.
 
 ## Executable and check-only constraints
 

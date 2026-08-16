@@ -3,7 +3,7 @@ title: "Performance Budgets"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - performance
@@ -33,11 +33,14 @@ Track:
 
 ## Core
 
-Requirements:
+Requirements (v0.1, measured — not marketing SLAs):
 - no network during core initialization;
 - no GUI dependency;
-- `check/plan` does not spawn transform providers;
-- no-op path does not initialize encoders.
+- `check/plan` does not spawn transform providers (only `ffprobe` for inspect);
+- no-op path does not initialize encoders or construct the FFmpeg transform provider.
+
+`fitifact bench` records these proofs on the canonical fixtures. Wall-clock
+numbers are observational; CI asserts outcomes and spawn proofs, not budgets.
 
 ## Web
 

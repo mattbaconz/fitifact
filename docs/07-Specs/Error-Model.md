@@ -12,7 +12,9 @@ tags:
 
 # Error model
 
-## Categories
+## Categories — implemented in v0.1
+
+These codes exist on `fitifact.error/v1` and in the Rust `ErrorCode` enum:
 
 - `INPUT_INVALID`
 - `INSPECTION_UNSUPPORTED`
@@ -24,11 +26,33 @@ tags:
 - `EXECUTION_FAILED`
 - `EXECUTION_LIMIT`
 - `VALIDATION_FAILED`
-- `PROFILE_STALE`
 - `SECURITY_BLOCKED`
-- `CLOUD_QUOTA`
 
 `ALREADY_COMPATIBLE` is a success status, not an error.
+
+## Categories — deferred
+
+These names are reserved for later surfaces. They are not present in v0.1
+`ErrorCode` and must not appear in CLI envelopes:
+
+- `PROFILE_STALE`
+- `CLOUD_QUOTA`
+
+## CLI exit mapping
+
+Engine failures requested as JSON still use the `fitifact.error/v1` envelope.
+Process exit codes for those codes are:
+
+- `INPUT_INVALID`, `INSPECTION_UNSUPPORTED`, `INSPECTION_LIMIT` → 4
+- `NO_VALID_PLAN` → 3
+- `PROVIDER_MISSING`, `EXECUTION_FAILED`, `EXECUTION_LIMIT` → 5
+- `VALIDATION_FAILED` → 6
+- `SECURITY_BLOCKED` → 7
+- `REQUIREMENTS_AMBIGUOUS`, `REQUIREMENTS_CONFLICT`, and any other unmapped
+  engine or usage error → **64**
+
+Constraint compile conflicts are therefore exit 64, not exit 4. See
+[[07-Specs/CLI-Spec]].
 
 ## Object
 

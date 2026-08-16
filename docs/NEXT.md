@@ -14,20 +14,20 @@ tags:
 The v0.1 CLI/media slice is implemented locally: inspection, typed constraints,
 bounded planning, no-op/remux/selective-video-transcode, explicit refusal,
 post-validation, deterministic fixtures, CI, and GitHub-only packaging
-preparation. Do not reopen that slice unless a review finds a false-safe defect.
+preparation. Local RC verification for unpublished `0.1.0-rc.1` has been run
+(fmt, Clippy, workspace tests, live FFmpeg including temp WebM refusal, fixture
+and workflow checks, and `dist plan --tag=v0.1.0-rc.1`). Do not reopen that
+slice unless a review finds a false-safe defect. Keep the package unpublished.
 
-1. **Finish local RC verification**
-   - confirm `0.1.0-rc.1` on the reviewed commit;
-   - run fmt, Clippy, unit/integration tests, live FFmpeg tests, fixture and
-     workflow checks, and `dist plan --tag=v0.1.0-rc.1`;
-   - keep the package unpublished.
+1. **Local RC verification** — done for this candidate; stay unpublished.
 
 2. **Complete local identity**
    - the public name is Fitifact;
-   - the checkout folder should match (`C:\fitifact`);
+   - the product git checkout is `C:\fitifact\fitifact` under the `C:\fitifact`
+     umbrella; in-repo `docs/` is canonical;
    - preserve Shoehorn only as historical rename/collision context.
 
-3. **Complete the publication gate**
+3. **Complete the publication gate** (owner)
    - automated Fitifact exact-name checks found no material collision signal;
    - complete USPTO/WIPO/EUIPO human/legal review and obtain owner sign-off;
    - do not create the public repository, push, tag, or release before sign-off.
@@ -73,16 +73,16 @@ If the core cannot reliably make this decision, do not add more formats.
 
 ## Optimization milestone
 
-Before adding more file families, prove:
+v0.1 proves locally:
 
 ```text
 cold start -> inspect -> no-op
 ```
 
-without loading a transform provider.
+without constructing or spawning a transform provider. `check`/`plan` spawn only
+`ffprobe` and the workspace `Cargo.lock` contains no HTTP client or `tokio`
+runtime. Run `fitifact bench` for the measured report.
 
 Then, in deferred later work, prove:
 - image workflow does not load media runtime;
 - extension remains a thin IPC/UI layer.
-
-For v0.1, prove local check/plan performs no network activity.
