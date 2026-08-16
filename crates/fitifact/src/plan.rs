@@ -49,6 +49,18 @@ pub enum PreservationClaim {
     VideoColorMetadata,
 }
 
+impl std::fmt::Display for PreservationClaim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::AllStreamsCopied => "all streams copied",
+            Self::AudioStreamCopied => "audio stream copied",
+            Self::VideoDimensions => "video dimensions",
+            Self::VideoPixelFormat => "video pixel format",
+            Self::VideoColorMetadata => "video color metadata",
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanStep {
     pub id: String,
