@@ -432,6 +432,14 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
             "v0.1 operations can copy only AAC audio",
         ));
     }
+    let video = artifact.first_video().expect("topology checked");
+    if video.width.is_none() || video.height.is_none() || artifact.duration_ms.is_none() {
+        return Some(blocking(
+            BlockingCode::UnknownRequiredFact,
+            Vec::new(),
+            "v0.1 cannot execute a transform without known video dimensions and duration",
+        ));
+    }
     if let Some(check) = report.failing_or_unknown(Field::MediaVideoCodec) {
         let video = artifact.first_video().expect("topology checked");
         if video.codec.is_none() {
@@ -513,8 +521,12 @@ fn instantiate(
     match operation {
         TransformId::Remux => {
             let container = report.failing_or_unknown(Field::MediaContainer)?;
+            let video = artifact.first_video()?;
             if artifact.container != Some(Container::Mov)
-                || artifact.first_video()?.codec != Some(VideoCodec::H264)
+                || video.codec != Some(VideoCodec::H264)
+                || video.width.is_none()
+                || video.height.is_none()
+                || artifact.duration_ms.is_none()
             {
                 return None;
             }
@@ -539,8 +551,12 @@ fn instantiate(
         }
         TransformId::TranscodeVideo => {
             let video = report.failing_or_unknown(Field::MediaVideoCodec)?;
+            let input_video = artifact.first_video()?;
+            let width = input_video.width?;
+            let height = input_video.height?;
             if artifact.container != Some(Container::Mp4)
-                || artifact.first_video()?.codec != Some(VideoCodec::Hevc)
+                || input_video.codec != Some(VideoCodec::Hevc)
+                || artifact.duration_ms.is_none()
             {
                 return None;
             }
@@ -554,7 +570,6 @@ fn instantiate(
                     message: "The target requires an MP4 container.".into(),
                 });
             }
-            let input_video = artifact.first_video()?;
             let mut expected = vec![
                 ExpectedFact {
                     field: Field::MediaVideoCodec,
@@ -564,19 +579,15 @@ fn instantiate(
                     field: Field::MediaContainer,
                     value: ExpectedValue::Container(Container::Mp4),
                 },
-            ];
-            if let Some(width) = input_video.width {
-                expected.push(ExpectedFact {
+                ExpectedFact {
                     field: Field::MediaVideoWidth,
                     value: ExpectedValue::Integer(u64::from(width)),
-                });
-            }
-            if let Some(height) = input_video.height {
-                expected.push(ExpectedFact {
+                },
+                ExpectedFact {
                     field: Field::MediaVideoHeight,
                     value: ExpectedValue::Integer(u64::from(height)),
-                });
-            }
+                },
+            ];
             expected.extend([
                 ExpectedFact {
                     field: Field::MediaVideoPixelFormat,

@@ -619,6 +619,51 @@ mod tests {
         assert_eq!(error.code, ErrorCode::SecurityBlocked);
     }
 
+    #[test]
+    fn runtime_rejects_missing_dimensions_or_duration_as_forged() {
+        let complete = crate::artifact::Artifact::media(
+            Container::Mov,
+            crate::artifact::VideoCodec::H264,
+            Some(crate::artifact::AudioCodec::Aac),
+            10,
+        );
+        let plan = crate::plan::plan(
+            &complete,
+            &crate::constraints::media_h264_mp4_aac(),
+            &crate::capability::default_catalog(),
+        )
+        .plan()
+        .unwrap()
+        .clone();
+
+        let mut missing_width = complete.clone();
+        missing_width.first_video_mut().unwrap().width = None;
+        assert_eq!(
+            validate_plan_for_execution(&plan, &missing_width)
+                .unwrap_err()
+                .code,
+            ErrorCode::SecurityBlocked
+        );
+
+        let mut missing_height = complete.clone();
+        missing_height.first_video_mut().unwrap().height = None;
+        assert_eq!(
+            validate_plan_for_execution(&plan, &missing_height)
+                .unwrap_err()
+                .code,
+            ErrorCode::SecurityBlocked
+        );
+
+        let mut missing_duration = complete;
+        missing_duration.duration_ms = None;
+        assert_eq!(
+            validate_plan_for_execution(&plan, &missing_duration)
+                .unwrap_err()
+                .code,
+            ErrorCode::SecurityBlocked
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn system_spawner_bounds_stdout_and_keeps_only_stderr_tail() {
