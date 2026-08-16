@@ -68,7 +68,7 @@ pub fn explain_plan(
                     "Keeping: {}",
                     plan.preserved
                         .iter()
-                        .map(|claim| format!("{claim:?}").to_ascii_lowercase())
+                        .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
@@ -192,6 +192,22 @@ mod tests {
                 .contains("I can change only the video stream.")
                 || explanation.details.iter().any(|d| d.contains("video"))
         );
+        let keeping = explanation
+            .details
+            .iter()
+            .find(|line| line.starts_with("Keeping: "))
+            .expect("transcode explanation should name preserved facts");
+        assert!(
+            keeping.contains("video dimensions")
+                && keeping.contains("video pixel format")
+                && keeping.contains("video color metadata")
+                && keeping.contains("audio stream copied"),
+            "expected readable preservation claims, got {keeping}"
+        );
+        assert!(
+            !keeping.contains("videodimensions") && !keeping.contains("audiostreamcopied"),
+            "preservation claims must not dump debug enum names, got {keeping}"
+        );
     }
 
     #[test]
@@ -209,6 +225,14 @@ mod tests {
         assert!(explanation.summary.contains("MOV"));
         assert!(explanation.summary.contains("MP4"));
         assert!(explanation.summary.contains("remux"));
+        assert!(
+            explanation
+                .details
+                .iter()
+                .any(|line| line == "Keeping: all streams copied"),
+            "remux explanation should say streams are copied, got {:?}",
+            explanation.details
+        );
     }
 
     #[test]

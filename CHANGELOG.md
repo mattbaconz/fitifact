@@ -58,3 +58,6 @@ All notable changes to Fitifact are documented here.
   so a borrowed `isom`/`qt` tag cannot promote Matroska or WebM evidence.
 - Refused transforms whose video width, height, or duration is unknown instead
   of emitting a plan the runtime would reject as forged.
+- Quoted the public-readiness secret-scan pattern so Git does not treat PEM
+  markers as options, and printed preservation claims as readable phrases
+  instead of debug enum names.

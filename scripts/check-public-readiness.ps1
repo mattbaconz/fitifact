@@ -12,8 +12,25 @@ try {
     $skips = [System.Collections.Generic.List[string]]::new()
 
     $secretPattern = '-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|sk_live_[A-Za-z0-9]{20,}'
-    $secretFiles = @(git grep -Il -E $secretPattern -- . 2>$null)
-    if ($secretFiles.Count -gt 0) {
+    $nativePref = $null
+    if (Test-Path variable:/PSNativeCommandUseErrorActionPreference) {
+        $nativePref = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+    }
+    try {
+        $secretFiles = @(git grep -Il -E -- "$secretPattern" .)
+        $gitStatus = $LASTEXITCODE
+    }
+    finally {
+        if ($null -ne $nativePref) {
+            $PSNativeCommandUseErrorActionPreference = $nativePref
+        }
+    }
+    if ($gitStatus -gt 1) {
+        Write-Host "Tracked-secret git grep failed with exit code $gitStatus"
+        $failures.Add("high-signal tracked-secret scan")
+    }
+    elseif ($secretFiles.Count -gt 0) {
         $secretFiles | ForEach-Object { Write-Error "Possible tracked secret in file: $_" }
         $failures.Add("high-signal tracked-secret scan")
     }
