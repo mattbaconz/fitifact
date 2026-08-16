@@ -149,3 +149,19 @@ fn shared_matroska_webm_probe_is_unknown_and_never_webm_compatible() {
         assert!(!check(&artifact, &target).compatible);
     }
 }
+
+#[test]
+fn iso_bmff_brand_cannot_promote_matroska_webm_probe() {
+    let json = r#"{
+        "streams": [{"codec_type": "video", "codec_name": "h264"}],
+        "format": {"format_name": "matroska,webm", "tags": {"major_brand": "isom"}}
+    }"#;
+    let artifact = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, json).unwrap();
+    assert!(matches!(artifact.container, Some(Container::Unknown(_))));
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    assert!(!check(&artifact, &target).compatible);
+}

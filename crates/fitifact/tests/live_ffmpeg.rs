@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use fitifact::artifact::{AudioCodec, HdrStatus, VideoCodec};
+use fitifact::artifact::{AudioCodec, Container, HdrStatus, VideoCodec};
 use fitifact::capability::{TransformId, default_catalog};
-use fitifact::constraints::media_h264_mp4_aac;
+use fitifact::check::check;
+use fitifact::constraints::{ConstraintInput, compile, media_h264_mp4_aac};
 use fitifact::error::ErrorCode;
 use fitifact::ffmpeg::FfmpegProvider;
 use fitifact::inspect::{FfprobeInspector, Inspector};
@@ -291,4 +292,35 @@ fn canonical_hdr10_fixture_is_refused_without_conversion() {
         outcome.blocking_codes(),
         vec![BlockingCode::HdrConversionUnsupported]
     );
+}
+
+#[test]
+#[ignore]
+fn live_matroska_is_not_webm_and_cannot_remux() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-mkv-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate(
+        &dir,
+        "h264-aac.mkv",
+        &[
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "64k",
+        ],
+    );
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector.inspect(&input).unwrap();
+    assert_ne!(artifact.container, Some(Container::Webm));
+    let webm_target = compile(ConstraintInput {
+        container: Some(vec!["webm".into()]),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    assert!(!check(&artifact, &webm_target).compatible);
+    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::UnsupportedContainer]
+    );
+    let _ = std::fs::remove_dir_all(dir);
 }
