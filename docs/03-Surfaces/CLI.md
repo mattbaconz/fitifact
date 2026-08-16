@@ -3,7 +3,7 @@ title: "CLI"
 type: surface
 status: active
 implementation: v0.1
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - cli
@@ -21,8 +21,8 @@ It is scriptable, human-readable by default, and supports structured JSON.
 fitifact inspect FILE [--json]
 fitifact check FILE CONSTRAINTS [--json]
 fitifact plan FILE CONSTRAINTS [--json]
-fitifact adapt FILE CONSTRAINTS [-o OUTPUT] [--json] [--dry-run]
-fitifact doctor
+fitifact adapt FILE CONSTRAINTS [-o OUTPUT] [--json] [--dry-run] [--timeout-seconds]
+fitifact doctor [--json]
 ```
 
 Constraints are typed flags (`--container`, `--video-codec`, `--audio-codec`,
@@ -31,14 +31,14 @@ Constraints are typed flags (`--container`, `--video-codec`, `--audio-codec`,
 
 ## Executable and check-only constraints
 
-Container changes can be executed by remux. HEVC video can be transcoded to
-H.264 while compatible AAC audio is copied. Already compatible MP4/H.264/AAC is
+MOV/H.264/AAC targeting MP4 remuxes without re-encoding. MP4/HEVC/AAC targeting
+MP4/H.264 transcodes video and copies AAC. Already compatible MP4/H.264/AAC is
 a no-op. File size and video dimensions can be inspected and checked but cannot
 be changed by the v0.1 provider. Unsupported mutations are refused.
 
-Every created output is re-inspected and validated. The default is a new
-`.adapted` sibling; `-o` may select another path, but neither originals nor
-existing outputs are overwritten.
+Every created output is re-inspected and validated. The default is a unique
+sibling such as `video.fitifact.mp4`, then `video.fitifact.2.mp4`. `-o` may
+select another new path; neither originals nor existing outputs are overwritten.
 
 ## Deferred commands and modes
 
