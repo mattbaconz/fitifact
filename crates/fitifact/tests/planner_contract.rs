@@ -325,6 +325,53 @@ fn refuses_every_source_outside_the_exact_v01_operation_matrix() {
 }
 
 #[test]
+fn refuses_missing_dimensions_or_duration_instead_of_an_unexecutable_plan() {
+    for (container, codec) in [
+        (Container::Mov, VideoCodec::H264),
+        (Container::Mp4, VideoCodec::Hevc),
+    ] {
+        let mut missing_width = Artifact::media(
+            container.clone(),
+            codec.clone(),
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        missing_width.first_video_mut().unwrap().width = None;
+        assert_eq!(
+            blocking(&missing_width, &media_h264_mp4_aac()),
+            vec![BlockingCode::UnknownRequiredFact],
+            "{container:?} {codec:?} without width must refuse"
+        );
+
+        let mut missing_height = Artifact::media(
+            container.clone(),
+            codec.clone(),
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        missing_height.first_video_mut().unwrap().height = None;
+        assert_eq!(
+            blocking(&missing_height, &media_h264_mp4_aac()),
+            vec![BlockingCode::UnknownRequiredFact],
+            "{container:?} {codec:?} without height must refuse"
+        );
+
+        let mut missing_duration = Artifact::media(
+            container.clone(),
+            codec.clone(),
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        missing_duration.duration_ms = None;
+        assert_eq!(
+            blocking(&missing_duration, &media_h264_mp4_aac()),
+            vec![BlockingCode::UnknownRequiredFact],
+            "{container:?} {codec:?} without duration must refuse"
+        );
+    }
+}
+
+#[test]
 fn intersected_container_target_is_order_independent() {
     let artifact = Artifact::media(
         Container::Mp4,

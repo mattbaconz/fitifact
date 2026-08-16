@@ -56,3 +56,5 @@ All notable changes to Fitifact are documented here.
   and execution to the exact MOV/H.264 remux and MP4/HEVC transcode sources.
 - Restricted MP4/MOV brand interpretation to ISO-BMFF/QuickTime demuxer labels
   so a borrowed `isom`/`qt` tag cannot promote Matroska or WebM evidence.
+- Refused transforms whose video width, height, or duration is unknown instead
+  of emitting a plan the runtime would reject as forged.
