@@ -34,8 +34,8 @@ Destination-first + minimum mutation + validation.
 - original preserved.
 
 ## Current v0.1
-CLI + media only: MP4/H.264/AAC no-op, remux acceptable streams into the target
-container, or transcode HEVC video to H.264 while copying compatible AAC audio.
+CLI + media only: MP4/H.264/AAC no-op, MOV/H.264/AAC remux to MP4, or
+MP4/HEVC-to-H.264 video transcode while copying compatible AAC audio.
 File-size and dimension constraints are check-only. Everything else is refused.
 
 ## Later public MVP (deferred)

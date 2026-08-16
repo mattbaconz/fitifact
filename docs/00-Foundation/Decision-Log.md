@@ -104,10 +104,11 @@ prerequisite for proving `adapt(file, constraints)`.
 **Status:** accepted.
 v0.1 proves inspection, typed constraints, minimum-mutation planning, selective
 video transcode, remux, no-op, and post-validation on media via FFmpeg/ffprobe.
-Its executable matrix is MP4/H.264/AAC no-op, acceptable streams in the wrong
-container remux, and HEVC video to H.264 with compatible AAC audio copied. It
-refuses every other mutation. File-size and video-dimension constraints are
-check-only in v0.1. Images wait until this media milestone is reliable.
+Its executable matrix is MP4/H.264/AAC no-op, MOV/H.264/AAC remux to MP4, and
+MP4/HEVC-to-H.264 video transcode with compatible AAC copied. It refuses every
+other mutation, including WebM, Matroska, unknown containers, and MOV/HEVC.
+File-size and video-dimension constraints are check-only in v0.1. Images wait
+until this media milestone is reliable.
 
 ## D-021 — System FFmpeg/ffprobe, not bundled
 **Status:** accepted.

@@ -73,22 +73,27 @@ impl Container {
     }
 
     pub fn from_probe(format_name: &str, major_brand: Option<&str>) -> Self {
-        if let Some(brand) = major_brand.map(str::trim) {
-            let brand = brand.trim_end_matches('\0').trim().to_ascii_lowercase();
-            if brand == "qt" || brand.starts_with("qt") {
-                return Self::Mov;
-            }
-            if matches!(
-                brand.as_str(),
-                "isom" | "iso2" | "iso5" | "iso6" | "mp41" | "mp42" | "mp71" | "avc1" | "msdh"
-            ) {
-                return Self::Mp4;
-            }
-        }
         let normalized = format_name.trim().to_ascii_lowercase();
+        if iso_bmff_family_label(&normalized) {
+            if let Some(brand) = major_brand.map(str::trim) {
+                let brand = brand.trim_end_matches('\0').trim().to_ascii_lowercase();
+                if brand == "qt" || brand.starts_with("qt") {
+                    return Self::Mov;
+                }
+                if matches!(
+                    brand.as_str(),
+                    "isom" | "iso2" | "iso5" | "iso6" | "mp41" | "mp42" | "mp71" | "avc1" | "msdh"
+                ) {
+                    return Self::Mp4;
+                }
+            }
+            return match normalized.as_str() {
+                "mp4" => Self::Mp4,
+                "mov" | "quicktime" | "qt" => Self::Mov,
+                _ => Self::Unknown(format_name.to_string()),
+            };
+        }
         match normalized.as_str() {
-            "mp4" => Self::Mp4,
-            "mov" | "quicktime" | "qt" => Self::Mov,
             "webm" => Self::Webm,
             "matroska" | "mkv" => Self::Mkv,
             _ => Self::Unknown(format_name.to_string()),
@@ -104,6 +109,16 @@ impl Container {
             Self::Unknown(other) => other,
         }
     }
+}
+
+fn iso_bmff_family_label(format_name: &str) -> bool {
+    !format_name.is_empty()
+        && format_name.split(',').all(|part| {
+            matches!(
+                part.trim(),
+                "mp4" | "mov" | "quicktime" | "qt" | "m4a" | "3gp" | "3g2" | "mj2"
+            )
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -501,6 +516,19 @@ mod tests {
             Container::Unknown("matroska,webm".into())
         );
         assert_eq!(Container::from_probe("matroska", None), Container::Mkv);
+    }
+
+    #[test]
+    fn probe_brands_do_not_promote_non_iso_bmff_labels() {
+        assert_eq!(
+            Container::from_probe("matroska,webm", Some("isom")),
+            Container::Unknown("matroska,webm".into())
+        );
+        assert_eq!(Container::from_probe("webm", Some("isom")), Container::Webm);
+        assert_eq!(
+            Container::from_probe("matroska", Some("qt")),
+            Container::Mkv
+        );
     }
 
     #[test]

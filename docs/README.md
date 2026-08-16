@@ -34,8 +34,8 @@ Implemented:
 - typed YAML or flag constraints, compatibility checks, bounded planning, and
   machine-readable reports;
 - MP4/H.264/AAC no-op;
-- remux when acceptable streams are in the wrong container;
-- HEVC-to-H.264 video transcode while copying compatible AAC audio;
+- MOV/H.264/AAC remux to MP4;
+- MP4/HEVC-to-H.264 video transcode while copying compatible AAC audio;
 - post-execution re-inspection and validation;
 - GitHub-only distribution, Apache-2.0, no telemetry or network activity.
 

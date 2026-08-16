@@ -54,3 +54,5 @@ All notable changes to Fitifact are documented here.
 - Treated FFprobe's shared `matroska,webm` label as unknown, kept unknown
   container facts from being reinterpreted during checks, and aligned planning
   and execution to the exact MOV/H.264 remux and MP4/HEVC transcode sources.
+- Restricted MP4/MOV brand interpretation to ISO-BMFF/QuickTime demuxer labels
+  so a borrowed `isom`/`qt` tag cannot promote Matroska or WebM evidence.
