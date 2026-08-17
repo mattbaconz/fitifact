@@ -21,7 +21,8 @@ Constraints, compatibility predicates, planner, profile resolution, schema valid
 Real tiny files with known properties.
 
 The tracked canonical media set is under `fixtures/media`; its generator,
-provider provenance, and SHA-256 manifest are committed with it. Generated-temp
+provider provenance, and SHA-256 manifest are committed with it. The D-025
+image pair is under `fixtures/image` with its own SHA-256 manifest. Generated-temp
 provider tests remain in addition to these canonical fixtures.
 
 ### Provider integration

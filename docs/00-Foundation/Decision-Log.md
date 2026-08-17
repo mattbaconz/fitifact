@@ -2,7 +2,7 @@
 title: "Decision Log"
 type: decision-log
 status: active
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - decision-log
@@ -53,9 +53,9 @@ and required replacement before launch.
 Use mature transformation engines underneath.
 
 ## D-010 — MVP focuses on media/image compatibility
-**Status:** superseded in part by D-020.
-Images remain deferred to the later public MVP after the media engine slice is
-proven.
+**Status:** superseded in part by D-020 and D-025.
+The first public engine slice was media-only (D-020). The first image
+executable matrix is D-025. Broader image formats remain deferred.
 
 ## D-011 — Rust core
 **Status:** accepted for v0 by D-018.
@@ -67,9 +67,10 @@ dependencies remain subject to their own licenses and legal review.
 
 ## D-013 — Thin integrations
 **Status:** accepted.
-The CLI is the only v0.1 integration. Deferred browser, desktop, mobile, web, and
-SDK integrations must contain minimal orchestration/UI and reuse the same
-compatibility core.
+The CLI is the reference integration. A local-only static drop page plus
+`fitifact-wasm` covers the D-025 image matrix in-browser without a media
+runtime. Deferred hosted web, browser extension, desktop, mobile, and SDK
+integrations must stay thin and reuse the same compatibility core.
 
 ## D-014 — Lazy provider loading
 **Status:** accepted.
@@ -92,7 +93,9 @@ must remain replaceable capability providers; the planner is provider-independen
 
 ## D-018 — Rust core for v0
 **Status:** accepted.
-The v0 engine is a Rust workspace (`fitifact` library + `fitifact-cli`). The product is the planner/constraint core; FFmpeg is a subprocess. This avoids a TypeScript rewrite before native/WASM embeddings.
+The v0 engine is a Rust workspace (`fitifact` library, `fitifact-cli`, and
+`fitifact-wasm`). The product is the planner/constraint core; FFmpeg is a
+subprocess for media. Images use an in-process provider so WASM can share it.
 
 ## D-019 — CLI-only first slice
 **Status:** accepted.
@@ -128,9 +131,10 @@ underscore variants), npm, executable/command names, and ICANN/RDAP found no
 material collision signal. This result is not legal clearance.
 
 Final human/legal review of USPTO, WIPO, and EUIPO records is still pending.
-Public publication is blocked until explicit owner/legal sign-off. No public
-repository, release, package publication, or naming claim may precede that
-sign-off.
+A 2026-08-16 search packet is recorded in [[01-Product/Naming-Brand]]; it is
+not clearance. Public publication is blocked until explicit owner/legal
+sign-off. No public repository, release, package publication, or naming claim
+may precede that sign-off.
 
 ## D-024 — Public core and private operations boundary
 **Status:** accepted.
@@ -140,3 +144,14 @@ infrastructure, credentials, metering, private profiles, continuous verification
 operations, and enterprise control-plane code are deferred and belong in a
 separate private checkout. Local Fitifact has no telemetry, network activity, or
 implicit cloud fallback.
+
+## D-025 — First image executable matrix
+**Status:** accepted.
+**Recorded:** 2026-08-16.
+
+After the media `0.1.0-rc.1` freeze, the first image slice is JPEG already
+matching JPEG → no-op, and PNG targeting JPEG → in-process encode. It refuses
+WebP, HEIC/HEIF, TIFF, animation, claiming alpha-preserving JPEG, and
+resize/byte-fitting. The image provider is in-process Rust so WASM can share it;
+it must not construct or spawn FFmpeg. Media remains system FFmpeg (D-021). Do
+not reopen the D-020 media matrix.

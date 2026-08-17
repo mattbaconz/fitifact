@@ -27,20 +27,23 @@ fitifact bench [--json] [--fixtures DIR] [--keep]
 ```
 
 Constraints are typed flags (`--container`, `--video-codec`, `--audio-codec`,
-`--max-size`, `--max-width`, `--max-height`) or `--constraints FILE.yaml`.
+`--image-format`, `--max-size`, `--max-width`, `--max-height`) or
+`--constraints FILE.yaml`.
 `adapt --dry-run` plans without writing.
-`fitifact bench` is the canonical demo/benchmark: no-op, remux, and HEVC
-transcode on tracked fixtures, with a human table or `fitifact.bench/v1` JSON.
+`fitifact bench` is the canonical demo/benchmark: media no-op, remux, and HEVC
+transcode plus JPEG no-op and PNG→JPEG on tracked fixtures, with a human table
+or `fitifact.bench/v1` JSON.
 
 ## Executable and check-only constraints
 
 MOV/H.264/AAC targeting MP4 remuxes without re-encoding. MP4/HEVC/AAC targeting
 MP4/H.264 transcodes video and copies AAC. Already compatible MP4/H.264/AAC is
-a no-op. File size and video dimensions can be inspected and checked but cannot
-be changed by the v0.1 provider. Unsupported mutations are refused.
+a no-op. JPEG targeting JPEG is a no-op. PNG targeting JPEG encodes in-process
+without FFmpeg. File size and dimensions can be inspected and checked but cannot
+be changed. Unsupported mutations are refused.
 
 Every created output is re-inspected and validated. The default is a unique
-sibling such as `video.fitifact.mp4`, then `video.fitifact.2.mp4`. `-o` may
+sibling such as `video.fitifact.mp4` or `photo.fitifact.jpg`. `-o` may
 select another new path; neither originals nor existing outputs are overwritten.
 
 ## Deferred commands and modes

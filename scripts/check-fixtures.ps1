@@ -53,3 +53,45 @@ foreach ($required in @("2026-08-16", "ffmpeg version", "ffprobe version", "lavf
 }
 
 Write-Host "Fixture hashes, size bounds, inventory, and provenance: PASS"
+
+$image = Join-Path $root "fixtures\image"
+$imageManifest = Join-Path $image "SHA256SUMS"
+$imageNames = @(
+    "compatible-jpeg.jpg",
+    "mismatch-png.png"
+)
+if (-not (Test-Path -LiteralPath $imageManifest)) {
+    throw "Missing fixtures/image/SHA256SUMS"
+}
+$imageListed = @{}
+foreach ($line in Get-Content -LiteralPath $imageManifest) {
+    if ($line -notmatch '^([0-9a-f]{64})  (.+)$') {
+        throw "Malformed image SHA256SUMS line"
+    }
+    $imageListed[$Matches[2]] = $Matches[1]
+}
+$imageActual = @(Get-ChildItem -LiteralPath $image -File | Where-Object {
+    $_.Extension -in @(".jpg", ".jpeg", ".png")
+} | ForEach-Object Name | Sort-Object)
+if (Compare-Object ($imageNames | Sort-Object) $imageActual) {
+    throw "Image fixture directory does not contain exactly the two canonical image binaries"
+}
+foreach ($name in $imageNames) {
+    $path = Join-Path $image $name
+    $length = (Get-Item -LiteralPath $path).Length
+    if ($length -gt 100KB) {
+        throw "Image fixture exceeds the 100 KiB limit: $name"
+    }
+    $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not $imageListed.ContainsKey($name) -or $imageListed[$name] -ne $hash) {
+        throw "Image fixture checksum mismatch: $name"
+    }
+    Write-Host "$hash  $name ($length bytes)"
+}
+$imageReadme = Get-Content -Raw -LiteralPath (Join-Path $image "README.md")
+foreach ($required in @("2026-08-16", "in-process", "JPEG", "PNG")) {
+    if (-not $imageReadme.Contains($required)) {
+        throw "Image fixture provenance is missing: $required"
+    }
+}
+Write-Host "Image fixture hashes, size bounds, inventory, and provenance: PASS"

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{AudioCodec, Container, Family, VideoCodec};
+use crate::artifact::{AudioCodec, Container, Family, ImageFormat, VideoCodec};
 pub use crate::contract::{CONSTRAINTS_SCHEMA, ConstraintsSchema};
 use crate::error::{Error, ErrorCode, Result};
 
@@ -38,6 +38,12 @@ pub enum Field {
     MediaVideoColorPrimaries,
     #[serde(rename = "media.video.hdr")]
     MediaVideoHdr,
+    #[serde(rename = "image.format")]
+    ImageFormat,
+    #[serde(rename = "image.width")]
+    ImageWidth,
+    #[serde(rename = "image.height")]
+    ImageHeight,
 }
 
 impl Field {
@@ -57,6 +63,9 @@ impl Field {
             Self::MediaVideoColorTransfer => "media.video.color_transfer",
             Self::MediaVideoColorPrimaries => "media.video.color_primaries",
             Self::MediaVideoHdr => "media.video.hdr",
+            Self::ImageFormat => "image.format",
+            Self::ImageWidth => "image.width",
+            Self::ImageHeight => "image.height",
         }
     }
 }
@@ -143,6 +152,7 @@ pub struct ConstraintInput {
     pub max_bytes: Option<u64>,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
+    pub image_format: Option<Vec<String>>,
     #[serde(default = "default_true")]
     pub preserve_audio: bool,
     #[serde(default = "default_true")]
@@ -163,6 +173,7 @@ impl Default for ConstraintInput {
             max_bytes: None,
             max_width: None,
             max_height: None,
+            image_format: None,
             preserve_audio: true,
             preserve_resolution: true,
         }
@@ -204,6 +215,15 @@ pub fn compile(input: ConstraintInput) -> Result<ConstraintSet> {
             value: ConstraintValue::List(values),
         });
     }
+    let image_target = input.image_format.is_some();
+    if let Some(values) = input.image_format {
+        hard.push(Constraint {
+            id: "image-format".into(),
+            field: Field::ImageFormat,
+            op: Operator::In,
+            value: ConstraintValue::List(values),
+        });
+    }
     if let Some(max_bytes) = input.max_bytes {
         hard.push(Constraint {
             id: "max-bytes".into(),
@@ -213,17 +233,27 @@ pub fn compile(input: ConstraintInput) -> Result<ConstraintSet> {
         });
     }
     if let Some(max_width) = input.max_width {
+        let field = if image_target {
+            Field::ImageWidth
+        } else {
+            Field::MediaVideoWidth
+        };
         hard.push(Constraint {
             id: "max-width".into(),
-            field: Field::MediaVideoWidth,
+            field,
             op: Operator::Lte,
             value: ConstraintValue::Integer(u64::from(max_width)),
         });
     }
     if let Some(max_height) = input.max_height {
+        let field = if image_target {
+            Field::ImageHeight
+        } else {
+            Field::MediaVideoHeight
+        };
         hard.push(Constraint {
             id: "max-height".into(),
-            field: Field::MediaVideoHeight,
+            field,
             op: Operator::Lte,
             value: ConstraintValue::Integer(u64::from(max_height)),
         });
@@ -328,8 +358,17 @@ fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
                 AudioCodec::parse_constraint(value).map(|value| value.as_str().to_string())
             })?;
         }
+        (Field::ImageFormat, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "image format", |value| {
+                ImageFormat::parse_constraint(value).map(|value| value.as_str().to_string())
+            })?;
+        }
         (
-            Field::FileBytes | Field::MediaVideoWidth | Field::MediaVideoHeight,
+            Field::FileBytes
+            | Field::MediaVideoWidth
+            | Field::MediaVideoHeight
+            | Field::ImageWidth
+            | Field::ImageHeight,
             Operator::Lte,
             ConstraintValue::Integer(value),
         ) if *value > 0 => {}
@@ -514,6 +553,15 @@ pub fn media_h264_mp4_aac() -> ConstraintSet {
         ..ConstraintInput::default()
     })
     .expect("built-in constraints are valid")
+}
+
+pub fn image_jpeg() -> ConstraintSet {
+    compile(ConstraintInput {
+        family: Some("image".into()),
+        image_format: Some(vec!["jpeg".into()]),
+        ..ConstraintInput::default()
+    })
+    .expect("built-in image constraints are valid")
 }
 
 #[cfg(test)]

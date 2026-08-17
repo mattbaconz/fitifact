@@ -58,10 +58,11 @@ claims state only guarantees of the logical operation.
 
 ## v0.1 catalog and search
 
-The catalog contains two operations: lossless MOV/H.264-to-MP4 remux, and
-MP4/HEVC-to-H.264 video transcode while copying already-valid AAC audio.
-WebM, Matroska, unknown containers, and MOV/HEVC are outside the v0.1 source
-capability matrix and return `cannot_satisfy`. Breadth-first search is bounded
+The catalog contains three operations: lossless MOV/H.264-to-MP4 remux,
+MP4/HEVC-to-H.264 video transcode while copying already-valid AAC audio, and
+in-process PNG-to-JPEG encode. WebM, Matroska, unknown containers, MOV/HEVC,
+WebP, HEIC/HEIF, TIFF, and animation are outside the executable matrix and
+return `cannot_satisfy`. Breadth-first search is bounded
 to depth 2 and candidates rank lexicographically by semantic loss, lossy steps,
 streams changed, then step count.
 

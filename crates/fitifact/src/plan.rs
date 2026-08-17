@@ -2,7 +2,9 @@ use std::collections::{HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{Artifact, AudioCodec, Container, Family, HdrStatus, StreamType, VideoCodec};
+use crate::artifact::{
+    Artifact, AudioCodec, Container, Family, HdrStatus, ImageFormat, StreamType, VideoCodec,
+};
 use crate::capability::{CapabilityCatalog, TransformId};
 use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field};
@@ -11,10 +13,14 @@ pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 pub const PLANNER_VERSION: &str = "0.1.0";
 const MAX_DEPTH: usize = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct StepTarget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub container: Option<Container>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_codec: Option<VideoCodec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_format: Option<ImageFormat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +53,7 @@ pub enum PreservationClaim {
     VideoDimensions,
     VideoPixelFormat,
     VideoColorMetadata,
+    ImageDimensions,
 }
 
 impl std::fmt::Display for PreservationClaim {
@@ -57,6 +64,7 @@ impl std::fmt::Display for PreservationClaim {
             Self::VideoDimensions => "video dimensions",
             Self::VideoPixelFormat => "video pixel format",
             Self::VideoColorMetadata => "video color metadata",
+            Self::ImageDimensions => "image dimensions",
         })
     }
 }
@@ -101,6 +109,9 @@ pub enum BlockingCode {
     ColorConversionUnsupported,
     UnknownRequiredFact,
     NoProvenPlan,
+    UnsupportedImageFormat,
+    UnsupportedImageTarget,
+    AnimationUnsupported,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -305,6 +316,9 @@ pub fn plan(
 }
 
 fn topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
+    if artifact.family == Family::Image {
+        return image_topology_blocker(artifact);
+    }
     if artifact.family != Family::Media {
         return Some(blocking(
             BlockingCode::NonMediaUnsupported,
@@ -328,7 +342,56 @@ fn topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
     None
 }
 
+fn image_topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
+    let image = artifact.image.as_ref()?;
+    if image.animated == Some(true) {
+        return Some(blocking(
+            BlockingCode::AnimationUnsupported,
+            Vec::new(),
+            "the first image slice refuses animated sources",
+        ));
+    }
+    None
+}
+
+fn is_image_target(constraints: &ConstraintSet) -> bool {
+    constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageFormat
+            || (constraint.field == Field::FileFamily
+                && constraint.value == ConstraintValue::Text("image".into()))
+    })
+}
+
+fn is_media_target(constraints: &ConstraintSet) -> bool {
+    constraints.hard.iter().any(|constraint| {
+        matches!(
+            constraint.field,
+            Field::MediaContainer | Field::MediaVideoCodec | Field::MediaAudioCodec
+        ) || (constraint.field == Field::FileFamily
+            && constraint.value == ConstraintValue::Text("media".into()))
+    })
+}
+
 fn target_blocker(constraints: &ConstraintSet) -> Option<BlockingReason> {
+    if is_image_target(constraints) && is_media_target(constraints) {
+        return Some(blocking(
+            BlockingCode::NonMediaUnsupported,
+            Vec::new(),
+            "image and media targets cannot be mixed",
+        ));
+    }
+    if is_image_target(constraints) {
+        if effective_values(constraints, Field::ImageFormat)
+            .is_some_and(|values| !values.contains("jpeg"))
+        {
+            return Some(blocking(
+                BlockingCode::UnsupportedImageTarget,
+                constraint_ids(constraints, Field::ImageFormat),
+                "the first image slice can produce only JPEG",
+            ));
+        }
+        return None;
+    }
     if let Some(constraint) = constraints
         .hard
         .iter()
@@ -395,7 +458,12 @@ fn constraint_ids(constraints: &ConstraintSet, field: Field) -> Vec<String> {
 }
 
 fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
-    for field in [Field::MediaVideoWidth, Field::MediaVideoHeight] {
+    for field in [
+        Field::MediaVideoWidth,
+        Field::MediaVideoHeight,
+        Field::ImageWidth,
+        Field::ImageHeight,
+    ] {
         if let Some(check) = report.failing_or_unknown(field) {
             return Some(blocking(
                 if check.result == CheckResult::Unknown {
@@ -404,7 +472,7 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
                     BlockingCode::ResizeUnsupported
                 },
                 vec![check.constraint_id.clone()],
-                "v0.1 can check dimensions but cannot resize video",
+                "v0.1 can check dimensions but cannot resize",
             ));
         }
     }
@@ -423,6 +491,9 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
 }
 
 fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option<BlockingReason> {
+    if artifact.family == Family::Image {
+        return image_mutation_blocker(artifact, report);
+    }
     if let Some(check) = report.failing_or_unknown(Field::MediaAudioCodec) {
         return Some(blocking(
             if check.result == CheckResult::Unknown {
@@ -517,6 +588,41 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
     None
 }
 
+fn image_mutation_blocker(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+) -> Option<BlockingReason> {
+    let image = artifact.image.as_ref();
+    let format = image.and_then(|facts| facts.format.clone());
+    match format {
+        Some(ImageFormat::Jpeg) | Some(ImageFormat::Png) => {}
+        Some(_) => {
+            return Some(blocking(
+                BlockingCode::UnsupportedImageFormat,
+                ids_for(report, Field::ImageFormat),
+                "the first image slice encodes only PNG to JPEG and no-ops JPEG",
+            ));
+        }
+        None => {
+            return Some(blocking(
+                BlockingCode::UnknownRequiredFact,
+                ids_for(report, Field::ImageFormat),
+                "the image format is unknown",
+            ));
+        }
+    }
+    if image.and_then(|facts| facts.width).is_none()
+        || image.and_then(|facts| facts.height).is_none()
+    {
+        return Some(blocking(
+            BlockingCode::UnknownRequiredFact,
+            Vec::new(),
+            "the first image slice cannot encode without known dimensions",
+        ));
+    }
+    None
+}
+
 fn approved_sdr_color(video: &crate::artifact::VideoStream) -> bool {
     video.color_range.as_deref() == Some("tv")
         && video.color_space.as_deref() == Some("bt709")
@@ -548,6 +654,7 @@ fn instantiate(
                 target: StepTarget {
                     container: Some(Container::Mp4),
                     video_codec: None,
+                    image_format: None,
                 },
                 reasons: vec![PlanReason {
                     constraint_id: container.constraint_id.clone(),
@@ -644,10 +751,36 @@ fn instantiate(
                 target: StepTarget {
                     container: Some(Container::Mp4),
                     video_codec: Some(VideoCodec::H264),
+                    image_format: None,
                 },
                 reasons,
                 expected,
                 preservation,
+                warnings: Vec::new(),
+            })
+        }
+        TransformId::EncodeJpeg => {
+            let format = report.failing_or_unknown(Field::ImageFormat)?;
+            let image = artifact.image.as_ref()?;
+            let width = image.width?;
+            let height = image.height?;
+            if image.format != Some(ImageFormat::Png) || image.animated != Some(false) {
+                return None;
+            }
+            Some(PlanStep {
+                id: format!("step-{}", index + 1),
+                operation,
+                target: StepTarget {
+                    container: None,
+                    video_codec: None,
+                    image_format: Some(ImageFormat::Jpeg),
+                },
+                reasons: vec![PlanReason {
+                    constraint_id: format.constraint_id.clone(),
+                    message: "The target requires a JPEG image.".into(),
+                }],
+                expected: crate::image::jpeg_expected(width, height),
+                preservation: vec![PreservationClaim::ImageDimensions],
                 warnings: Vec::new(),
             })
         }
@@ -661,6 +794,11 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
     }
     if let (Some(codec), Some(video)) = (&step.target.video_codec, next.first_video_mut()) {
         video.codec = Some(codec.clone());
+    }
+    if let (Some(format), Some(image)) = (&step.target.image_format, next.image.as_mut()) {
+        image.format = Some(format.clone());
+        image.alpha = Some(false);
+        image.animated = Some(false);
     }
     next
 }

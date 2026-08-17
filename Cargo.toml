@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/fitifact", "crates/fitifact-cli"]
+members = ["crates/fitifact", "crates/fitifact-cli", "crates/fitifact-wasm"]
 
 [workspace.package]
 version = "0.1.0-rc.1"

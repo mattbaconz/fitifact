@@ -30,6 +30,7 @@ Typed constraint flags are:
 --container <container>
 --video-codec <codec>
 --audio-codec <codec>
+--image-format <format>
 --max-size <bytes|MB|MiB>
 --max-width <pixels>
 --max-height <pixels>
@@ -49,15 +50,16 @@ are read through a 1 MiB bounded reader before UTF-8 and YAML validation; one
 byte beyond the limit is rejected without reading or allocating the remainder.
 
 Only MOV/H.264/AAC-to-MP4 remux and MP4/HEVC/AAC-to-MP4/H.264 transcode (video
-re-encoded, AAC copied) are executable within the D-020 matrix. The remux path
-requires a single compatible AAC audio stream and a safe stream topology.
-File-size and dimension constraints are check-only in v0.1. Unsupported source
-containers or mutations return an unsatisfiable result rather than a misleading
-plan.
+re-encoded, AAC copied) are executable within the D-020 matrix. JPEG no-op and
+PNG→JPEG encode are executable within D-025 and do not start FFmpeg. The remux
+path requires a single compatible AAC audio stream and a safe stream topology.
+File-size and dimension constraints are check-only. Unsupported source
+containers, image formats, or mutations return an unsatisfiable result rather
+than a misleading plan.
 
-Default adaptation output is a unique sibling such as `video.fitifact.mp4`,
-then `video.fitifact.2.mp4`. `-o` selects a different new output path. Existing
-paths are refused before FFmpeg starts; there is no overwrite option. Changed
+Default adaptation output is a unique sibling such as `video.fitifact.mp4` or
+`photo.fitifact.jpg`, then a numeric suffix if needed. `-o` selects a different new output path. Existing
+paths are refused before a provider starts; there is no overwrite option. Changed
 output is written inside an atomically reserved hidden sibling workspace,
 freshly hashed, inspected, and provenance-validated, then published with an
 atomic create-if-absent hard link as the last fallible publication operation.
@@ -87,13 +89,15 @@ Doctor warns when the detected FFmpeg **major version is older than 6**. CI
 currently installs FFmpeg 7.x. FFmpeg 6.x is accepted without an age warning
 and is not rejected solely for age.
 
-`bench` times the three canonical fixtures (no-op, remux, transcode), measures
-one CLI inspect cold start, and prints a human table or `fitifact.bench/v1`
-JSON. It constructs the FFmpeg transform provider only for remux/transcode.
-Exit 0 if outcomes and proofs pass; exit 5 if doctor is unhealthy; any other
-nonzero status means a proof or canonical outcome failed. `--fixtures` selects
-the media directory (default `fixtures/media` or `FITIFACT_FIXTURES`); `--keep`
-retains the temporary adaptation workspace.
+`bench` times the three canonical media fixtures (no-op, remux, transcode) and
+the two canonical image fixtures (JPEG no-op, PNG encode), measures one CLI
+inspect cold start, and prints a human table or `fitifact.bench/v1` JSON. It
+constructs the FFmpeg transform provider only for remux/transcode. Image adapt
+must prove zero ffmpeg spawns. Exit 0 if outcomes and proofs pass; exit 5 if
+doctor is unhealthy; any other nonzero status means a proof or canonical
+outcome failed. `--fixtures` selects the media directory (default
+`fixtures/media` or `FITIFACT_FIXTURES`); image fixtures are the sibling
+`image` directory. `--keep` retains the temporary adaptation workspace.
 
 ## Deferred grammar
 

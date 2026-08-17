@@ -49,6 +49,9 @@ preferences:
 | `file.bytes` | `lte` | positive integer bytes |
 | `media.video.width` | `lte` | positive integer pixels |
 | `media.video.height` | `lte` | positive integer pixels |
+| `image.format` | `in` | non-empty known-image-format list |
+| `image.width` | `lte` | positive integer pixels |
+| `image.height` | `lte` | positive integer pixels |
 
 Both validating compiler functions reject input over 1 MiB, a missing or wrong schema, an empty hard
 target, blank or duplicate IDs, conflicting requirements, unknown keys or enum
@@ -62,5 +65,5 @@ case-insensitive. Unitless fractions, fractional-byte results, ambiguous units,
 and overflow are rejected.
 
 An unknown inspection fact never satisfies a hard constraint. File-size and
-dimension constraints are check-only in v0.1; the planner refuses fitting or
-resizing.
+dimension constraints are check-only; the planner refuses fitting or
+resizing. The first image target that can be produced is JPEG (D-025).

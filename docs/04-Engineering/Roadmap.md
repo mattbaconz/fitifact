@@ -11,10 +11,11 @@ tags:
 
 # Roadmap
 
-Only the v0.1 CLI/media slice is current. Every later phase below is deferred
-and is not a commitment or claim of implementation.
+Only the unpublished `0.1.0-rc.1` media freeze plus the later D-025 image and
+local web commits are current. Every later phase below is deferred and is not
+a commitment or claim of implementation.
 
-## v0.1 — CLI/media slice (current)
+## v0.1 — CLI/media slice (frozen locally)
 - media inspection;
 - constraint schema;
 - bounded transform graph;
@@ -23,19 +24,22 @@ and is not a commitment or claim of implementation.
 - CLI;
 - fixtures.
 
-Exit: no-op/remux/selective transcode chosen correctly.
+Exit: no-op/remux/selective transcode chosen correctly. Tag target:
+`b033552cb2729e96ca97c649a7bb4a223f2ad900`.
+
+## After the freeze — image and local web (this tree)
+- JPEG no-op and PNG→JPEG in-process;
+- `fixtures/image`;
+- `fitifact-wasm` plus `web/` static drop page;
+- no ffmpeg.wasm.
 
 ## Later public MVP — deferred
-- web app;
-- image inspection and provider;
-- local processing where practical;
-- CLI;
-- custom constraints;
-- small sourced profile set;
+- hosted web app;
+- WebP / HEIC / TIFF / animation;
+- custom destination profiles;
 - explanation UI;
 - approved license;
-- security process;
-- docs.
+- security process.
 
 ## Rejection compiler — deferred
 - paste error/requirements;

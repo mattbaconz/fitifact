@@ -2,7 +2,7 @@
 title: "Source Ledger"
 type: research
 status: active
-updated: 2026-08-15
+updated: 2026-08-16
 canonical: true
 tags:
   - sources
@@ -95,8 +95,28 @@ Primary sources are preferred.
 - https://github.com/total-typescript/shoehorn
 
 These sources explain why the retired Shoehorn codename was replaced. The
-2026-08-15 Fitifact search record is in [[01-Product/Naming-Brand]] and
-[[00-Foundation/Decision-Log]].
+2026-08-15 and 2026-08-16 Fitifact search records are in
+[[01-Product/Naming-Brand]] and [[00-Foundation/Decision-Log]].
+
+## Fitifact naming packet — 2026-08-16
+
+Exact-name and human-pass sources (not clearance):
+
+- https://api.github.com/search/repositories?q=fitifact
+- https://api.github.com/users/fitifact
+- https://crates.io/api/v1/crates/fitifact
+- https://crates.io/api/v1/crates/fiti_fact
+- https://crates.io/api/v1/crates?q=fitifact&per_page=5
+- https://registry.npmjs.org/fitifact
+- https://registry.npmjs.org/-/v1/search?text=fitifact&size=5
+- https://rdap.verisign.com/com/v1/domain/fitifact.com
+- https://lookup.icann.org/en
+- https://branddb.wipo.int/en
+- https://www.wipo.int/en/web/global-brand-database
+- https://www.euipo.europa.eu/en/trade-marks
+- https://markinton.com/trademark/fit-facts-74363546
+- https://markinton.com/trademark/fitfacts-76462032
+- https://ttabvue.uspto.gov/ttabvue/v?pno=76462032&pty=EXT
 
 ## Source policy
 

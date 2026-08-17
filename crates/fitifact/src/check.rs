@@ -193,6 +193,21 @@ fn fact(artifact: &Artifact, field: Field) -> Option<Fact> {
         Field::MediaVideoHdr => artifact
             .first_video()
             .map(|video| Fact::Text(video.hdr.as_str().into())),
+        Field::ImageFormat => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.format.as_ref())
+            .map(|format| Fact::Text(format.as_str().to_string())),
+        Field::ImageWidth => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.width)
+            .map(|width| Fact::Int(u64::from(width))),
+        Field::ImageHeight => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.height)
+            .map(|height| Fact::Int(u64::from(height))),
     }
 }
 
@@ -223,6 +238,9 @@ fn canonicalize(field: Field, raw: &str) -> String {
             .as_str()
             .to_string(),
         Field::MediaAudioCodec => crate::artifact::AudioCodec::parse_loose(raw)
+            .as_str()
+            .to_string(),
+        Field::ImageFormat => crate::artifact::ImageFormat::parse_loose(raw)
             .as_str()
             .to_string(),
         Field::FileFamily => Family::from_str_loose(raw).as_str().to_string(),

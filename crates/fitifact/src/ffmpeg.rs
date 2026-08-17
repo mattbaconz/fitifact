@@ -197,6 +197,12 @@ pub fn ffmpeg_args(step: &PlanStep, input: &Path, output: &Path) -> Result<Vec<S
             let container = container_from_step(step).unwrap_or(Container::Mp4);
             append_movflags(&mut args, &container);
         }
+        TransformId::EncodeJpeg => {
+            return Err(Error::new(
+                ErrorCode::ExecutionFailed,
+                "the FFmpeg provider does not encode images",
+            ));
+        }
     }
 
     args.push(path_arg(output)?);
@@ -391,6 +397,7 @@ mod tests {
             target: StepTarget {
                 video_codec: Some(VideoCodec::H264),
                 container: Some(Container::Mp4),
+                image_format: None,
             },
             reasons: Vec::new(),
             expected: Vec::new(),
@@ -407,6 +414,7 @@ mod tests {
             target: StepTarget {
                 video_codec: None,
                 container: Some(Container::Mp4),
+                image_format: None,
             },
             reasons: Vec::new(),
             expected: Vec::new(),

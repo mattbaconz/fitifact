@@ -1,9 +1,8 @@
 # Fitifact
 
-Fitifact is a destination-first media compatibility CLI. It inspects what a
+Fitifact is a destination-first file compatibility CLI. It inspects what a
 file actually contains, checks typed destination constraints, chooses the
-smallest supported change, executes it with system FFmpeg, and validates the
-result.
+smallest supported change, executes it, and validates the result.
 
 ```text
 inspect -> constraints -> check -> plan -> execute -> validate
@@ -11,23 +10,27 @@ inspect -> constraints -> check -> plan -> execute -> validate
 
 ## v0.1 scope
 
-This release is intentionally narrow:
+This release is intentionally narrow. The unpublished `0.1.0-rc.1` freeze is
+the media matrix below. Later commits on the same version string add D-025
+images and a local-only web drop page.
 
-| Input and requested result | v0.1 behavior |
+| Input and requested result | Behavior |
 | --- | --- |
 | MP4 with H.264 video and AAC audio already satisfying the target | No-op; no encoder starts |
 | MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding |
 | MP4 with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
+| JPEG already satisfying a JPEG target | No-op; FFmpeg is not started |
+| PNG targeting JPEG | In-process encode; no resize |
 | Any other mutation | Refuse explicitly |
 
-File-size and video-dimension constraints are supported by `inspect` and
-`check`, but v0.1 cannot execute size fitting or resizing. It never overwrites
+File-size and dimension constraints are supported by `inspect` and `check`,
+but this slice cannot execute size fitting or resizing. It never overwrites
 the input or an existing output, never silently drops streams, and never treats
 an FFmpeg success code as proof of compatibility.
 
-Images, profiles, natural-language parsing, web/browser/desktop/mobile
-interfaces, cloud execution, managed APIs, bundled FFmpeg, package registries,
-OS signing, and package-manager formulae are deferred.
+WebP, HEIC/HEIF, TIFF, animation, destination profiles, natural-language
+parsing, hosted APIs, bundled FFmpeg, ffmpeg.wasm, package registries, OS
+signing, and package-manager formulae are deferred.
 
 ## Requirements
 
@@ -71,17 +74,22 @@ cargo run -p fitifact-cli -- inspect video.mp4
 cargo run -p fitifact-cli -- check video.mp4 --container mp4 --video-codec h264 --audio-codec aac
 cargo run -p fitifact-cli -- plan video.mov --container mp4 --video-codec h264 --audio-codec aac
 cargo run -p fitifact-cli -- adapt video.mov --container mp4 --video-codec h264 --audio-codec aac
+cargo run -p fitifact-cli -- adapt photo.png --image-format jpeg
 cargo run -p fitifact-cli -- bench
 ```
 
+The optional local web drop page is `web/index.html`. It needs a wasm-pack
+build of `crates/fitifact-wasm` into `web/pkg`; native `cargo test -p fitifact-wasm`
+does not require a wasm target.
+
 Use `--json` with every command for structured output; engine failures use
 `fitifact.error/v1`. `fitifact bench` (and `fitifact bench --json`) is the
-canonical demo: it times no-op, remux, and HEVC transcode on the tracked
-fixtures and prints spawn/provider proofs. Run it from the repository root so
-`fixtures/media` resolves.
+canonical demo: it times no-op, remux, HEVC transcode, JPEG no-op, and PNG
+encode on the tracked fixtures and prints spawn/provider proofs. Run it from
+the repository root so `fixtures/media` resolves; image fixtures are read from
+the sibling `fixtures/image` directory.
 Use `adapt --dry-run` to plan without writing a file. By default, adaptation
-writes a unique sibling such as `video.fitifact.mp4` or
-`video.fitifact.2.mp4`; `-o` chooses another new path and existing paths are
+writes a unique sibling such as `video.fitifact.mp4` or `photo.fitifact.jpg`; `-o` chooses another new path and existing paths are
 refused. The transform timeout defaults to 1800 seconds and can be set from 1
 through 86400 seconds with `--timeout-seconds`.
 

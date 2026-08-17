@@ -14,8 +14,14 @@ tags:
 # Artifact schema
 
 Inspections serialize as `fitifact.artifact/v1`. The artifact records raw byte
-length, normalized container and duration facts, inspection provider metadata,
-and every ffprobe stream in input order.
+length, family, normalized container and duration facts for media, optional
+image facts, inspection provider metadata, and every ffprobe stream in input
+order for media files.
+
+Image facts, when present, record format, width, height, alpha, and whether the
+source is animated. Inspection sniffs magic bytes, not the filename extension.
+JPEG and PNG decode enough to fill dimensions; other recognized image magics
+are recorded as format with partial completeness.
 
 Each stream carries an optional probe index and a tagged `type`: `video`,
 `audio`, `subtitle`, `data`, `attachment`, or `unknown`. A missing probe index is

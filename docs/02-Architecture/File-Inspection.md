@@ -56,15 +56,13 @@ streams; it refuses unsafe topology rather than dropping streams.
 
 ## Image facts
 
-- decoded format;
-- dimensions;
-- frame count;
-- alpha;
-- bit depth;
-- colorspace/profile;
-- orientation;
-- animation;
-- metadata size.
+The first image inspector sniffs magic bytes (not the extension) and records
+format, dimensions, alpha, and animation. JPEG and PNG decode for dimensions.
+WebP, HEIC/HEIF, TIFF, and GIF are recognized as formats and refused by the
+planner. Frame count, ICC profile, orientation, and metadata-size execution
+remain later.
+
+Image inspection does not start ffprobe.
 
 ## PDF facts later
 

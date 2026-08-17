@@ -2,8 +2,8 @@
 title: "Web App"
 type: surface
 status: active
-implementation: deferred
-updated: 2026-08-15
+implementation: partial
+updated: 2026-08-16
 canonical: true
 tags:
   - web
@@ -16,15 +16,39 @@ tags:
 
 Zero-install trial, YouTube destination, consumer discovery and gateway to FOSS/native/cloud.
 
-## Flow
+## Implemented local drop page
 
-`Drop -> inspect -> target -> check -> plan -> adapt -> validate -> save`
+`web/index.html` plus `web/app.js` is a static, local-only drop flow for the
+D-025 image matrix. It is not a Next.js app, not hosted, and not a cloud
+upload form.
 
-## Processing
+```text
+Drop -> inspect -> check -> plan -> adapt -> validate -> save
+```
 
-- small image transforms: browser/local first;
-- media: ffmpeg.wasm when practical;
-- heavy jobs: native companion or explicit cloud.
+The page loads `./pkg/fitifact_wasm.js` from a same-origin wasm-pack build of
+`crates/fitifact-wasm`. It never fetches a media provider and never ships
+ffmpeg.wasm. Video files return `INSPECTION_UNSUPPORTED` and tell the user to
+use the CLI. JPEG/PNG previews use object URLs; untrusted SVG/HTML is not
+rendered in origin.
+
+The page states `Uploads to Fitifact: 0 bytes` because the file never leaves
+the tab: no network requests, no analytics, no CDN fonts.
+
+Optional local build:
+
+```text
+wasm-pack build crates/fitifact-wasm --target web --out-dir ../../web/pkg
+```
+
+On `wasm32-unknown-unknown`, `getrandom` may need
+`RUSTFLAGS=--cfg getrandom_backend="wasm_js"`. Native `cargo test -p fitifact-wasm`
+covers the byte API without a wasm target. Generated `web/pkg` output is gitignored.
+
+## Deferred processing
+
+- media: ffmpeg.wasm is still not in this repository;
+- heavy jobs: native companion or explicit cloud, elsewhere.
 
 ## Trust
 
@@ -36,44 +60,28 @@ Handle:
 - unsupported inspection;
 - ambiguous requirements;
 - no plan;
-- browser provider missing;
-- out of memory;
+- local WASM module missing;
 - execution failure;
 - validation failure.
 
 ## Landing demos
 
-- correct MP4 container / wrong codec;
-- file too large;
-- already valid/no-op.
-
-## SEO
-
-Prefer intent:
-- fix unsupported upload;
-- MP4 not accepted;
-- make video compatible;
-- fit under upload limit.
-
-Avoid thousands of low-value X-to-Y pages.
+- PNG that needs JPEG;
+- JPEG that already fits;
+- a video file that must use the CLI.
 
 ## Safety
 
-Use workers/sandboxes. Never render hostile HTML/SVG with active privileges in app origin.
+Use object URLs for raster previews only. Never render hostile HTML/SVG with
+active privileges in app origin.
 
 ## Lazy-loading strategy
 
-The initial page should contain only:
-- UI;
-- schemas/core;
-- lightweight inspection.
-
-Do not eagerly ship the media transcoder.
+The initial page contains UI plus the image WASM module when built. It does
+not eagerly ship a media transcoder.
 
 ```text
-image selected -> lazy image runtime if needed
-video selected -> inspect first -> lazy media runtime only if transform needed
+image selected -> in-process JPEG/PNG path
+video selected -> inspect-not-available; use the CLI
 heavy job -> native companion or explicit cloud
 ```
-
-The homepage should remain fast even as Fitifact gains more file families.

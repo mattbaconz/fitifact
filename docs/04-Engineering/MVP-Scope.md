@@ -29,23 +29,24 @@ Executable adaptation behavior is limited to:
    encoder;
 2. MOV/H.264/AAC targeting MP4/H.264/AAC: remux without re-encoding;
 3. MP4/HEVC/AAC targeting MP4/H.264/AAC: transcode video and copy audio;
-4. all other requested mutations: explicit refusal.
+4. JPEG targeting JPEG: no-op without starting FFmpeg;
+5. PNG targeting JPEG: in-process encode without resizing;
+6. all other requested mutations: explicit refusal.
 
-The CLI accepts file-size and video-dimension constraints for inspection and
-compatibility checking. They are **check-only**: v0.1 cannot resize video, change
-frame rate, or fit a byte target. A plan must never pretend otherwise.
+The CLI accepts file-size and dimension constraints for inspection and
+compatibility checking. They are **check-only**: this slice cannot resize,
+change frame rate, or fit a byte target. A plan must never pretend otherwise.
 
-v0.1 uses system FFmpeg/ffprobe, is distributed only through GitHub, performs no
-telemetry or network activity, never overwrites originals or existing outputs,
-never silently discards streams, and validates every generated output.
+Media uses system FFmpeg/ffprobe. Images use the in-process Rust provider
+(D-025) and must not construct `FfmpegProvider`. The unpublished package is
+still `0.1.0-rc.1`. Publication remains GitHub-only after D-023 sign-off.
 
 ## Later public MVP — deferred
 
-The broader public MVP may add a one-click web experience and common image
-adaptation (JPEG, PNG, WebP, HEIC/HEIF where viable, and TIFF). Potential image
-constraints include bytes, dimensions, aspect ratio, alpha, and animation.
-Those surfaces, formats, transforms, providers, and packaging are not
-implemented in v0.1.
+The broader public MVP may add common image formats beyond JPEG/PNG (WebP,
+HEIC/HEIF where viable, and TIFF), destination profiles, a hosted web app, and
+richer explanation UI. Those formats, transforms, providers, and packaging are
+not implemented here.
 
 A few sourced destination profiles, profile registry workflows, browser-local
 processing, and richer explanation UI are also deferred. Natural-language
@@ -75,10 +76,9 @@ private checkout. They must not be added here or presented as available.
 
 ### Later public MVP (deferred)
 
-- nontechnical one-click web flow;
-- common image compatibility workflow;
-- browser initial path without eager heavyweight media runtime;
-- image work without initializing the media provider.
+- hosted one-click web flow;
+- WebP, HEIC/HEIF, TIFF, animation, and resize/byte-fitting;
+- destination profiles and natural-language requirements.
 
 ## Anti-scope rule
 
