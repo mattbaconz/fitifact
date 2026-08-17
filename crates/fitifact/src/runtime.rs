@@ -188,6 +188,9 @@ pub fn execute(
 
 pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<()> {
     validate_plan_shape(plan)?;
+    if artifact.family == Family::Image {
+        return validate_image_plan(plan, artifact);
+    }
     if artifact.family != Family::Media
         || artifact.video_streams().count() != 1
         || artifact.audio_streams().count() > 1
@@ -249,8 +252,28 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
                 return Err(forged_plan());
             }
         }
+        TransformId::EncodeJpeg => return Err(forged_plan()),
     }
     if plan.preserved != step.preservation {
+        return Err(forged_plan());
+    }
+    Ok(())
+}
+
+fn validate_image_plan(plan: &Plan, artifact: &Artifact) -> Result<()> {
+    let step = &plan.steps[0];
+    if step.operation != TransformId::EncodeJpeg {
+        return Err(forged_plan());
+    }
+    let image = artifact.image.as_ref().ok_or_else(forged_plan)?;
+    let width = image.width.ok_or_else(forged_plan)?;
+    let height = image.height.ok_or_else(forged_plan)?;
+    if image.format != Some(crate::artifact::ImageFormat::Png)
+        || image.animated != Some(false)
+        || step.expected != crate::image::jpeg_expected(width, height)
+        || step.preservation != vec![PreservationClaim::ImageDimensions]
+        || plan.preserved != step.preservation
+    {
         return Err(forged_plan());
     }
     Ok(())
@@ -289,6 +312,10 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
                 && step
                     .preservation
                     .contains(&PreservationClaim::VideoColorMetadata)
+        }
+        TransformId::EncodeJpeg => {
+            step.target.image_format == Some(crate::artifact::ImageFormat::Jpeg)
+                && step.preservation == vec![PreservationClaim::ImageDimensions]
         }
     };
     if !valid_target || plan.preserved != step.preservation {
@@ -561,6 +588,7 @@ mod tests {
                 target: StepTarget {
                     container: Some(Container::Mp4),
                     video_codec: None,
+                    image_format: None,
                 },
                 reasons: Vec::new(),
                 expected: Vec::new(),

@@ -101,6 +101,7 @@ fn constraints_file_conflicts_with_every_individual_hard_target() {
         ["--container", "mp4"],
         ["--video-codec", "h264"],
         ["--audio-codec", "aac"],
+        ["--image-format", "jpeg"],
         ["--max-size", "1"],
         ["--max-width", "1"],
         ["--max-height", "1"],
@@ -181,4 +182,5 @@ fn bench_json_reports_canonical_proofs() {
     assert_eq!(value["proofs"]["noop_ffmpeg_spawns_zero"], true);
     assert_eq!(value["proofs"]["check_plan_ffprobe_only"], true);
     assert_eq!(value["proofs"]["all_outcomes_matched"], true);
+    assert_eq!(value["proofs"]["image_adapt_ffmpeg_spawns_zero"], true);
 }

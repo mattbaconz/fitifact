@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::adapt::{AdaptRequest, AdaptationStatus, adapt};
 use crate::capability::{TransformId, default_catalog};
 use crate::check::check;
-use crate::constraints::media_h264_mp4_aac;
+use crate::constraints::{image_jpeg, media_h264_mp4_aac};
 use crate::contract::BenchSchema;
 use crate::doctor::diagnose;
 use crate::error::{Error, ErrorCode, Result};
 use crate::ffmpeg::FfmpegProvider;
-use crate::inspect::{FfprobeInspector, Inspector};
+use crate::image::ImageProvider;
+use crate::inspect::{DefaultInspector, FfprobeInspector, Inspector};
 use crate::plan::{PlanOutcome, plan};
 use crate::runtime::{
     ExecutionContext, RecordingSpawner, SystemSpawner, TransformProvider, program_is_ffprobe,
@@ -37,6 +38,11 @@ const CANONICAL: &[(&str, &str)] = &[
     ("compatible-h264-aac.mp4", "no-op"),
     ("remux-h264-aac.mov", "remux"),
     ("mismatch-hevc-aac.mp4", "transcode"),
+];
+
+const CANONICAL_IMAGE: &[(&str, &str)] = &[
+    ("compatible-jpeg.jpg", "no-op"),
+    ("mismatch-png.png", "encode-jpeg"),
 ];
 
 #[derive(Debug, Clone)]
@@ -81,6 +87,7 @@ pub struct BenchProofs {
     pub check_plan_ffprobe_only: bool,
     pub no_network_crates: bool,
     pub all_outcomes_matched: bool,
+    pub image_adapt_ffmpeg_spawns_zero: bool,
 }
 
 pub fn network_crates_in_lockfile(lockfile: &str) -> Vec<String> {
@@ -186,15 +193,30 @@ pub fn run_bench(options: BenchOptions) -> Result<BenchReport> {
         )?);
     }
 
+    let image_dir = image_fixture_dir(&options.fixtures);
+    let mut image_ffmpeg_spawns = Vec::new();
+    if image_dir.is_dir() {
+        for &(file, expected) in CANONICAL_IMAGE {
+            let scenario = run_image_scenario(&image_dir.join(file), expected, &options.work_dir)?;
+            image_ffmpeg_spawns.push(scenario.ffmpeg_spawns);
+            scenarios.push(scenario);
+        }
+    }
+
     let check_plan_ffprobe_only =
         prove_check_plan_ffprobe_only(&options.fixtures.join(CANONICAL[0].0))?;
-    let noop = scenarios.iter().find(|row| row.expected == "no-op");
+    let media_noop = scenarios
+        .iter()
+        .find(|row| row.file == CANONICAL[0].0 && row.expected == "no-op");
     let proofs = BenchProofs {
-        noop_ffmpeg_spawns_zero: noop
+        noop_ffmpeg_spawns_zero: media_noop
             .is_some_and(|row| row.ffmpeg_spawns == 0 && !row.transform_provider_loaded),
         check_plan_ffprobe_only,
         no_network_crates,
         all_outcomes_matched: scenarios.iter().all(|row| row.matched),
+        image_adapt_ffmpeg_spawns_zero: image_dir.is_dir()
+            && !image_ffmpeg_spawns.is_empty()
+            && image_ffmpeg_spawns.iter().all(|count| *count == 0),
     };
 
     if !options.keep {
@@ -298,6 +320,93 @@ fn run_scenario(path: &Path, expected: &str, work_dir: &Path) -> Result<BenchSce
             if step.operation == TransformId::TranscodeVideo =>
         {
             "transcode"
+        }
+        (AdaptationStatus::Adapted, Some(step)) if step.operation == TransformId::EncodeJpeg => {
+            "encode-jpeg"
+        }
+        (AdaptationStatus::Adapted, _) => "adapted",
+        (AdaptationStatus::CannotSatisfy, _) => "refuse",
+        (AdaptationStatus::Failed, _) => "failed",
+    };
+
+    Ok(BenchScenario {
+        file,
+        expected: expected.into(),
+        actual: actual.into(),
+        matched: actual == expected,
+        summary: result.explanation.summary,
+        inspect_ms,
+        check_ms,
+        plan_ms,
+        adapt_ms,
+        ffprobe_spawns: spawner.ffprobe_spawn_count(),
+        ffmpeg_spawns: spawner.ffmpeg_spawn_count(),
+        transform_provider_loaded,
+    })
+}
+
+fn image_fixture_dir(media_dir: &Path) -> PathBuf {
+    media_dir
+        .parent()
+        .map(|parent| parent.join("image"))
+        .unwrap_or_else(|| PathBuf::from("fixtures/image"))
+}
+
+fn run_image_scenario(path: &Path, expected: &str, work_dir: &Path) -> Result<BenchScenario> {
+    let file = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("file")
+        .to_string();
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let inspector = DefaultInspector::new(&spawner);
+    let target = image_jpeg();
+
+    let start = Instant::now();
+    let artifact = inspector.inspect(path)?;
+    let inspect_ms = millis(start.elapsed());
+
+    let start = Instant::now();
+    let _report = check(&artifact, &target);
+    let check_ms = millis(start.elapsed());
+
+    let start = Instant::now();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    let plan_ms = millis(start.elapsed());
+
+    let transform_provider_loaded = matches!(outcome, PlanOutcome::Planned { .. });
+    let provider = transform_provider_loaded.then(ImageProvider::default);
+    let output = (expected != "no-op").then(|| {
+        work_dir.join(format!(
+            "{}.adapted.jpg",
+            path.file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or("out")
+        ))
+    });
+
+    let start = Instant::now();
+    let result = adapt(AdaptRequest {
+        input: path,
+        constraints: target,
+        output,
+        catalog: None,
+        inspector: &inspector,
+        provider: provider.as_ref().map(|item| item as &dyn TransformProvider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(work_dir.to_path_buf()),
+        },
+    })?;
+    let adapt_ms = millis(start.elapsed());
+
+    let actual = match (
+        &result.status,
+        result.plan.as_ref().and_then(|plan| plan.steps.first()),
+    ) {
+        (AdaptationStatus::Compatible, _) => "no-op",
+        (AdaptationStatus::Adapted, Some(step)) if step.operation == TransformId::EncodeJpeg => {
+            "encode-jpeg"
         }
         (AdaptationStatus::Adapted, _) => "adapted",
         (AdaptationStatus::CannotSatisfy, _) => "refuse",

@@ -2,6 +2,21 @@
 
 All notable changes to Fitifact are documented here.
 
+## [Unreleased] — after `0.1.0-rc.1` freeze
+
+These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
+`b033552cb2729e96ca97c649a7bb4a223f2ad900`.
+
+### [added]
+
+- D-025 image slice: JPEG already matching JPEG is a no-op; PNG targeting JPEG
+  encodes in-process; WebP, HEIC/HEIF, TIFF, animation, and resize/byte-fitting
+  are refused. The image provider never constructs or spawns FFmpeg.
+- Tracked `fixtures/image` pair, `--image-format`, and a bench proof that image
+  adapt spawns ffmpeg zero times.
+- `fitifact-wasm` byte API and a static `web/` drop page for that image matrix
+  only. Video files tell the user to use the CLI. No ffmpeg.wasm and no uploads.
+
 ## [0.1.0-rc.1] - unpublished candidate
 
 ### [added]

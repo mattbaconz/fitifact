@@ -10,6 +10,8 @@ pub enum TransformId {
     Remux,
     #[serde(rename = "media.transcode_video")]
     TranscodeVideo,
+    #[serde(rename = "image.encode_jpeg")]
+    EncodeJpeg,
 }
 
 impl TransformId {
@@ -17,6 +19,7 @@ impl TransformId {
         match self {
             Self::Remux => "media.remux",
             Self::TranscodeVideo => "media.transcode_video",
+            Self::EncodeJpeg => "image.encode_jpeg",
         }
     }
 }
@@ -37,6 +40,7 @@ pub struct Capability {
     pub streams_changed: u32,
     pub requires_media: bool,
     pub requires_video: bool,
+    pub requires_image: bool,
     /// If true, the step is only instantiated when video codec is fail/unknown.
     pub requires_video_codec_change: bool,
 }
@@ -56,6 +60,7 @@ pub fn default_catalog() -> CapabilityCatalog {
                 streams_changed: 0,
                 requires_media: true,
                 requires_video: false,
+                requires_image: false,
                 requires_video_codec_change: false,
             },
             Capability {
@@ -65,7 +70,18 @@ pub fn default_catalog() -> CapabilityCatalog {
                 streams_changed: 1,
                 requires_media: true,
                 requires_video: true,
+                requires_image: false,
                 requires_video_codec_change: true,
+            },
+            Capability {
+                id: TransformId::EncodeJpeg,
+                can_set: vec![Field::ImageFormat],
+                loss: LossClass::Low,
+                streams_changed: 0,
+                requires_media: false,
+                requires_video: false,
+                requires_image: true,
+                requires_video_codec_change: false,
             },
         ],
     }
@@ -74,6 +90,9 @@ pub fn default_catalog() -> CapabilityCatalog {
 impl Capability {
     pub fn preconditions_met(&self, artifact: &Artifact) -> bool {
         if self.requires_media && artifact.family != Family::Media {
+            return false;
+        }
+        if self.requires_image && artifact.family != Family::Image {
             return false;
         }
         if self.requires_video && artifact.first_video().is_none() {

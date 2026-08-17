@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::{Artifact, Container};
-use crate::capability::{CapabilityCatalog, default_catalog};
+use crate::capability::{CapabilityCatalog, TransformId, default_catalog};
 use crate::check::{CompatibilityReport, check};
 use crate::constraints::ConstraintSet;
 use crate::contract::AdaptationSchema;
@@ -421,18 +421,26 @@ fn default_output_with_limit(
     limit: u32,
     occupied: impl Fn(&Path) -> bool,
 ) -> Result<PathBuf> {
-    let container = plan
+    let ext = if plan
         .steps
         .iter()
-        .rev()
-        .find_map(|step| step.target.container.clone())
-        .or_else(|| current.cloned())
-        .unwrap_or(Container::Mp4);
-    let ext = match container {
-        Container::Mov => "mov",
-        Container::Webm => "webm",
-        Container::Mkv => "mkv",
-        _ => "mp4",
+        .any(|step| step.operation == TransformId::EncodeJpeg)
+    {
+        "jpg"
+    } else {
+        let container = plan
+            .steps
+            .iter()
+            .rev()
+            .find_map(|step| step.target.container.clone())
+            .or_else(|| current.cloned())
+            .unwrap_or(Container::Mp4);
+        match container {
+            Container::Mov => "mov",
+            Container::Webm => "webm",
+            Container::Mkv => "mkv",
+            _ => "mp4",
+        }
     };
     let stem = input
         .file_stem()
@@ -1553,6 +1561,32 @@ mod tests {
             b"keep"
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn default_image_output_uses_jpg_sibling() {
+        let plan = Plan {
+            schema: crate::contract::PlanSchema,
+            planner_version: crate::plan::PLANNER_VERSION.into(),
+            steps: vec![crate::plan::PlanStep {
+                id: "step-1".into(),
+                operation: TransformId::EncodeJpeg,
+                target: crate::plan::StepTarget {
+                    container: None,
+                    video_codec: None,
+                    image_format: Some(crate::artifact::ImageFormat::Jpeg),
+                },
+                reasons: Vec::new(),
+                expected: Vec::new(),
+                preservation: Vec::new(),
+                warnings: Vec::new(),
+            }],
+            preserved: Vec::new(),
+            warnings: Vec::new(),
+        };
+        let path =
+            default_output_with_limit(Path::new("photo.png"), &plan, None, 10, |_| false).unwrap();
+        assert_eq!(path, PathBuf::from("photo.fitifact.jpg"));
     }
 
     #[test]

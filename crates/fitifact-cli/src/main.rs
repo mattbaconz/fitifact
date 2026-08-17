@@ -5,8 +5,10 @@ use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use fitifact::artifact::Artifact;
+use fitifact::capability::TransformId;
 use fitifact::ffmpeg::FfmpegProvider;
-use fitifact::inspect::FfprobeInspector;
+use fitifact::image::ImageProvider;
+use fitifact::inspect::DefaultInspector;
 use fitifact::runtime::{ExecutionContext, SystemSpawner, TransformProvider};
 use fitifact::{
     AdaptRequest, AdaptationStatus, BenchOptions, ConstraintInput, ConstraintSet, PlanOutcome,
@@ -91,6 +93,8 @@ struct TargetArgs {
     video_codec: Option<String>,
     #[arg(long = "audio-codec")]
     audio_codec: Option<String>,
+    #[arg(long = "image-format")]
+    image_format: Option<String>,
     #[arg(long = "max-size", value_name = "BYTES|MB|MiB", value_parser = parse_size_arg)]
     max_size: Option<u64>,
     #[arg(long = "max-width")]
@@ -103,6 +107,7 @@ struct TargetArgs {
             "container",
             "video_codec",
             "audio_codec",
+            "image_format",
             "max_size",
             "max_width",
             "max_height"
@@ -163,7 +168,7 @@ fn run(cli: Cli) -> Result<ExitCode, CliError> {
 }
 
 fn inspect_cmd(file: &Path, json: bool) -> Result<ExitCode, CliError> {
-    let inspector = FfprobeInspector::default();
+    let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
     if json {
         println!(
@@ -178,7 +183,7 @@ fn inspect_cmd(file: &Path, json: bool) -> Result<ExitCode, CliError> {
 
 fn check_cmd(file: &Path, target: TargetArgs, json: bool) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
-    let inspector = FfprobeInspector::default();
+    let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
     let report = check(&artifact, &constraints);
     if json {
@@ -207,7 +212,7 @@ fn plan_cmd(
     from_dry_run: bool,
 ) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
-    let inspector = FfprobeInspector::default();
+    let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
     let report = check(&artifact, &constraints);
     let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
@@ -241,20 +246,33 @@ fn adapt_cmd(
     timeout_seconds: u64,
 ) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
-    let inspector = FfprobeInspector::default();
+    let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
     let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
-    let loaded = matches!(outcome, PlanOutcome::Planned { .. })
-        .then(FfmpegProvider::<SystemSpawner>::default);
+    let ffmpeg;
+    let image;
+    let provider: Option<&dyn TransformProvider> = match outcome
+        .plan()
+        .and_then(|plan| plan.steps.first())
+        .map(|step| step.operation)
+    {
+        Some(TransformId::EncodeJpeg) => {
+            image = ImageProvider;
+            Some(&image)
+        }
+        Some(_) => {
+            ffmpeg = FfmpegProvider::<SystemSpawner>::default();
+            Some(&ffmpeg)
+        }
+        None => None,
+    };
     let result = adapt(AdaptRequest {
         input: file,
         constraints,
         output,
         catalog: None,
         inspector: &inspector,
-        provider: loaded
-            .as_ref()
-            .map(|provider| provider as &dyn TransformProvider),
+        provider,
         execution: ExecutionContext {
             timeout: Duration::from_secs(timeout_seconds),
             temp_dir: None,
@@ -384,6 +402,7 @@ fn bench_cmd(json: bool, fixtures: Option<PathBuf>, keep: bool) -> Result<ExitCo
     let proofs_ok = report.proofs.noop_ffmpeg_spawns_zero
         && report.proofs.check_plan_ffprobe_only
         && report.proofs.all_outcomes_matched
+        && report.proofs.image_adapt_ffmpeg_spawns_zero
         && (report.proofs.no_network_crates || find_lockfile(&cwd).is_none());
     if proofs_ok {
         Ok(ExitCode::SUCCESS)
@@ -453,6 +472,10 @@ fn print_bench(report: &fitifact::BenchReport) {
         "  canonical outcomes matched                  {}",
         proof_mark(report.proofs.all_outcomes_matched)
     );
+    println!(
+        "  image adapt did not spawn ffmpeg              {}",
+        proof_mark(report.proofs.image_adapt_ffmpeg_spawns_zero)
+    );
 }
 
 fn proof_mark(ok: bool) -> &'static str {
@@ -473,18 +496,20 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
     if target.container.is_none()
         && target.video_codec.is_none()
         && target.audio_codec.is_none()
+        && target.image_format.is_none()
         && target.max_size.is_none()
         && target.max_width.is_none()
         && target.max_height.is_none()
     {
         return Err(CliError::usage(
-            "provide destination constraints via flags (e.g. --container mp4 --video-codec h264) or --constraints FILE.yaml",
+            "provide destination constraints via flags (e.g. --container mp4 --video-codec h264 or --image-format jpeg) or --constraints FILE.yaml",
         ));
     }
     compile(ConstraintInput {
         container: target.container.clone().map(|v| vec![v]),
         video_codec: target.video_codec.clone().map(|v| vec![v]),
         audio_codec: target.audio_codec.clone().map(|v| vec![v]),
+        image_format: target.image_format.clone().map(|v| vec![v]),
         max_bytes: target.max_size,
         max_width: target.max_width,
         max_height: target.max_height,
@@ -527,6 +552,22 @@ fn print_inspect(artifact: &Artifact) {
         .and_then(|n| n.to_str())
         .unwrap_or("file");
     println!("{name}");
+    if artifact.family == fitifact::Family::Image {
+        let image = artifact.image.as_ref();
+        println!("Family          image");
+        println!(
+            "Format          {}",
+            image
+                .and_then(|facts| facts.format.as_ref())
+                .map(fitifact::ImageFormat::display_label)
+                .unwrap_or_else(|| "unknown".into())
+        );
+        if let Some((w, h)) = image.and_then(|facts| facts.width.zip(facts.height)) {
+            println!("Resolution      {w}×{h}");
+        }
+        println!("Size            {}", format_bytes(artifact.byte_length));
+        return;
+    }
     println!(
         "Container       {}",
         artifact

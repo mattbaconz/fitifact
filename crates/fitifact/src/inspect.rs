@@ -89,6 +89,59 @@ pub fn inspect(path: &Path, inspector: &dyn Inspector) -> Result<Artifact> {
     inspector.inspect(path)
 }
 
+#[derive(Debug, Clone)]
+pub struct DefaultInspector<S = SystemSpawner> {
+    media: FfprobeInspector<S>,
+}
+
+impl Default for DefaultInspector<SystemSpawner> {
+    fn default() -> Self {
+        Self::new(SystemSpawner)
+    }
+}
+
+impl<S> DefaultInspector<S> {
+    pub fn new(spawner: S) -> Self {
+        Self {
+            media: FfprobeInspector::new(spawner),
+        }
+    }
+}
+
+impl<S: ProcessSpawner> Inspector for DefaultInspector<S> {
+    fn inspect(&self, path: &Path) -> Result<Artifact> {
+        if !path.exists() {
+            return Err(Error::new(
+                ErrorCode::InputInvalid,
+                format!("file not found: {}", path.display()),
+            ));
+        }
+        let header = read_header(path)?;
+        if crate::image::looks_like_image(&header) {
+            let bytes = std::fs::read(path).map_err(|err| {
+                Error::new(ErrorCode::InputInvalid, format!("cannot read image: {err}"))
+            })?;
+            return crate::image::artifact_from_bytes(Some(path), &bytes);
+        }
+        self.media.inspect(path)
+    }
+}
+
+fn read_header(path: &Path) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)
+        .map_err(|err| Error::new(ErrorCode::InputInvalid, format!("cannot open file: {err}")))?;
+    let mut buf = vec![0_u8; 16];
+    let n = file.read(&mut buf).map_err(|err| {
+        Error::new(
+            ErrorCode::InputInvalid,
+            format!("cannot read file header: {err}"),
+        )
+    })?;
+    buf.truncate(n);
+    Ok(buf)
+}
+
 #[derive(Debug, Deserialize)]
 struct Probe {
     streams: Option<Vec<ProbeStream>>,
@@ -183,6 +236,7 @@ pub fn artifact_from_ffprobe_json(path: &Path, byte_length: u64, json: &str) -> 
         container,
         streams,
         duration_ms,
+        image: None,
         inspection: InspectionMeta {
             provider: "ffprobe".into(),
             provider_version: probe.program_version.and_then(|version| version.version),

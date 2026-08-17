@@ -157,6 +157,10 @@ fn plan_summary(plan: &Plan) -> String {
     if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::Remux {
         return "I can remux the container without re-encoding.".into();
     }
+    if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::EncodeJpeg {
+        return "Your image is PNG; this target needs JPEG. I can encode it without resizing."
+            .into();
+    }
     format!("I need to change {} things.", plan.steps.len())
 }
 
@@ -164,6 +168,7 @@ fn step_line(step: &PlanStep) -> String {
     match step.operation {
         TransformId::Remux => "Remux to the required container (stream copy).".into(),
         TransformId::TranscodeVideo => "Transcode video; copy audio if present.".into(),
+        TransformId::EncodeJpeg => "Encode to JPEG without changing the pixel dimensions.".into(),
     }
 }
 

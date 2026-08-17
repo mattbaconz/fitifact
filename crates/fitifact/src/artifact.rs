@@ -36,6 +36,64 @@ impl Family {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum ImageFormat {
+    Jpeg,
+    Png,
+    Webp,
+    Tiff,
+    Heif,
+    Gif,
+    Unknown(String),
+}
+
+impl ImageFormat {
+    pub fn parse_constraint(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "jpeg" | "jpg" | "jpe" => Some(Self::Jpeg),
+            "png" => Some(Self::Png),
+            "webp" => Some(Self::Webp),
+            "tiff" | "tif" => Some(Self::Tiff),
+            "heif" | "heic" => Some(Self::Heif),
+            "gif" => Some(Self::Gif),
+            _ => None,
+        }
+    }
+
+    pub fn parse_loose(raw: &str) -> Self {
+        Self::parse_constraint(raw).unwrap_or_else(|| Self::Unknown(raw.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Jpeg => "jpeg",
+            Self::Png => "png",
+            Self::Webp => "webp",
+            Self::Tiff => "tiff",
+            Self::Heif => "heif",
+            Self::Gif => "gif",
+            Self::Unknown(other) => other,
+        }
+    }
+
+    pub fn display_label(&self) -> String {
+        match self {
+            Self::Unknown(other) => format!("unknown ({other})"),
+            known => known.as_str().to_ascii_uppercase(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageFacts {
+    pub format: Option<ImageFormat>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub alpha: Option<bool>,
+    pub animated: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Container {
     Mp4,
     Mov,
@@ -384,6 +442,8 @@ pub struct Artifact {
     pub container: Option<Container>,
     pub streams: Vec<Stream>,
     pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageFacts>,
     pub inspection: InspectionMeta,
 }
 
@@ -435,6 +495,7 @@ impl Artifact {
             container: Some(container),
             streams,
             duration_ms: Some(1_000),
+            image: None,
             inspection: InspectionMeta {
                 provider: "fixture".into(),
                 provider_version: Some("test".into()),
@@ -444,7 +505,14 @@ impl Artifact {
         }
     }
 
-    pub fn image_stub(bytes: u64) -> Self {
+    pub fn image(
+        format: ImageFormat,
+        width: u32,
+        height: u32,
+        bytes: u64,
+        alpha: bool,
+        animated: bool,
+    ) -> Self {
         Self {
             schema: ArtifactSchema,
             path: None,
@@ -453,6 +521,13 @@ impl Artifact {
             container: None,
             streams: Vec::new(),
             duration_ms: None,
+            image: Some(ImageFacts {
+                format: Some(format),
+                width: Some(width),
+                height: Some(height),
+                alpha: Some(alpha),
+                animated: Some(animated),
+            }),
             inspection: InspectionMeta {
                 provider: "fixture".into(),
                 provider_version: Some("test".into()),

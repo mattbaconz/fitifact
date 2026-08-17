@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::Artifact;
+use crate::artifact::{Artifact, Family};
 use crate::capability::TransformId;
 use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, Field};
@@ -96,6 +96,8 @@ pub fn validate_adaptation(
         )
     })?;
     let checks = check(&artifact, constraints);
+    let operation = plan.steps[0].operation;
+    let image_job = operation == TransformId::EncodeJpeg || source.family == Family::Image;
     let mut integrity = vec![ValidationCheck {
         id: "parseable".into(),
         status: ValidationStatus::Pass,
@@ -108,23 +110,38 @@ pub fn validate_adaptation(
         "more than zero bytes",
         artifact.byte_length.to_string(),
     ));
-    integrity.push(simple_check(
-        "stream_topology",
-        stream_topology(source) == stream_topology(&artifact),
-        format!("{:?}", stream_topology(source)),
-        format!("{:?}", stream_topology(&artifact)),
-    ));
-    integrity.push(option_equality_check(
-        "width",
-        source.first_video().and_then(|video| video.width),
-        artifact.first_video().and_then(|video| video.width),
-    ));
-    integrity.push(option_equality_check(
-        "height",
-        source.first_video().and_then(|video| video.height),
-        artifact.first_video().and_then(|video| video.height),
-    ));
-    integrity.push(duration_check(source.duration_ms, artifact.duration_ms));
+    if image_job {
+        let source_image = source.image.as_ref();
+        let output_image = artifact.image.as_ref();
+        integrity.push(option_equality_check(
+            "image_width",
+            source_image.and_then(|image| image.width),
+            output_image.and_then(|image| image.width),
+        ));
+        integrity.push(option_equality_check(
+            "image_height",
+            source_image.and_then(|image| image.height),
+            output_image.and_then(|image| image.height),
+        ));
+    } else {
+        integrity.push(simple_check(
+            "stream_topology",
+            stream_topology(source) == stream_topology(&artifact),
+            format!("{:?}", stream_topology(source)),
+            format!("{:?}", stream_topology(&artifact)),
+        ));
+        integrity.push(option_equality_check(
+            "width",
+            source.first_video().and_then(|video| video.width),
+            artifact.first_video().and_then(|video| video.width),
+        ));
+        integrity.push(option_equality_check(
+            "height",
+            source.first_video().and_then(|video| video.height),
+            artifact.first_video().and_then(|video| video.height),
+        ));
+        integrity.push(duration_check(source.duration_ms, artifact.duration_ms));
+    }
 
     for expected in &plan.steps[0].expected {
         let actual = actual_value(&artifact, expected.field);
@@ -145,37 +162,38 @@ pub fn validate_adaptation(
     }
 
     let mut provenance = Vec::new();
-    let operation = plan.steps[0].operation;
-    let video_equal = source_hashes.video == output_hashes.video;
-    provenance.push(provenance_check(
-        if operation == TransformId::Remux {
-            "video_copied"
-        } else {
-            "video_changed"
-        },
-        "video",
-        source_hashes,
-        output_hashes,
-        if operation == TransformId::Remux {
-            video_equal
-        } else {
-            !video_equal
-        },
-        &source_hashes.video,
-        &output_hashes.video,
-    ));
-    if source.first_audio().is_some() {
-        let input_audio = source_hashes.audio.as_deref().unwrap_or_default();
-        let output_audio = output_hashes.audio.as_deref().unwrap_or_default();
+    if !image_job {
+        let video_equal = source_hashes.video == output_hashes.video;
         provenance.push(provenance_check(
-            "audio_copied",
-            "audio",
+            if operation == TransformId::Remux {
+                "video_copied"
+            } else {
+                "video_changed"
+            },
+            "video",
             source_hashes,
             output_hashes,
-            !input_audio.is_empty() && input_audio == output_audio,
-            input_audio,
-            output_audio,
+            if operation == TransformId::Remux {
+                video_equal
+            } else {
+                !video_equal
+            },
+            &source_hashes.video,
+            &output_hashes.video,
         ));
+        if source.first_audio().is_some() {
+            let input_audio = source_hashes.audio.as_deref().unwrap_or_default();
+            let output_audio = output_hashes.audio.as_deref().unwrap_or_default();
+            provenance.push(provenance_check(
+                "audio_copied",
+                "audio",
+                source_hashes,
+                output_hashes,
+                !input_audio.is_empty() && input_audio == output_audio,
+                input_audio,
+                output_audio,
+            ));
+        }
     }
 
     let mut status = compatibility_status(&checks);
@@ -317,6 +335,21 @@ fn actual_value(artifact: &Artifact, field: Field) -> Option<ExpectedValue> {
         Field::MediaVideoColorTransfer => video?.color_transfer.clone().map(ExpectedValue::Text),
         Field::MediaVideoColorPrimaries => video?.color_primaries.clone().map(ExpectedValue::Text),
         Field::MediaVideoHdr => Some(ExpectedValue::Text(video?.hdr.as_str().into())),
+        Field::ImageFormat => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.format.as_ref())
+            .map(|format| ExpectedValue::Text(format.as_str().into())),
+        Field::ImageWidth => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.width)
+            .map(|value| ExpectedValue::Integer(value.into())),
+        Field::ImageHeight => artifact
+            .image
+            .as_ref()
+            .and_then(|image| image.height)
+            .map(|value| ExpectedValue::Integer(value.into())),
         _ => None,
     }
 }
