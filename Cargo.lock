@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "getrandom",
  "image",
@@ -179,7 +179,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact-cli"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "clap",
  "fitifact",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact-wasm"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "fitifact",
  "serde_json",
