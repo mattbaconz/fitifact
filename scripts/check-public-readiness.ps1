@@ -44,7 +44,12 @@ try {
         "fixtures/media/mismatch-hevc-aac.mp4",
         "fixtures/media/refusal-hdr10-hevc-aac.mp4",
         "fixtures/media/remux-h264-aac.mov",
-        "fixtures/media/unsupported-extra-video.mp4"
+        "fixtures/media/unsupported-extra-video.mp4",
+        "fixtures/image/compatible-jpeg.jpg",
+        "fixtures/image/mismatch-png.png",
+        "docs/brand/ft-mark-light.png",
+        "docs/brand/ft-icon-dark.png",
+        "docs/brand/ft-mark-simple.png"
     )
     $unexpectedBinaries = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @(git ls-files)) {
