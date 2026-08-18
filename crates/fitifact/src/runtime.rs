@@ -562,6 +562,7 @@ mod tests {
     use crate::capability::TransformId;
     use crate::contract::PlanSchema;
     use crate::plan::{PLANNER_VERSION, PlanStep, StepTarget};
+    #[cfg(windows)]
     use std::time::Instant;
 
     struct ForbiddenSpawner;
