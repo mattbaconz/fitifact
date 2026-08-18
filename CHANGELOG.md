@@ -19,6 +19,11 @@ These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 - `ft.` visual monogram in `docs/brand/` for README and future icon use. It is
   not a trademark filing.
 
+### [fixed]
+
+- Define `[profile.dist]` so cargo-dist 0.32 artifact builds can run. The
+  freeze tag `v0.1.0-rc.1` does not include this; do not move that tag.
+
 ## [0.1.0-rc.1] - unpublished candidate
 
 ### [added]

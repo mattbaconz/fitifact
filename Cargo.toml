@@ -8,3 +8,9 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/mattbaconz/fitifact"
 publish = false
+
+# cargo-dist 0.32 builds with --profile dist. Missing this made the
+# v0.1.0-rc.1 freeze tag fail artifact jobs on every target.
+[profile.dist]
+inherits = "release"
+lto = "thin"
