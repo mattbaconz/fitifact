@@ -42,7 +42,7 @@ dependencies = [
 name = "anstyle-query"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
+checksum = "40c48f72fd53cd289104c70f9667eeb7b49d3d02fbdca"
 dependencies = [
  "windows-sys",
 ]
@@ -74,13 +74,7 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
-
-[[package]]
-name = "bytemuck"
-version = "1.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+checksum = "72f5acc6cb49de5aadfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
 
 [[package]]
 name = "byteorder-lite"
@@ -166,7 +160,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "getrandom",
  "image",
@@ -179,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact-cli"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "clap",
  "fitifact",
@@ -188,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "fitifact-wasm"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "fitifact",
  "serde_json",
