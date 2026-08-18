@@ -3,8 +3,8 @@ Set-StrictMode -Version Latest
 
 $root = Split-Path -Parent $PSScriptRoot
 $missing = [System.Collections.Generic.List[string]]::new()
-$markdownFiles = @(rg --files $root -g "*.md" | ForEach-Object {
-    if ([IO.Path]::IsPathRooted($_)) { $_ } else { Join-Path $root $_ }
+$markdownFiles = @(git -C $root ls-files -- '*.md' | ForEach-Object {
+    Join-Path $root $_
 })
 
 function Test-Target([string]$Source, [string]$RawTarget) {
