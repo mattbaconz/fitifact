@@ -215,7 +215,7 @@ jobs:
           # Generate exactly the distributable CLI package SBOM.
           cargo cyclonedx -v --format xml --describe binaries --manifest-path crates/fitifact-cli/Cargo.toml
 
-          mapfile -d '' sboms < <(find crates -type f -name '*.cdx.xml' -print0)
+          mapfile -d '' sboms < <(find crates/fitifact-cli -type f -name '*.cdx.xml' -print0)
           if [[ "${#sboms[@]}" -ne 1 ]]; then
             echo "expected exactly one fitifact-cli CycloneDX XML file, found ${#sboms[@]}" >&2
             exit 1

@@ -2,10 +2,17 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] — after `0.1.0-rc.2`
+## [Unreleased] — after `0.1.0-rc.3`
 
 These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`.
+
+## [0.1.0-rc.3] - buildable candidate
+
+### [fixed]
+
+- Collect only `crates/fitifact-cli` CycloneDX XML so the global release job
+  does not fail when cargo-cyclonedx also emits a wasm SBOM.
 
 ## [0.1.0-rc.2] - buildable candidate
 
