@@ -19,8 +19,9 @@ The v0.1 CLI/media slice is frozen locally as `0.1.0-rc.1`. The
 `v0.1.0-rc.1`. Do not reopen the media matrix unless a review finds a
 false-safe defect. Keep crates `publish = false`. GitHub Release stays off until `FITIFACT_PUBLICATION_APPROVED`. The freeze tree
 is missing `[profile.dist]`; artifact jobs for that tag failed. Do not move
-the tag. The first buildable public candidate is `0.1.0-rc.2` on commits after
-the freeze (includes `[profile.dist]` and D-025).
+the tag. The first buildable public candidate is `0.1.0-rc.3`. `v0.1.0-rc.2` built
+native archives but failed the global SBOM step because cargo-cyclonedx also
+wrote a wasm `.cdx.xml`. Do not move either existing tag.
 
 Local identity: the public name is Fitifact; the product git checkout is
 `C:\fitifact\fitifact` under the `C:\fitifact` umbrella; in-repo `docs/` is
