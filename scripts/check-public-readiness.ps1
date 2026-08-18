@@ -54,7 +54,7 @@ try {
     $unexpectedBinaries = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @(git ls-files)) {
         $full = Join-Path $root $path
-        if (-not (Test-Path -LiteralPath $full) -or (Get-Item -LiteralPath $full).Length -eq 0) {
+        if (-not (Test-Path -LiteralPath $full) -or (Get-Item -LiteralPath $full -Force).Length -eq 0) {
             continue
         }
         $stream = [IO.File]::OpenRead($full)
