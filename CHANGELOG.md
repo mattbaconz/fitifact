@@ -2,10 +2,12 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] — after `0.1.0-rc.1` freeze
+## [Unreleased] — after `0.1.0-rc.2`
 
 These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`.
+
+## [0.1.0-rc.2] - buildable candidate
 
 ### [added]
 
@@ -23,6 +25,9 @@ These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 
 - Define `[profile.dist]` so cargo-dist 0.32 artifact builds can run. The
   freeze tag `v0.1.0-rc.1` does not include this; do not move that tag.
+- Pin `image` to 0.25.9 so MSRV 1.85 still checks.
+- Resolve Markdown files for the doc-link scan from `git ls-files` so CI pwsh
+  does not need ripgrep.
 
 ## [0.1.0-rc.1] - unpublished candidate
 
