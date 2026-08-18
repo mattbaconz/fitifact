@@ -11,12 +11,15 @@ tags:
 
 # Next actions
 
-The v0.1 CLI/media slice is frozen locally as unpublished `0.1.0-rc.1`. The
+The v0.1 CLI/media slice is frozen locally as `0.1.0-rc.1`. The
 **only allowed RC tag target** is commit
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`
-(`feat: freeze unpublished 0.1.0-rc.1 local candidate`). Do not tag later
-image/web commits as `v0.1.0-rc.1`. Do not reopen the media matrix unless a
-review finds a false-safe defect. Keep the package unpublished.
+(`feat: freeze unpublished 0.1.0-rc.1 local candidate`). Annotated tag
+`v0.1.0-rc.1` peels to that SHA. Do not tag later image/web commits as
+`v0.1.0-rc.1`. Do not reopen the media matrix unless a review finds a
+false-safe defect. Keep crates `publish = false`. GitHub Release stays off
+until `FITIFACT_PUBLICATION_APPROVED`. The freeze tree is missing
+`[profile.dist]`; artifact jobs for that tag failed. Do not move the tag.
 
 Local identity: the public name is Fitifact; the product git checkout is
 `C:\fitifact\fitifact` under the `C:\fitifact` umbrella; in-repo `docs/` is

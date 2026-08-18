@@ -25,10 +25,10 @@ Before either tag:
 - [x] Record owner-directed sign-off dated 2026-08-18 against the 2026-08-16
       packet. USPTO/WIPO/EUIPO remain a human pass, not billed clearance;
       WIPO interactive search was not completed.
-- [ ] Create the public repository and apply [[04-Engineering/Repository-Rules]].
-- [ ] Configure the protected `public-release` GitHub Environment with required
-      release-owner reviewers, and create the repository variable
-      `FITIFACT_PUBLICATION_APPROVED` with the default value `false`.
+- [x] Create the public repository `mattbaconz/fitifact` (2026-08-18).
+- [x] Configure the protected `public-release` GitHub Environment with required
+      reviewers, deploy from `v*` tags, and repository variable
+      `FITIFACT_PUBLICATION_APPROVED=false`.
 - [ ] Protect `v*` tags against deletion, update, and unauthorized creation.
 - [ ] Confirm the default branch is clean and every required CI check passes.
 - [ ] Run `scripts/check-public-readiness.ps1 -RequireDependencyTools` from the
