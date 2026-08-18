@@ -2,7 +2,7 @@
 title: "Next Actions"
 type: action-plan
 status: active
-updated: 2026-08-16
+updated: 2026-08-18
 canonical: true
 tags:
   - next
@@ -25,11 +25,12 @@ historical rename/collision context.
 
 1. **Local RC verification** — done on the freeze commit; stay unpublished.
 
-2. **Publication gate** (owner — **paused here**)
+2. **Publication gate** (owner directed public GitHub 2026-08-18)
    - 2026-08-16 naming packet is in [[01-Product/Naming-Brand]]; it is not
-     clearance; owner/legal sign-off is unchecked;
-   - do not create `mattbaconz/fitifact`, push, tag, or release before sign-off;
-   - after sign-off, follow [[04-Engineering/Release-Checklist]] GitHub-only.
+     billed clearance; owner directed GitHub create/push/tag;
+   - GitHub Release stays off until `FITIFACT_PUBLICATION_APPROVED=true` and
+     Environment `public-release` is approved;
+   - follow [[04-Engineering/Release-Checklist]] GitHub-only.
 
 3. **Owner runbook after a public repo exists** (cannot run from this Windows
    workspace today): on clean Windows x64, Linux GNU x64, macOS Intel, and

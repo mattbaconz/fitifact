@@ -1,9 +1,9 @@
 ---
 title: "v0.1 Release Checklist"
 type: engineering
-status: blocked
+status: active
 implementation: prepared
-updated: 2026-08-16
+updated: 2026-08-18
 canonical: true
 tags:
   - release
@@ -15,13 +15,16 @@ tags:
 
 ## Publication gate
 
-This entire checklist is **blocked** until the owner and legal reviewer record
-Fitifact naming approval. Preparing or rehearsing local commands does not
-authorize creating the public repository, pushing tags, or publishing assets.
+Owner directed public GitHub create/push/tag on 2026-08-18. That is not billed
+attorney clearance. GitHub Release publication remains blocked until
+`FITIFACT_PUBLICATION_APPROVED` is `true` and Environment `public-release` is
+approved.
 
 Before either tag:
 
-- [ ] Record owner/legal sign-off and the final USPTO, WIPO, and EUIPO review.
+- [x] Record owner-directed sign-off dated 2026-08-18 against the 2026-08-16
+      packet. USPTO/WIPO/EUIPO remain a human pass, not billed clearance;
+      WIPO interactive search was not completed.
 - [ ] Create the public repository and apply [[04-Engineering/Repository-Rules]].
 - [ ] Configure the protected `public-release` GitHub Environment with required
       release-owner reviewers, and create the repository variable

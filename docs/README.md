@@ -2,7 +2,7 @@
 title: "Fitifact documentation"
 type: root-index
 status: active
-updated: 2026-08-15
+updated: 2026-08-18
 canonical: true
 tags:
   - fitifact
@@ -74,5 +74,6 @@ exists as part of v0.1.
 - [[04-Engineering/Roadmap]]
 
 The strongest current launch description remains **“I Made an Adapter for
-Files.”** Public publication is blocked until owner/legal sign-off on the name;
-see [[01-Product/Naming-Brand]].
+Files.”** Owner directed public GitHub on 2026-08-18; the name is still not
+billed-cleared. GitHub Release publication stays gated. See
+[[01-Product/Naming-Brand]].

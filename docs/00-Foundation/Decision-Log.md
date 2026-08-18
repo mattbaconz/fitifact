@@ -2,7 +2,7 @@
 title: "Decision Log"
 type: decision-log
 status: active
-updated: 2026-08-16
+updated: 2026-08-18
 canonical: true
 tags:
   - decision-log
@@ -122,19 +122,21 @@ v0 invokes system `ffmpeg` and `ffprobe` on PATH as subprocesses with argv array
 v0 searches a tiny capability catalog (BFS, max depth 2) and ranks by semantic loss, lossy steps, streams changed, then step count. Pareto scoring waits until there are enough real alternatives to justify it.
 
 ## D-023 — Fitifact public-name candidate and publication gate
-**Status:** accepted pending legal sign-off.
-**Recorded:** 2026-08-15.
+**Status:** accepted; owner directed public GitHub 2026-08-18.
+**Recorded:** 2026-08-15; owner sign-off 2026-08-18.
 
 Replace the historical Shoehorn codename with **Fitifact** in the repository.
 Automated exact-name checks across GitHub, crates.io (including hyphen and
 underscore variants), npm, executable/command names, and ICANN/RDAP found no
 material collision signal. This result is not legal clearance.
 
-Final human/legal review of USPTO, WIPO, and EUIPO records is still pending.
 A 2026-08-16 search packet is recorded in [[01-Product/Naming-Brand]]; it is
-not clearance. Public publication is blocked until explicit owner/legal
-sign-off. No public repository, release, package publication, or naming claim
-may precede that sign-off.
+not billed attorney clearance. WIPO Global Brand Database interactive search
+was not completed. Owner directed public GitHub create, `main` push, and
+annotated `v0.1.0-rc.1` on 2026-08-18. GitHub Release publication remains
+gated by `FITIFACT_PUBLICATION_APPROVED` and Environment `public-release`.
+Do not publish crates.io/npm packages or make trademark claims from this
+packet.
 
 ## D-024 — Public core and private operations boundary
 **Status:** accepted.

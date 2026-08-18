@@ -2,7 +2,7 @@
 title: "Fitifact agent instructions"
 type: agent-instructions
 status: active
-updated: 2026-08-15
+updated: 2026-08-18
 canonical: true
 tags:
   - agents
@@ -170,8 +170,9 @@ them to scope.
 Fitifact is the selected public name, but it is not legally cleared. The
 2026-08-15 automated exact-name search found no material collision signal across
 GitHub, crates.io hyphen/underscore variants, npm, command names, and ICANN/RDAP.
-USPTO, WIPO, and EUIPO final human/legal review is still pending. Public
-publication is blocked until owner/legal sign-off. See
+Owner directed public GitHub create/push/tag on 2026-08-18 against the
+2026-08-16 packet; that is not billed attorney clearance. GitHub Release
+publication stays gated by `FITIFACT_PUBLICATION_APPROVED`. See
 [`docs/01-Product/Naming-Brand.md`](docs/01-Product/Naming-Brand.md).
 
 ## Forbidden shortcuts

@@ -2,7 +2,7 @@
 title: "Naming and Brand"
 type: brand
 status: active
-updated: 2026-08-16
+updated: 2026-08-18
 canonical: true
 tags:
   - brand
@@ -18,11 +18,16 @@ Fitifact replaces the historical **Shoehorn** working codename. It evokes a
 small artifact made to satisfy a particular fit or compatibility requirement
 and works as both a product name and CLI command.
 
-The name is **not legally cleared**. Do not create public repositories, publish
-packages, buy assets, or make trademark claims until the publication gate below
-is satisfied. This document is a search record, not legal advice, and must not
-be described as trademark clearance, registrability, ownership, or freedom to
+The name is **not legally cleared**. Owner directed public GitHub create, push,
+and freeze-tag on 2026-08-18 against the human pass below. That is not billed
+attorney clearance. Do not publish packages, buy assets, or make trademark
+claims. This document is a search record, not legal advice, and must not be
+described as trademark clearance, registrability, ownership, or freedom to
 operate.
+
+The `ft.` ligature in `docs/brand/` is a visual monogram for documentation and
+future icon use, not a trademark filing; owner/legal sign-off remains
+unchecked. Pair the mark with the word **Fitifact** in public copy.
 
 ## Collision-search record — 2026-08-15
 
@@ -39,8 +44,8 @@ not proof of availability, registrability, ownership, or freedom to operate.
 
 ## Human review packet — 2026-08-16
 
-Re-checked from this workspace on 2026-08-16. Owner/legal sign-off remains
-**unchecked**. Public publication stays blocked (D-023).
+Re-checked from this workspace on 2026-08-16. Owner directed public GitHub
+create/push/tag on 2026-08-18. That direction is not billed clearance.
 
 ### Exact-name software and package checks
 
@@ -85,16 +90,22 @@ packet:
   **IFIT** registrations (iFIT Inc., fitness/education classes) are a different
   mark and class story for counsel, not an exact hit.
 
-**Owner/legal sign-off:** [ ] not recorded.
+**Owner/legal sign-off:** [x] owner directed 2026-08-18. Public GitHub
+create, `main` push, and annotated `v0.1.0-rc.1` on the freeze SHA were
+authorized from this packet. This is not billed attorney clearance, not a
+completed WIPO Global Brand Database interactive search, and not a trademark
+registration. GitHub Release publication stays gated by
+`FITIFACT_PUBLICATION_APPROVED` and Environment `public-release`.
 
 ## Publication gate
 
-Before any public repository, release, registry package, domain purchase, or
-public launch:
+Owner directed public GitHub on 2026-08-18. Remaining gates before a GitHub
+Release, registry package, domain purchase, or public launch:
 
-1. complete and record human review of USPTO, WIPO, and EUIPO results;
+1. keep USPTO, WIPO, and EUIPO review recorded; WIPO interactive search is
+   still incomplete;
 2. resolve any confusingly similar marks in relevant software/service classes;
-3. obtain explicit owner/legal sign-off;
+3. set `FITIFACT_PUBLICATION_APPROVED` only for an explicit Release window;
 4. re-check package, command, social, and domain availability at publication
    time.
 

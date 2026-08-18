@@ -1,3 +1,5 @@
+<img src="docs/brand/ft-mark-light.png" alt="Fitifact" width="180">
+
 # Fitifact
 
 Fitifact is a destination-first file compatibility CLI. It inspects what a

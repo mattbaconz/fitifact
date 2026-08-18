@@ -3,7 +3,7 @@ title: "Repository Rules"
 type: engineering
 status: active
 implementation: prepared
-updated: 2026-08-16
+updated: 2026-08-18
 canonical: true
 tags:
   - github
@@ -13,9 +13,10 @@ tags:
 
 # Repository rules
 
-These settings are a publication checklist, not a claim about current remote
-state. The public `mattbaconz/fitifact` repository does not exist yet, so no
-ruleset or branch protection can be applied until owner/legal Fitifact approval.
+These settings are the intended GitHub configuration for public
+`mattbaconz/fitifact`. Owner directed repository creation on 2026-08-18.
+Apply them on the live repo; they are not a claim that every control is
+already enforced.
 
 ## Default-branch rules
 
