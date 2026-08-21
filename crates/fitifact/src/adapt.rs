@@ -664,6 +664,7 @@ struct CleanupOutcome {
 }
 
 impl CleanupOutcome {
+    #[cfg(any(windows, unix))]
     fn complete() -> Self {
         Self { warning: None }
     }
