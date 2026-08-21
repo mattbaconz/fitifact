@@ -76,6 +76,12 @@ export interface CropRectangle {
 }
 
 export interface ImagePlan {
+  schema: "fitifact.image-adapt-plan/v1";
+  plan: {
+    schema: "fitifact.plan/v1";
+    planner_version: string;
+    steps: Array<{ operation: "image.adapt" }>;
+  };
   noop: boolean;
   source_format: "jpeg" | "png";
   source_width: number;
@@ -122,12 +128,14 @@ export interface AdaptReport {
 }
 
 export interface EditableTarget {
-  format: "jpeg" | "png";
+  formats: Array<"jpeg" | "png">;
   maxBytes: string;
-  width: string;
-  widthOp: "eq" | "lte" | "gte";
-  height: string;
-  heightOp: "eq" | "lte" | "gte";
+  widthExact: string;
+  widthMin: string;
+  widthMax: string;
+  heightExact: string;
+  heightMin: string;
+  heightMax: string;
 }
 
 export function isErrorReport(value: unknown): value is ErrorReport {

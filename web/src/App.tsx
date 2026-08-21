@@ -3,6 +3,7 @@ import { constraintSetFromEditable, editableTargetFromConstraints, formatBytes }
 import { cropAxis, cropForAspect } from "./lib/crop";
 import type {
   AdaptReport,
+  ConstraintSet,
   EditableTarget,
   ErrorReport,
   PlanReport,
@@ -58,6 +59,8 @@ export function App() {
   const [requirements, setRequirements] = useState(DEFAULT_REQUIREMENTS);
   const [parsed, setParsed] = useState<RequirementParse | null>(null);
   const [target, setTarget] = useState<EditableTarget | null>(null);
+  const [confirmedConstraintsJson, setConfirmedConstraintsJson] = useState<string | null>(null);
+  const [targetDirty, setTargetDirty] = useState(false);
   const [state, setState] = useState<ProductState>("idle");
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
   const [error, setError] = useState<ErrorReport | null>(null);
@@ -136,15 +139,47 @@ export function App() {
     setProgress(null);
   }
 
-  async function parseRequirements() {
-    const operation = beginOperation(true);
-    setState("processing");
-    setError(null);
-    setSourceFile(null);
+  function clearDerivedState(clearSource: boolean) {
     setPlan(null);
     setAdapted(null);
     setOutputBuffer(null);
     setPreviewBuffer(null);
+    setCropConsent(false);
+    setProgress(null);
+    if (clearSource) setSourceFile(null);
+  }
+
+  function editRequirements(value: string) {
+    ++operationRef.current;
+    client.cancel();
+    setRequirements(value);
+    setParsed(null);
+    setTarget(null);
+    setConfirmedConstraintsJson(null);
+    setTargetDirty(false);
+    clearDerivedState(true);
+    setError(null);
+    setState("idle");
+  }
+
+  function editTarget(update: (current: EditableTarget) => EditableTarget) {
+    if (!target) return;
+    ++operationRef.current;
+    setTarget((current) => current ? update(current) : current);
+    setTargetDirty(true);
+    clearDerivedState(false);
+    setError(null);
+    setState("requirements_ready");
+  }
+
+  async function parseRequirements() {
+    const operation = beginOperation(true);
+    setState("processing");
+    setError(null);
+    setTarget(null);
+    setConfirmedConstraintsJson(null);
+    setTargetDirty(false);
+    clearDerivedState(true);
     try {
       const { report } = await client.compile<RequirementParse>(requirements, onProgress(operation));
       if (operation !== operationRef.current) return;
@@ -166,8 +201,15 @@ export function App() {
         });
         setTarget(null);
       } else {
-        setTarget(editableTargetFromConstraints(report.constraints));
-        setState("requirements_ready");
+        try {
+          setTarget(editableTargetFromConstraints(report.constraints));
+          setConfirmedConstraintsJson(JSON.stringify(report.constraints));
+          setState("requirements_ready");
+        } catch (caught) {
+          setTarget(null);
+          setConfirmedConstraintsJson(null);
+          handleFailure(caught, operation);
+        }
       }
     } catch (caught) {
       handleFailure(caught, operation);
@@ -176,14 +218,14 @@ export function App() {
     }
   }
 
-  function constraintsJson(): string {
+  function draftConstraintsJson(): string {
     if (!target) throw new Error("Review a valid requirement first.");
     return JSON.stringify(constraintSetFromEditable(target));
   }
 
   async function analyzeFile(file: File) {
     if (state === "processing") return;
-    if (!target) {
+    if (!target || !confirmedConstraintsJson || targetDirty) {
       setError({
         schema: "fitifact.error/v1",
         code: "INPUT_INVALID",
@@ -202,16 +244,14 @@ export function App() {
     setError(null);
     setState("processing");
     try {
-      const buffer = await file.arrayBuffer();
-      if (operation !== operationRef.current) return;
-      const { report, preview } = await client.analyze<PlanReport>(
-        file.name,
-        buffer,
-        constraintsJson(),
+      const { report, preview, constraintsSnapshot } = await client.analyze<PlanReport>(
+        file,
+        confirmedConstraintsJson,
         onProgress(operation),
       );
       if (operation !== operationRef.current) return;
       setPlan(report);
+      setConfirmedConstraintsJson(constraintsSnapshot ?? confirmedConstraintsJson);
       setPreviewBuffer(preview ?? null);
       if (report.report.compatible && report.plan.noop) {
         setOutputBuffer(preview ?? null);
@@ -227,7 +267,7 @@ export function App() {
   }
 
   async function replan() {
-    if (!sourceFile || state === "processing") return;
+    if (!sourceFile || !confirmedConstraintsJson || !target || state === "processing") return;
     const operation = beginOperation();
     setState("processing");
     setError(null);
@@ -235,12 +275,16 @@ export function App() {
     setAdapted(null);
     setOutputBuffer(null);
     try {
-      const { report, preview } = await client.replan<PlanReport>(
-        constraintsJson(),
+      const draft = draftConstraintsJson();
+      const { report, preview, constraintsSnapshot } = await client.replan<PlanReport>(
+        confirmedConstraintsJson,
+        draft,
         onProgress(operation),
       );
       if (operation !== operationRef.current) return;
       setPlan(report);
+      setConfirmedConstraintsJson(constraintsSnapshot ?? draft);
+      setTargetDirty(false);
       if (preview) setPreviewBuffer(preview);
       setCropConsent(false);
       if (report.report.compatible && report.plan.noop) {
@@ -256,8 +300,30 @@ export function App() {
     }
   }
 
+  async function confirmTarget() {
+    if (!target || sourceFile || state === "processing") return;
+    const operation = beginOperation();
+    setState("processing");
+    setError(null);
+    try {
+      const { report } = await client.compileConstraints<ConstraintSet>(
+        draftConstraintsJson(),
+        onProgress(operation),
+      );
+      if (operation !== operationRef.current) return;
+      setTarget(editableTargetFromConstraints(report));
+      setConfirmedConstraintsJson(JSON.stringify(report));
+      setTargetDirty(false);
+      setState("requirements_ready");
+    } catch (caught) {
+      handleFailure(caught, operation);
+    } finally {
+      if (operation === operationRef.current) setProgress(null);
+    }
+  }
+
   async function adaptImage() {
-    if (!plan || state === "processing") return;
+    if (!plan || !confirmedConstraintsJson || targetDirty || state === "processing") return;
     if (plan.plan.target.crop.required && (!crop || !cropConsent)) {
       setState("crop_approval_required");
       return;
@@ -267,7 +333,7 @@ export function App() {
     setError(null);
     try {
       const { report, output } = await client.adapt<AdaptReport>(
-        constraintsJson(),
+        confirmedConstraintsJson,
         plan.plan.target.crop.required ? crop : null,
         onProgress(operation),
       );
@@ -297,7 +363,7 @@ export function App() {
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
-    if (state === "processing" || !target) return;
+    if (state === "processing" || !target || !confirmedConstraintsJson || targetDirty) return;
     const file = event.dataTransfer.files.item(0);
     if (file) void analyzeFile(file);
   }
@@ -328,7 +394,7 @@ export function App() {
               id="requirements"
               rows={4}
               value={requirements}
-              onChange={(event) => setRequirements(event.target.value)}
+              onChange={(event) => editRequirements(event.target.value)}
               disabled={state === "processing"}
             />
             <button type="button" onClick={() => void parseRequirements()} disabled={state === "processing" || !requirements.trim()}>
@@ -345,23 +411,23 @@ export function App() {
             <div className="step-heading"><span>2</span><h2 id="target-title">Review the target</h2></div>
             {target ? (
               <div className="target-form">
-                <label>Format<select value={target.format} disabled={state === "processing"} onChange={(event) => setTarget({ ...target, format: event.target.value as "jpeg" | "png" })}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
-                <label>Maximum bytes<input inputMode="numeric" value={target.maxBytes} disabled={state === "processing"} onChange={(event) => setTarget({ ...target, maxBytes: event.target.value })} placeholder="No limit" /></label>
-                <fieldset disabled={state === "processing"}><legend>Width</legend><select aria-label="Width rule" value={target.widthOp} onChange={(event) => setTarget({ ...target, widthOp: event.target.value as EditableTarget["widthOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Width in pixels" inputMode="numeric" value={target.width} onChange={(event) => setTarget({ ...target, width: event.target.value })} placeholder="Any" /></fieldset>
-                <fieldset disabled={state === "processing"}><legend>Height</legend><select aria-label="Height rule" value={target.heightOp} onChange={(event) => setTarget({ ...target, heightOp: event.target.value as EditableTarget["heightOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Height in pixels" inputMode="numeric" value={target.height} onChange={(event) => setTarget({ ...target, height: event.target.value })} placeholder="Any" /></fieldset>
-                {plan && sourceFile ? <button className="secondary" type="button" onClick={() => void replan()} disabled={state === "processing"}>Review target changes</button> : null}
+                <fieldset className="format-options" disabled={state === "processing"}><legend>Allowed formats</legend>{(["jpeg", "png"] as const).map((format) => <label key={format}><input type="checkbox" checked={target.formats.includes(format)} onChange={(event) => editTarget((current) => ({ ...current, formats: event.target.checked ? [...current.formats, format] : current.formats.filter((item) => item !== format) }))} /> {format.toUpperCase()}</label>)}</fieldset>
+                <label>Maximum bytes<input inputMode="numeric" value={target.maxBytes} disabled={state === "processing"} onChange={(event) => editTarget((current) => ({ ...current, maxBytes: event.target.value }))} placeholder="No limit" /></label>
+                <fieldset className="dimension-fields" disabled={state === "processing"}><legend>Width</legend><label>Exact<input aria-label="Exact width" inputMode="numeric" value={target.widthExact} onChange={(event) => editTarget((current) => ({ ...current, widthExact: event.target.value }))} placeholder="Any" /></label><label>Minimum<input aria-label="Minimum width" inputMode="numeric" value={target.widthMin} onChange={(event) => editTarget((current) => ({ ...current, widthMin: event.target.value }))} placeholder="None" /></label><label>Maximum<input aria-label="Maximum width" inputMode="numeric" value={target.widthMax} onChange={(event) => editTarget((current) => ({ ...current, widthMax: event.target.value }))} placeholder="None" /></label></fieldset>
+                <fieldset className="dimension-fields" disabled={state === "processing"}><legend>Height</legend><label>Exact<input aria-label="Exact height" inputMode="numeric" value={target.heightExact} onChange={(event) => editTarget((current) => ({ ...current, heightExact: event.target.value }))} placeholder="Any" /></label><label>Minimum<input aria-label="Minimum height" inputMode="numeric" value={target.heightMin} onChange={(event) => editTarget((current) => ({ ...current, heightMin: event.target.value }))} placeholder="None" /></label><label>Maximum<input aria-label="Maximum height" inputMode="numeric" value={target.heightMax} onChange={(event) => editTarget((current) => ({ ...current, heightMax: event.target.value }))} placeholder="None" /></label></fieldset>
+                {targetDirty ? <button className="secondary" type="button" onClick={() => void (sourceFile ? replan() : confirmTarget())} disabled={state === "processing"}>{sourceFile ? "Review target changes" : "Confirm target changes"}</button> : null}
               </div>
             ) : <p className="empty-copy">A normalized, editable target will appear here.</p>}
           </section>
 
           <section className="card upload-card" aria-labelledby="image-title">
             <div className="step-heading"><span>3</span><h2 id="image-title">Choose your image</h2></div>
-            <div className={`drop-zone ${dragging ? "is-dragging" : ""} ${!target ? "is-disabled" : ""}`} aria-disabled={!target || state === "processing"} onDragOver={(event) => { event.preventDefault(); if (state !== "processing" && target) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+            <div className={`drop-zone ${dragging ? "is-dragging" : ""} ${!confirmedConstraintsJson || targetDirty ? "is-disabled" : ""}`} aria-disabled={!confirmedConstraintsJson || targetDirty || state === "processing"} onDragOver={(event) => { event.preventDefault(); if (state !== "processing" && confirmedConstraintsJson && !targetDirty) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
               <p><strong>Drop a JPEG or PNG here</strong></p>
               <p id="image-help">HEIC is accepted only in an explicitly approved build.</p>
-              {!target ? <p id="image-prerequisite" className="prerequisite">Review the requirements before choosing a file.</p> : null}
+              {!confirmedConstraintsJson || targetDirty ? <p id="image-prerequisite" className="prerequisite">Review the requirements and target before choosing a file.</p> : null}
               <label className="button-label" htmlFor="image-file">Choose an image</label>
-              <input id="image-file" className="visually-hidden" type="file" accept="image/jpeg,image/png,.heic,.heif" aria-describedby={!target ? "image-help image-prerequisite" : "image-help"} onChange={(event) => { const file = event.currentTarget.files?.item(0); if (file) void analyzeFile(file); event.currentTarget.value = ""; }} disabled={!target || state === "processing"} />
+              <input id="image-file" className="visually-hidden" type="file" accept="image/jpeg,image/png,.heic,.heif" aria-describedby={!confirmedConstraintsJson || targetDirty ? "image-help image-prerequisite" : "image-help"} onChange={(event) => { const file = event.currentTarget.files?.item(0); if (file) void analyzeFile(file); event.currentTarget.value = ""; }} disabled={!confirmedConstraintsJson || targetDirty || state === "processing"} />
             </div>
             {sourceFile ? <p className="file-row"><span>{sourceFile.name}</span><span>{formatBytes(sourceFile.size)}</span></p> : null}
           </section>

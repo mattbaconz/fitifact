@@ -2,13 +2,14 @@ import type { CropRectangle, ErrorReport, ProductState } from "../types";
 
 export type WorkerRequest =
   | { id: number; type: "compile"; requirements: string }
-  | { id: number; type: "analyze"; name: string; buffer: ArrayBuffer; constraintsJson: string }
-  | { id: number; type: "replan"; constraintsJson: string }
+  | { id: number; type: "compile_constraints"; constraintsJson: string }
+  | { id: number; type: "analyze"; file: File; constraintsJson: string }
+  | { id: number; type: "replan"; previousConstraintsJson: string; constraintsJson: string }
   | { id: number; type: "adapt"; constraintsJson: string; crop: CropRectangle | null };
 
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: string; percent: number }
-  | { id: number; type: "result"; report: unknown; output?: ArrayBuffer; preview?: ArrayBuffer }
+  | { id: number; type: "result"; report: unknown; output?: ArrayBuffer; preview?: ArrayBuffer; constraintsSnapshot?: string }
   | { id: number; type: "failure"; state: ProductState; report: ErrorReport };
 
 export function productStateForError(report: Pick<ErrorReport, "code">): ProductState {

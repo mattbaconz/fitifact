@@ -9,6 +9,7 @@ use crate::capability::{CapabilityCatalog, TransformId};
 use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
+use crate::image_adapt::ImageAdaptStepTarget;
 
 pub const PLANNER_VERSION: &str = "0.1.0";
 const MAX_DEPTH: usize = 2;
@@ -21,6 +22,8 @@ pub struct StepTarget {
     pub video_codec: Option<VideoCodec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_format: Option<ImageFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageAdaptStepTarget>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -655,6 +658,7 @@ fn instantiate(
                     container: Some(Container::Mp4),
                     video_codec: None,
                     image_format: None,
+                    image: None,
                 },
                 reasons: vec![PlanReason {
                     constraint_id: container.constraint_id.clone(),
@@ -752,6 +756,7 @@ fn instantiate(
                     container: Some(Container::Mp4),
                     video_codec: Some(VideoCodec::H264),
                     image_format: None,
+                    image: None,
                 },
                 reasons,
                 expected,
@@ -774,6 +779,7 @@ fn instantiate(
                     container: None,
                     video_codec: None,
                     image_format: Some(ImageFormat::Jpeg),
+                    image: None,
                 },
                 reasons: vec![PlanReason {
                     constraint_id: format.constraint_id.clone(),
@@ -784,6 +790,7 @@ fn instantiate(
                 warnings: Vec::new(),
             })
         }
+        TransformId::ImageAdapt => None,
     }
 }
 

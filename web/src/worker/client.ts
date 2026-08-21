@@ -5,6 +5,7 @@ export interface WorkerResult<T> {
   report: T;
   output?: ArrayBuffer;
   preview?: ArrayBuffer;
+  constraintsSnapshot?: string;
 }
 
 export interface ProgressUpdate {
@@ -54,17 +55,20 @@ export class ImageWorkerClient {
     return this.call<T>({ type: "compile", requirements }, [], onProgress);
   }
 
+  compileConstraints<T>(constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "compile_constraints", constraintsJson }, [], onProgress);
+  }
+
   analyze<T>(
-    name: string,
-    buffer: ArrayBuffer,
+    file: File,
     constraintsJson: string,
     onProgress?: (progress: ProgressUpdate) => void,
   ) {
-    return this.call<T>({ type: "analyze", name, buffer, constraintsJson }, [buffer], onProgress);
+    return this.call<T>({ type: "analyze", file, constraintsJson }, [], onProgress);
   }
 
-  replan<T>(constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {
-    return this.call<T>({ type: "replan", constraintsJson }, [], onProgress);
+  replan<T>(previousConstraintsJson: string, constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "replan", previousConstraintsJson, constraintsJson }, [], onProgress);
   }
 
   adapt<T>(
@@ -146,7 +150,12 @@ export class ImageWorkerClient {
     if (value.type === "failure") {
       pending.reject(new WorkerFailure(value.state, value.report));
     } else {
-      pending.resolve({ report: value.report, output: value.output, preview: value.preview });
+      pending.resolve({
+        report: value.report,
+        output: value.output,
+        preview: value.preview,
+        constraintsSnapshot: value.constraintsSnapshot,
+      });
     }
   }
 }

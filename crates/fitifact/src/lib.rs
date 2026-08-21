@@ -46,10 +46,11 @@ pub use image::{
 };
 pub use image_adapt::{
     AtomicCancellation, BuiltinImageProvider, CancellationSignal, ImageAdaptExecution,
-    ImageAdaptOperation, ImageAdaptOptions, ImageAdaptPlan, ImageAdaptProvider, ImageAdaptTarget,
-    ImageCropRequirement, ImageExecutionStats, ImageMetadataBehavior, ImagePreservationClaim,
-    ImageProviderOutput, NeverCancelled, NormalizedCropRectangle, execute_image_adaptation,
-    execute_image_adaptation_with_provider, plan_image_adaptation,
+    ImageAdaptOperation, ImageAdaptOptions, ImageAdaptPlan, ImageAdaptProvider,
+    ImageAdaptStepTarget, ImageAdaptTarget, ImageCropRequirement, ImageExecutionStats,
+    ImageMetadataBehavior, ImagePreservationClaim, ImageProviderOutput, NeverCancelled,
+    NormalizedCropRectangle, execute_image_adaptation, execute_image_adaptation_with_provider,
+    plan_image_adaptation,
 };
 pub use inspect::{
     DefaultInspector, FfprobeInspector, Inspector, artifact_from_ffprobe_json, inspect,

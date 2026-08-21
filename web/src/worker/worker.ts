@@ -4,11 +4,17 @@ import type { ErrorReport } from "../types";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
 import { classifyInput } from "./magic";
 import { productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
+import {
+  EncodedResourceLimit,
+  enterWasmWithEncodedLimit,
+  readFileWithinLimit,
+} from "./resource";
+import { StaleConstraints, withMatchingConstraints } from "./snapshot";
 
 type Engine = typeof WasmEngine;
 type StoredSource =
-  | { kind: "bytes"; value: Uint8Array; generation: number }
-  | { kind: "rgba"; value: Uint8Array; width: number; height: number; generation: number };
+  | { kind: "bytes"; value: Uint8Array; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string }
+  | { kind: "rgba"; value: Uint8Array; width: number; height: number; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string };
 interface ImageLimits {
   schema: "fitifact.image-limits/v1";
   max_encoded_bytes: number;
@@ -82,11 +88,61 @@ function requireCurrent(generation: number): StoredSource {
   return source;
 }
 
+function canonicalConstraints(wasm: Engine, constraintsJson: string): string {
+  return JSON.stringify(parseReport(wasm.compile_constraints(constraintsJson)));
+}
+
+function enterSourceWasm<T>(selected: StoredSource, operation: () => T): T {
+  try {
+    return enterWasmWithEncodedLimit(
+      selected.encodedLength,
+      selected.maxEncodedBytes,
+      operation,
+    );
+  } catch (error) {
+    if (error instanceof EncodedResourceLimit) {
+      throw localFailure("INSPECTION_LIMIT", error.message);
+    }
+    throw error;
+  }
+}
+
+function requireConstraintsMatch<T>(stored: string, expected: string, operation: () => T): T {
+  try {
+    return withMatchingConstraints(stored, expected, operation);
+  } catch (error) {
+    if (error instanceof StaleConstraints) throw localFailure("INPUT_INVALID", error.message);
+    throw error;
+  }
+}
+
 async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
   const generation = ++sourceGeneration;
   source = null;
   try {
-    const bytes = new Uint8Array(request.buffer);
+    const wasm = await engine(request.id);
+    if (generation !== sourceGeneration) {
+      throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
+    }
+    const limits = parseReport<ImageLimits>(wasm.image_limits());
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await readFileWithinLimit(request.file, limits.max_encoded_bytes);
+    } catch (error) {
+      if (error instanceof EncodedResourceLimit) {
+        throw localFailure("INSPECTION_LIMIT", error.message);
+      }
+      throw error;
+    }
+    if (generation !== sourceGeneration) {
+      throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
+    }
+    const bytes = new Uint8Array(buffer);
+    const constraintsSnapshot = enterWasmWithEncodedLimit(
+      bytes.byteLength,
+      limits.max_encoded_bytes,
+      () => canonicalConstraints(wasm, request.constraintsJson),
+    );
     const kind = classifyInput(bytes);
     progress(request.id, "Checking the file type", 18);
     if (kind === "unsupported") {
@@ -100,17 +156,6 @@ async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
         throw localFailure(
           "UNSUPPORTED_HEIC",
           "HEIC was detected, but this build has not approved the optional local decoder.",
-        );
-      }
-      const wasm = await engine(request.id);
-      if (generation !== sourceGeneration) {
-        throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
-      }
-      const limits = parseReport<ImageLimits>(wasm.image_limits());
-      if (bytes.byteLength > limits.max_encoded_bytes) {
-        throw localFailure(
-          "INSPECTION_LIMIT",
-          `This file exceeds the ${limits.max_encoded_bytes} byte local input limit.`,
         );
       }
       progress(request.id, "Loading the approved HEIC decoder", 28);
@@ -131,41 +176,63 @@ async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
         width: decoded.width,
         height: decoded.height,
         generation,
+        encodedLength: bytes.byteLength,
+        maxEncodedBytes: limits.max_encoded_bytes,
+        constraintsSnapshot,
       };
     } else {
-      source = { kind: "bytes", value: bytes, generation };
+      source = {
+        kind: "bytes",
+        value: bytes,
+        generation,
+        encodedLength: bytes.byteLength,
+        maxEncodedBytes: limits.max_encoded_bytes,
+        constraintsSnapshot,
+      };
     }
-    return await plan(request.id, request.constraintsJson, generation);
+    return await plan(request.id, constraintsSnapshot, generation, constraintsSnapshot);
   } catch (error) {
     if (sourceGeneration === generation) source = null;
     throw error;
   }
 }
 
-async function plan(id: number, constraintsJson: string, generation = sourceGeneration) {
+async function plan(
+  id: number,
+  constraintsJson: string,
+  generation = sourceGeneration,
+  expectedSnapshot?: string,
+) {
   const selected = requireCurrent(generation);
   const wasm = await engine(id);
   requireCurrent(generation);
+  if (expectedSnapshot !== undefined) {
+    requireConstraintsMatch(selected.constraintsSnapshot, expectedSnapshot, () => undefined);
+  }
+  const constraintsSnapshot = enterSourceWasm(selected, () =>
+    canonicalConstraints(wasm, constraintsJson),
+  );
   progress(id, "Inspecting and planning minimum changes", 55);
   if (selected.kind === "bytes") {
-    const report = parseReport(wasm.plan_bytes(selected.value, constraintsJson));
+    const report = parseReport(enterSourceWasm(selected, () =>
+      wasm.plan_bytes(selected.value, constraintsSnapshot),
+    ));
     requireCurrent(generation);
+    selected.constraintsSnapshot = constraintsSnapshot;
     progress(id, "Plan ready for review", 100);
-    return { report };
+    return { report, constraintsSnapshot };
   }
-  const result = wasm.plan_rgba(
-    selected.value,
-    selected.width,
-    selected.height,
-    constraintsJson,
-  );
+  const result = enterSourceWasm(selected, () => wasm.plan_rgba(
+    selected.value, selected.width, selected.height, constraintsSnapshot,
+  ));
   try {
     const report = parseReport(result.report_json);
     requireCurrent(generation);
     const previewBytes = result.take_preview();
     const preview = previewBytes ? ownedArrayBuffer(previewBytes) : undefined;
+    selected.constraintsSnapshot = constraintsSnapshot;
     progress(id, "Plan ready for review", 100);
-    return { report, preview };
+    return { report, preview, constraintsSnapshot };
   } finally {
     result.free();
   }
@@ -176,18 +243,22 @@ async function adapt(request: Extract<WorkerRequest, { type: "adapt" }>) {
   const selected = requireCurrent(generation);
   const wasm = await engine(request.id);
   requireCurrent(generation);
+  const constraintsSnapshot = enterSourceWasm(selected, () =>
+    canonicalConstraints(wasm, request.constraintsJson),
+  );
+  requireConstraintsMatch(selected.constraintsSnapshot, constraintsSnapshot, () => undefined);
   const options = JSON.stringify({ crop: request.crop, crop_consent: request.crop !== null });
   progress(request.id, "Applying the approved plan locally", 40);
   const result =
     selected.kind === "bytes"
-      ? wasm.adapt_bytes(selected.value, request.constraintsJson, options)
-      : wasm.adapt_rgba(
+      ? enterSourceWasm(selected, () => wasm.adapt_bytes(selected.value, constraintsSnapshot, options))
+      : enterSourceWasm(selected, () => wasm.adapt_rgba(
           selected.value,
           selected.width,
           selected.height,
-          request.constraintsJson,
+          constraintsSnapshot,
           options,
-        );
+        ));
   try {
     const report = parseReport(result.report_json);
     requireCurrent(generation);
@@ -210,12 +281,22 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         progress(request.id, "Reading the requirement", 55);
         const report = parseReport(wasm.compile_requirements(request.requirements));
         post({ id: request.id, type: "result", report });
+      } else if (request.type === "compile_constraints") {
+        const wasm = await engine(request.id);
+        progress(request.id, "Checking the edited target", 55);
+        const report = parseReport(wasm.compile_constraints(request.constraintsJson));
+        post({ id: request.id, type: "result", report });
       } else if (request.type === "analyze") {
         const result = await analyze(request);
         const transfers = result.preview ? [result.preview] : [];
         post({ id: request.id, type: "result", ...result }, transfers);
       } else if (request.type === "replan") {
-        const result = await plan(request.id, request.constraintsJson);
+        const result = await plan(
+          request.id,
+          request.constraintsJson,
+          sourceGeneration,
+          request.previousConstraintsJson,
+        );
         const transfers = result.preview ? [result.preview] : [];
         post({ id: request.id, type: "result", ...result }, transfers);
       } else {

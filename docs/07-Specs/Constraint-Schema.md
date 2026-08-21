@@ -71,3 +71,9 @@ dimension constraints remain check-only. D-026 image adaptation executes byte
 fitting and image dimension `eq`/`gte`/`lte` targets through its typed image
 plan, then re-inspects and validates the result. Contradictory ranges and
 recognizable malformed numeric requirements are rejected before planning.
+
+The consumer review surface round-trips the complete supported normalized
+intersection: all allowed JPEG/PNG alternatives, exact/minimum/maximum bounds
+for each image axis, and the strictest byte ceiling. It refuses an unsupported
+normalized field/operator instead of silently narrowing alternatives or
+dropping a bound.

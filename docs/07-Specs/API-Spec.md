@@ -56,6 +56,12 @@ adaptation follows inspect → check → plan → execute → re-inspect → val
 `ImageAdaptOptions` accepts only a normalized crop rectangle and explicit crop
 consent. Errors use `fitifact.error/v1`.
 
+Image reports contain a `fitifact.image-adapt-plan/v1` execution envelope. Its
+`plan` member is a canonical, directly deserializable `fitifact.plan/v1` with
+a typed `image.adapt` step; legacy media plan JSON is unchanged. The browser
+worker clones `File`, loads core-owned limits before reading it, and rechecks
+encoded length before each WASM planning/adaptation entry.
+
 ## Hosted REST sketch — deferred
 
 ### `POST /v1/uploads`

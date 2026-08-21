@@ -1576,6 +1576,7 @@ mod tests {
                     container: None,
                     video_codec: None,
                     image_format: Some(crate::artifact::ImageFormat::Jpeg),
+                    image: None,
                 },
                 reasons: Vec::new(),
                 expected: Vec::new(),

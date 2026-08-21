@@ -30,6 +30,30 @@ fn requirements_compile_to_the_core_contract() {
 }
 
 #[test]
+fn complete_consumer_intersection_crosses_the_wasm_contract() {
+    let report = parse(&compile_requirements(
+        "JPEG or PNG, min 640 x 480, max 1920 x 1080, max 2 MB",
+    ));
+    let hard = report["constraints"]["hard"].as_array().unwrap();
+    assert_eq!(hard.len(), 6);
+    assert!(hard.iter().any(|constraint| {
+        constraint["field"] == "image.format"
+            && constraint["value"] == serde_json::json!(["jpeg", "png"])
+    }));
+    for (field, op, value) in [
+        ("image.width", "gte", 640),
+        ("image.height", "gte", 480),
+        ("image.width", "lte", 1920),
+        ("image.height", "lte", 1080),
+        ("file.bytes", "lte", 2_000_000),
+    ] {
+        assert!(hard.iter().any(|constraint| {
+            constraint["field"] == field && constraint["op"] == op && constraint["value"] == value
+        }));
+    }
+}
+
+#[test]
 fn browser_resource_limits_are_derived_from_the_core() {
     let limits = parse(&image_limits());
     assert_eq!(limits["schema"], "fitifact.image-limits/v1");
@@ -52,6 +76,12 @@ fn custom_constraints_drive_inspect_plan_adapt_and_validate() {
     let target = constraints("jpeg", 8, 4);
     let planned = parse(&plan_bytes(&source, &target));
     assert_eq!(planned["schema"], "fitifact.web-plan/v1");
+    assert_eq!(planned["plan"]["schema"], "fitifact.image-adapt-plan/v1");
+    assert_eq!(planned["plan"]["plan"]["schema"], "fitifact.plan/v1");
+    assert_eq!(
+        planned["plan"]["plan"]["steps"][0]["operation"],
+        "image.adapt"
+    );
     assert_eq!(planned["inspection"]["image"]["format"], "png");
     assert_eq!(planned["report"]["compatible"], false);
     assert_eq!(planned["plan"]["target"]["width"], 8);

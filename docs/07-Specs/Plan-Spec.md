@@ -82,7 +82,48 @@ remain future reproducibility work and are not claimed by v0.1.
 
 ## D-026 typed image plan
 
-Image planning returns one typed `image.adapt` target with source/target format
+Image execution uses the distinct `fitifact.image-adapt-plan/v1` envelope. Its
+required `plan` member is the same deserializable `fitifact.plan/v1` shape used
+by media planning, with an additive typed `image.adapt` step. The distinct
+outer discriminator holds execution-specific source, crop, fitting, and no-op
+fields without assigning an incompatible shape to `fitifact.plan/v1`. This
+abridged excerpt shows the discriminator and embedded canonical plan:
+
+```yaml
+schema: fitifact.image-adapt-plan/v1
+plan:
+  schema: fitifact.plan/v1
+  planner_version: 0.1.0
+  steps:
+    - id: step-1
+      operation: image.adapt
+      target:
+        image:
+          noop: false
+          source_format: png
+          source_width: 1200
+          source_height: 630
+          output:
+            format: jpeg
+            width: 1200
+            height: 630
+      reasons:
+        - constraint_id: image-format
+          message: The image output must satisfy image.format.
+      expected:
+        - field: image.format
+          value: jpeg
+        - field: image.width
+          value: 1200
+        - field: image.height
+          value: 630
+      preservation: [image_dimensions]
+      warnings: []
+  preserved: [image_dimensions]
+  warnings: []
+```
+
+The envelope returns one typed `image.adapt` target with source/target format
 and dimensions, optional `max_bytes`, preservation claims, metadata behavior,
 quality/upscale warnings, proportional-reduction permission, and a crop object
 that states whether explicit consent is required. It is not provider argv and

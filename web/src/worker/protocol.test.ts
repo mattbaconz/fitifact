@@ -35,12 +35,13 @@ describe("worker protocol", () => {
     expect(isWorkerResponse({ id: 1, type: "unknown" })).toBe(false);
   });
 
-  it("transfers the source buffer and resolves the real response envelope", async () => {
+  it("clones the File into the worker without allocating it on the main thread", async () => {
     const fake = new FakeWorker();
     const client = new ImageWorkerClient(() => fake);
-    const buffer = new ArrayBuffer(8);
-    const pending = client.analyze<{ schema: string }>("photo.png", buffer, "{}", () => undefined);
-    expect(fake.messages[0].transfer).toEqual([buffer]);
+    const file = new File([new Uint8Array(8)], "photo.png", { type: "image/png" });
+    const pending = client.analyze<{ schema: string }>(file, "{}", () => undefined);
+    expect(fake.messages[0].request).toMatchObject({ type: "analyze", file });
+    expect(fake.messages[0].transfer).toEqual([]);
     const id = fake.messages[0].request.id;
     const preview = new ArrayBuffer(4);
     fake.respond({ id, type: "result", report: { schema: "fitifact.web-plan/v1" }, preview });
@@ -48,6 +49,7 @@ describe("worker protocol", () => {
       report: { schema: "fitifact.web-plan/v1" },
       output: undefined,
       preview,
+      constraintsSnapshot: undefined,
     });
   });
 

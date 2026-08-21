@@ -36,6 +36,33 @@ fn plan_for(bytes: &[u8], target: &ConstraintSet) -> fitifact::ImageAdaptPlan {
 }
 
 #[test]
+fn image_envelope_embeds_a_deserializable_canonical_plan_v1() {
+    let source = fitifact::sample_png_rgb(16, 8);
+    let plan = plan_for(&source, &format_target("jpeg"));
+    let value = serde_json::to_value(&plan).unwrap();
+    assert_eq!(value["schema"], "fitifact.image-adapt-plan/v1");
+    assert_eq!(value["plan"]["schema"], "fitifact.plan/v1");
+    assert_eq!(value["plan"]["steps"][0]["operation"], "image.adapt");
+    assert_eq!(
+        value["plan"]["steps"][0]["target"]["image"]["source_format"],
+        "png"
+    );
+    assert_eq!(
+        value["plan"]["steps"][0]["target"]["image"]["output"]["format"],
+        "jpeg"
+    );
+
+    let canonical: fitifact::Plan = serde_json::from_value(value["plan"].clone()).unwrap();
+    assert_eq!(
+        canonical.steps[0].operation,
+        fitifact::TransformId::ImageAdapt
+    );
+    assert!(canonical.steps[0].target.image.is_some());
+    let round_trip: fitifact::ImageAdaptPlan = serde_json::from_value(value).unwrap();
+    assert_eq!(round_trip, plan);
+}
+
+#[test]
 fn compatible_jpeg_is_a_true_noop() {
     let input = sample_jpeg_rgb(32, 24);
     let target = format_target("jpeg");

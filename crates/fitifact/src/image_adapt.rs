@@ -11,14 +11,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapt::AdaptationStatus;
 use crate::artifact::{Artifact, Family, ImageFormat};
+use crate::capability::TransformId;
 use crate::check::{CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field, Operator};
+use crate::contract::ImageAdaptPlanSchema;
 use crate::error::{Error, ErrorCode, Result};
 use crate::image::{
     artifact_from_bytes, contains_image_metadata, decode_oriented, enforce_decoded_limit,
     jpeg_is_multi_image,
 };
-use crate::plan::PlanSchema;
+use crate::plan::{
+    ExpectedFact, ExpectedValue, PLANNER_VERSION, Plan, PlanReason, PlanStep, PreservationClaim,
+    StepTarget,
+};
 
 const MAX_JPEG_ENCODINGS: u8 = 7;
 const MAX_DIMENSION_REDUCTIONS: u8 = 3;
@@ -68,8 +73,18 @@ pub struct ImageAdaptTarget {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageAdaptStepTarget {
+    pub noop: bool,
+    pub source_format: ImageFormat,
+    pub source_width: u32,
+    pub source_height: u32,
+    pub output: ImageAdaptTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageAdaptPlan {
-    pub schema: PlanSchema,
+    pub schema: ImageAdaptPlanSchema,
+    pub plan: Plan,
     pub operation: ImageAdaptOperation,
     pub noop: bool,
     pub source_format: ImageFormat,
@@ -316,30 +331,86 @@ pub fn plan_image_adaptation(
         warnings.push("Cropping requires an explicit crop rectangle and consent.".into());
     }
 
+    let target = ImageAdaptTarget {
+        format: target_format.clone(),
+        width: target_width,
+        height: target_height,
+        max_bytes,
+        preservation,
+        metadata,
+        quality_warnings,
+        upscale_warnings,
+        crop: ImageCropRequirement {
+            required: crop_required,
+            explicit_consent_required: crop_required,
+            target_aspect_width: target_width,
+            target_aspect_height: target_height,
+        },
+        proportional_reduction_allowed,
+    };
+    let canonical_preserved = target
+        .preservation
+        .contains(&ImagePreservationClaim::Dimensions)
+        .then_some(PreservationClaim::ImageDimensions)
+        .into_iter()
+        .collect::<Vec<_>>();
+    let canonical_plan = Plan {
+        schema: crate::contract::PlanSchema,
+        planner_version: PLANNER_VERSION.into(),
+        steps: vec![PlanStep {
+            id: "step-1".into(),
+            operation: TransformId::ImageAdapt,
+            target: StepTarget {
+                image: Some(ImageAdaptStepTarget {
+                    noop,
+                    source_format: source_format.clone(),
+                    source_width,
+                    source_height,
+                    output: target.clone(),
+                }),
+                ..StepTarget::default()
+            },
+            reasons: constraints
+                .hard
+                .iter()
+                .map(|constraint| PlanReason {
+                    constraint_id: constraint.id.clone(),
+                    message: format!(
+                        "The image output must satisfy {}.",
+                        constraint.field.as_str()
+                    ),
+                })
+                .collect(),
+            expected: vec![
+                ExpectedFact {
+                    field: Field::ImageFormat,
+                    value: ExpectedValue::Text(target_format.as_str().into()),
+                },
+                ExpectedFact {
+                    field: Field::ImageWidth,
+                    value: ExpectedValue::Integer(u64::from(target_width)),
+                },
+                ExpectedFact {
+                    field: Field::ImageHeight,
+                    value: ExpectedValue::Integer(u64::from(target_height)),
+                },
+            ],
+            preservation: canonical_preserved.clone(),
+            warnings: warnings.clone(),
+        }],
+        preserved: canonical_preserved,
+        warnings: warnings.clone(),
+    };
+
     Ok(ImageAdaptPlan {
-        schema: PlanSchema,
+        schema: ImageAdaptPlanSchema,
+        plan: canonical_plan,
         operation: ImageAdaptOperation::ImageAdapt,
         noop,
         source_format,
         source_width,
         source_height,
-        target: ImageAdaptTarget {
-            format: target_format,
-            width: target_width,
-            height: target_height,
-            max_bytes,
-            preservation,
-            metadata,
-            quality_warnings,
-            upscale_warnings,
-            crop: ImageCropRequirement {
-                required: crop_required,
-                explicit_consent_required: crop_required,
-                target_aspect_width: target_width,
-                target_aspect_height: target_height,
-            },
-            proportional_reduction_allowed,
-        },
+        target,
         warnings,
     })
 }
