@@ -8,7 +8,7 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: string; percent: number }
-  | { id: number; type: "result"; report: unknown; output?: ArrayBuffer }
+  | { id: number; type: "result"; report: unknown; output?: ArrayBuffer; preview?: ArrayBuffer }
   | { id: number; type: "failure"; state: ProductState; report: ErrorReport };
 
 export function productStateForError(report: Pick<ErrorReport, "code">): ProductState {

@@ -1,4 +1,4 @@
-+# Third-party notices
+# Third-party notices
 
 ## Optional HEIC decoder
 
@@ -14,4 +14,3 @@ libheif, only after local HEIF magic detection and only when the build-time
   `node_modules/libheif-js` for the exact installed artifact.
 
 Fitifact does not load this optional decoder when the gate is absent and never fetches it from a CDN.
-

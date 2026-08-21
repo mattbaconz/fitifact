@@ -19,6 +19,11 @@ pub struct AdaptJs {
     pub output: Option<Vec<u8>>,
 }
 
+pub struct RgbaPlanJs {
+    pub report_json: String,
+    pub preview: Option<Vec<u8>>,
+}
+
 fn json_error(error: fitifact::Error) -> String {
     serde_json::to_string(&ErrorEnvelope::from(error)).expect("error envelope serializes")
 }
@@ -41,6 +46,15 @@ pub fn compile_constraints(constraints_json: &str) -> String {
         }
         Err(error) => json_error(error),
     }
+}
+
+pub fn image_limits() -> String {
+    serde_json::json!({
+        "schema": "fitifact.image-limits/v1",
+        "max_encoded_bytes": fitifact::MAX_IMAGE_INPUT_BYTES,
+        "max_decoded_pixels": fitifact::MAX_IMAGE_PIXELS,
+    })
+    .to_string()
 }
 
 pub fn inspect_bytes(bytes: &[u8]) -> String {
@@ -114,7 +128,17 @@ pub fn adapt_rgba(
     options_json: &str,
 ) -> AdaptJs {
     match rgba_as_png(rgba, width, height) {
-        Ok(bytes) => adapt_bytes(&bytes, constraints_json, options_json),
+        Ok(bytes) => {
+            let mut adapted = adapt_bytes(&bytes, constraints_json, options_json);
+            let compatible = serde_json::from_str::<serde_json::Value>(&adapted.report_json)
+                .ok()
+                .and_then(|report| report.get("status").cloned())
+                .is_some_and(|status| status == "compatible");
+            if compatible && adapted.output.is_none() {
+                adapted.output = Some(bytes);
+            }
+            adapted
+        }
         Err(error) => AdaptJs {
             report_json: json_error(error),
             output: None,
@@ -122,10 +146,23 @@ pub fn adapt_rgba(
     }
 }
 
-pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -> String {
+pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -> RgbaPlanJs {
     match rgba_as_png(rgba, width, height) {
-        Ok(bytes) => plan_bytes(&bytes, constraints_json),
-        Err(error) => json_error(error),
+        Ok(bytes) => {
+            let report_json = plan_bytes(&bytes, constraints_json);
+            let failed = serde_json::from_str::<serde_json::Value>(&report_json)
+                .ok()
+                .and_then(|report| report.get("schema").cloned())
+                .is_some_and(|schema| schema == "fitifact.error/v1");
+            RgbaPlanJs {
+                report_json,
+                preview: (!failed).then_some(bytes),
+            }
+        }
+        Err(error) => RgbaPlanJs {
+            report_json: json_error(error),
+            preview: None,
+        },
     }
 }
 
@@ -174,7 +211,7 @@ fn rgba_as_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, fitifact
 
 #[cfg(target_arch = "wasm32")]
 mod wasm_exports {
-    use super::AdaptJs as NativeAdapt;
+    use super::{AdaptJs as NativeAdapt, RgbaPlanJs as NativeRgbaPlan};
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen]
@@ -185,6 +222,11 @@ mod wasm_exports {
     #[wasm_bindgen]
     pub fn compile_constraints(constraints_json: &str) -> String {
         super::compile_constraints(constraints_json)
+    }
+
+    #[wasm_bindgen]
+    pub fn image_limits() -> String {
+        super::image_limits()
     }
 
     #[wasm_bindgen]
@@ -203,8 +245,35 @@ mod wasm_exports {
     }
 
     #[wasm_bindgen]
-    pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -> String {
-        super::plan_rgba(rgba, width, height, constraints_json)
+    pub struct RgbaPlanJs {
+        report_json: String,
+        preview: Option<Vec<u8>>,
+    }
+
+    #[wasm_bindgen]
+    impl RgbaPlanJs {
+        #[wasm_bindgen(getter)]
+        pub fn report_json(&self) -> String {
+            self.report_json.clone()
+        }
+
+        pub fn take_preview(&mut self) -> Option<Vec<u8>> {
+            self.preview.take()
+        }
+    }
+
+    impl From<NativeRgbaPlan> for RgbaPlanJs {
+        fn from(value: NativeRgbaPlan) -> Self {
+            Self {
+                report_json: value.report_json,
+                preview: value.preview,
+            }
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -> RgbaPlanJs {
+        super::plan_rgba(rgba, width, height, constraints_json).into()
     }
 
     #[wasm_bindgen]

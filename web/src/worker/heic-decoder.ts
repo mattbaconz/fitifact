@@ -19,33 +19,69 @@ interface LibHeif {
   HeifDecoder: new () => { decode(bytes: Uint8Array): HeifImage[] };
 }
 
-const MAX_PIXELS = 24_000_000;
+export class HeicDecodeFailure extends Error {
+  constructor(
+    readonly code: "INSPECTION_LIMIT" | "INSPECTION_UNSUPPORTED" | "EXECUTION_FAILED",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
-export async function decodeSingleHeic(bytes: Uint8Array): Promise<DecodedHeic> {
+export function decodedRgbaLength(width: number, height: number, maxPixels: number): number {
+  const pixels = width * height;
+  if (!Number.isSafeInteger(pixels) || width < 1 || height < 1 || pixels > maxPixels) {
+    throw new HeicDecodeFailure(
+      "INSPECTION_LIMIT",
+      `This HEIC exceeds the ${maxPixels.toLocaleString("en-US")} pixel local processing limit.`,
+    );
+  }
+  return pixels * 4;
+}
+
+export async function decodeSingleHeic(
+  bytes: Uint8Array,
+  maxDecodedPixels: number,
+): Promise<DecodedHeic> {
   const imported = await import("libheif-js/wasm-bundle");
   const libheif = (imported.default ?? imported) as LibHeif;
   if (typeof libheif.HeifDecoder !== "function") {
-    throw new Error("The approved HEIC decoder build could not be initialized.");
+    throw new HeicDecodeFailure(
+      "EXECUTION_FAILED",
+      "The approved HEIC decoder build could not be initialized.",
+    );
   }
   const images = new libheif.HeifDecoder().decode(bytes);
   if (images.length !== 1) {
     for (const image of images) image.free?.();
-    throw new Error("Animated or multi-image HEIC files are not supported.");
+    throw new HeicDecodeFailure(
+      "INSPECTION_UNSUPPORTED",
+      "Animated or multi-image HEIC files are not supported.",
+    );
   }
   const image = images[0];
   const width = image.get_width();
   const height = image.get_height();
-  const pixels = width * height;
-  if (!Number.isSafeInteger(pixels) || width < 1 || height < 1 || pixels > MAX_PIXELS) {
+  let rgbaLength: number;
+  try {
+    rgbaLength = decodedRgbaLength(width, height, maxDecodedPixels);
+  } catch (error) {
     image.free?.();
-    throw new Error("This HEIC exceeds the 24 megapixel local processing limit.");
+    throw error;
   }
-  const data = new Uint8ClampedArray(pixels * 4);
+  const data = new Uint8ClampedArray(rgbaLength);
   try {
     await new Promise<void>((resolve, reject) => {
       image.display({ data, width, height }, (displayed) => {
         if (displayed) resolve();
-        else reject(new Error("The HEIC decoder could not produce pixels."));
+        else {
+          reject(
+            new HeicDecodeFailure(
+              "EXECUTION_FAILED",
+              "The HEIC decoder could not produce pixels.",
+            ),
+          );
+        }
       });
     });
   } finally {

@@ -4,6 +4,7 @@ import { isWorkerResponse, type WorkerRequest, type WorkerResponse } from "./pro
 export interface WorkerResult<T> {
   report: T;
   output?: ArrayBuffer;
+  preview?: ArrayBuffer;
 }
 
 export interface ProgressUpdate {
@@ -145,7 +146,7 @@ export class ImageWorkerClient {
     if (value.type === "failure") {
       pending.reject(new WorkerFailure(value.state, value.report));
     } else {
-      pending.resolve({ report: value.report, output: value.output });
+      pending.resolve({ report: value.report, output: value.output, preview: value.preview });
     }
   }
 }

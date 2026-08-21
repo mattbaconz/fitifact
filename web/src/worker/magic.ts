@@ -1,6 +1,6 @@
 export type InputKind = "jpeg" | "png" | "heic" | "unsupported";
 
-const HEIF_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1"]);
+const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
 
 export function classifyInput(bytes: Uint8Array): InputKind {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
@@ -19,10 +19,12 @@ export function classifyInput(bytes: Uint8Array): InputKind {
   ) {
     return "png";
   }
-  if (bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp") {
-    const brandEnd = Math.min(bytes.length, 32);
-    for (let offset = 8; offset + 4 <= brandEnd; offset += 4) {
-      if (HEIF_BRANDS.has(ascii(bytes, offset, offset + 4))) return "heic";
+  if (bytes.length >= 16 && ascii(bytes, 4, 8) === "ftyp") {
+    const boxSize = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0);
+    if (boxSize < 16 || boxSize > bytes.length) return "unsupported";
+    if (HEIC_BRANDS.has(ascii(bytes, 8, 12))) return "heic";
+    for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
+      if (HEIC_BRANDS.has(ascii(bytes, offset, offset + 4))) return "heic";
     }
   }
   return "unsupported";

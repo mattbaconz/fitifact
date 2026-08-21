@@ -1,6 +1,6 @@
 use fitifact_wasm::{
-    adapt_bytes, adapt_rgba, compile_constraints, compile_requirements, inspect_bytes, plan_bytes,
-    plan_rgba, sample_jpeg_rgb, sample_png_rgb, validate_bytes,
+    adapt_bytes, adapt_rgba, compile_constraints, compile_requirements, image_limits,
+    inspect_bytes, plan_bytes, plan_rgba, sample_jpeg_rgb, sample_png_rgb, validate_bytes,
 };
 
 fn parse(json: &str) -> serde_json::Value {
@@ -27,6 +27,14 @@ fn requirements_compile_to_the_core_contract() {
     assert_eq!(report["constraints"]["schema"], "fitifact.constraints/v1");
     assert_eq!(report["constraints"]["hard"].as_array().unwrap().len(), 4);
     assert!(report["ambiguities"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn browser_resource_limits_are_derived_from_the_core() {
+    let limits = parse(&image_limits());
+    assert_eq!(limits["schema"], "fitifact.image-limits/v1");
+    assert_eq!(limits["max_encoded_bytes"], fitifact::MAX_IMAGE_INPUT_BYTES);
+    assert_eq!(limits["max_decoded_pixels"], fitifact::MAX_IMAGE_PIXELS);
 }
 
 #[test]
@@ -89,9 +97,12 @@ fn changed_aspect_requires_explicit_crop_rectangle_and_consent() {
 fn decoded_rgba_uses_the_same_plan_execute_and_validation_contract() {
     let rgba = [255_u8, 0, 0, 255, 0, 255, 0, 255];
     let target = constraints("png", 2, 1);
-    let planned = parse(&plan_rgba(&rgba, 2, 1, &target));
+    let planned_rgba = plan_rgba(&rgba, 2, 1, &target);
+    let planned = parse(&planned_rgba.report_json);
     assert_eq!(planned["schema"], "fitifact.web-plan/v1");
     assert_eq!(planned["report"]["compatible"], true);
+    let preview = planned_rgba.preview.expect("encoded PNG preview");
+    assert_eq!(&preview[..8], b"\x89PNG\r\n\x1a\n");
     let adapted = adapt_rgba(
         &rgba,
         2,
@@ -101,7 +112,11 @@ fn decoded_rgba_uses_the_same_plan_execute_and_validation_contract() {
     );
     let report = parse(&adapted.report_json);
     assert_eq!(report["status"], "compatible");
-    assert!(adapted.output.is_none());
+    let output = adapted
+        .output
+        .expect("compatible RGBA still returns encoded bytes");
+    assert_eq!(&output[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(parse(&validate_bytes(&output, &target))["compatible"], true);
     assert_eq!(report["output_artifact"]["image"]["format"], "png");
 }
 

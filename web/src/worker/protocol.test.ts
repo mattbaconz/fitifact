@@ -42,8 +42,13 @@ describe("worker protocol", () => {
     const pending = client.analyze<{ schema: string }>("photo.png", buffer, "{}", () => undefined);
     expect(fake.messages[0].transfer).toEqual([buffer]);
     const id = fake.messages[0].request.id;
-    fake.respond({ id, type: "result", report: { schema: "fitifact.web-plan/v1" } });
-    await expect(pending).resolves.toEqual({ report: { schema: "fitifact.web-plan/v1" }, output: undefined });
+    const preview = new ArrayBuffer(4);
+    fake.respond({ id, type: "result", report: { schema: "fitifact.web-plan/v1" }, preview });
+    await expect(pending).resolves.toEqual({
+      report: { schema: "fitifact.web-plan/v1" },
+      output: undefined,
+      preview,
+    });
   });
 
   it("terminates work and rejects outstanding operations on cancellation", async () => {

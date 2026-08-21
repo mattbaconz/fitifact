@@ -7,13 +7,18 @@ import { productStateForError, type WorkerRequest, type WorkerResponse } from ".
 
 type Engine = typeof WasmEngine;
 type StoredSource =
-  | { kind: "bytes"; value: Uint8Array }
-  | { kind: "rgba"; value: Uint8Array; width: number; height: number };
+  | { kind: "bytes"; value: Uint8Array; generation: number }
+  | { kind: "rgba"; value: Uint8Array; width: number; height: number; generation: number };
+interface ImageLimits {
+  schema: "fitifact.image-limits/v1";
+  max_encoded_bytes: number;
+  max_decoded_pixels: number;
+}
 
 const scope: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
-const MAX_INPUT_BYTES = 32 * 1024 * 1024;
 let enginePromise: Promise<Engine> | null = null;
 let source: StoredSource | null = null;
+let sourceGeneration = 0;
 
 class EngineFailure extends Error {
   constructor(readonly report: ErrorReport) {
@@ -57,83 +62,140 @@ function localFailure(code: string, message: string): EngineFailure {
   return new EngineFailure({ schema: "fitifact.error/v1", code, message, details: {} });
 }
 
-async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
-  const bytes = new Uint8Array(request.buffer);
-  if (bytes.byteLength > MAX_INPUT_BYTES) {
-    throw localFailure("INSPECTION_LIMIT", "This file exceeds the 32 MiB local input limit.");
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  if (
+    bytes.buffer instanceof ArrayBuffer &&
+    bytes.byteOffset === 0 &&
+    bytes.byteLength === bytes.buffer.byteLength
+  ) {
+    return bytes.buffer;
   }
-  const kind = classifyInput(bytes);
-  progress(request.id, "Checking the file type", 18);
-  if (kind === "unsupported") {
-    throw localFailure(
-      "INSPECTION_UNSUPPORTED",
-      "This file is not a supported JPEG or PNG. SVG and HTML are never rendered.",
-    );
-  }
-  if (kind === "heic") {
-    if (!__FITIFACT_HEIC_APPROVED__) {
-      throw localFailure(
-        "UNSUPPORTED_HEIC",
-        "HEIC was detected, but this build has not approved the optional local decoder.",
-      );
-    }
-    progress(request.id, "Loading the approved HEIC decoder", 28);
-    const { decodeSingleHeic } = await import("./heic-decoder");
-    const decoded = await decodeSingleHeic(bytes);
-    source = { kind: "rgba", value: decoded.rgba, width: decoded.width, height: decoded.height };
-  } else {
-    source = { kind: "bytes", value: bytes };
-  }
-  return plan(request.id, request.constraintsJson);
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  return owned.buffer;
 }
 
-async function plan(id: number, constraintsJson: string): Promise<unknown> {
-  if (!source) throw localFailure("INPUT_INVALID", "Choose an image before planning.");
+function requireCurrent(generation: number): StoredSource {
+  if (!source || sourceGeneration !== generation || source.generation !== generation) {
+    throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
+  }
+  return source;
+}
+
+async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+  const generation = ++sourceGeneration;
+  source = null;
+  try {
+    const bytes = new Uint8Array(request.buffer);
+    const kind = classifyInput(bytes);
+    progress(request.id, "Checking the file type", 18);
+    if (kind === "unsupported") {
+      throw localFailure(
+        "INSPECTION_UNSUPPORTED",
+        "This file is not a supported JPEG or PNG. SVG and HTML are never rendered.",
+      );
+    }
+    if (kind === "heic") {
+      if (!__FITIFACT_HEIC_APPROVED__) {
+        throw localFailure(
+          "UNSUPPORTED_HEIC",
+          "HEIC was detected, but this build has not approved the optional local decoder.",
+        );
+      }
+      const wasm = await engine(request.id);
+      if (generation !== sourceGeneration) {
+        throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
+      }
+      const limits = parseReport<ImageLimits>(wasm.image_limits());
+      if (bytes.byteLength > limits.max_encoded_bytes) {
+        throw localFailure(
+          "INSPECTION_LIMIT",
+          `This file exceeds the ${limits.max_encoded_bytes} byte local input limit.`,
+        );
+      }
+      progress(request.id, "Loading the approved HEIC decoder", 28);
+      const { decodeSingleHeic, HeicDecodeFailure } = await import("./heic-decoder");
+      let decoded;
+      try {
+        decoded = await decodeSingleHeic(bytes, limits.max_decoded_pixels);
+      } catch (error) {
+        if (error instanceof HeicDecodeFailure) throw localFailure(error.code, error.message);
+        throw error;
+      }
+      if (generation !== sourceGeneration) {
+        throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
+      }
+      source = {
+        kind: "rgba",
+        value: decoded.rgba,
+        width: decoded.width,
+        height: decoded.height,
+        generation,
+      };
+    } else {
+      source = { kind: "bytes", value: bytes, generation };
+    }
+    return await plan(request.id, request.constraintsJson, generation);
+  } catch (error) {
+    if (sourceGeneration === generation) source = null;
+    throw error;
+  }
+}
+
+async function plan(id: number, constraintsJson: string, generation = sourceGeneration) {
+  const selected = requireCurrent(generation);
   const wasm = await engine(id);
+  requireCurrent(generation);
   progress(id, "Inspecting and planning minimum changes", 55);
-  const json =
-    source.kind === "bytes"
-      ? wasm.plan_bytes(source.value, constraintsJson)
-      : wasm.plan_rgba(source.value, source.width, source.height, constraintsJson);
-  const report = parseReport(json);
-  progress(id, "Plan ready for review", 100);
-  return report;
+  if (selected.kind === "bytes") {
+    const report = parseReport(wasm.plan_bytes(selected.value, constraintsJson));
+    requireCurrent(generation);
+    progress(id, "Plan ready for review", 100);
+    return { report };
+  }
+  const result = wasm.plan_rgba(
+    selected.value,
+    selected.width,
+    selected.height,
+    constraintsJson,
+  );
+  try {
+    const report = parseReport(result.report_json);
+    requireCurrent(generation);
+    const previewBytes = result.take_preview();
+    const preview = previewBytes ? ownedArrayBuffer(previewBytes) : undefined;
+    progress(id, "Plan ready for review", 100);
+    return { report, preview };
+  } finally {
+    result.free();
+  }
 }
 
 async function adapt(request: Extract<WorkerRequest, { type: "adapt" }>) {
-  if (!source) throw localFailure("INPUT_INVALID", "Choose an image before adapting.");
+  const generation = sourceGeneration;
+  const selected = requireCurrent(generation);
   const wasm = await engine(request.id);
+  requireCurrent(generation);
   const options = JSON.stringify({ crop: request.crop, crop_consent: request.crop !== null });
   progress(request.id, "Applying the approved plan locally", 40);
   const result =
-    source.kind === "bytes"
-      ? wasm.adapt_bytes(source.value, request.constraintsJson, options)
+    selected.kind === "bytes"
+      ? wasm.adapt_bytes(selected.value, request.constraintsJson, options)
       : wasm.adapt_rgba(
-          source.value,
-          source.width,
-          source.height,
+          selected.value,
+          selected.width,
+          selected.height,
           request.constraintsJson,
           options,
         );
   try {
     const report = parseReport(result.report_json);
+    requireCurrent(generation);
     progress(request.id, "Validating every requirement", 82);
     const output = result.take_output();
     progress(request.id, "Validation complete", 100);
     if (!output) return { report };
-    let buffer: ArrayBuffer;
-    if (
-      output.buffer instanceof ArrayBuffer &&
-      output.byteOffset === 0 &&
-      output.byteLength === output.buffer.byteLength
-    ) {
-      buffer = output.buffer;
-    } else {
-      const owned = new Uint8Array(output.byteLength);
-      owned.set(output);
-      buffer = owned.buffer;
-    }
-    return { report, output: buffer };
+    return { report, output: ownedArrayBuffer(output) };
   } finally {
     result.free();
   }
@@ -149,9 +211,13 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         const report = parseReport(wasm.compile_requirements(request.requirements));
         post({ id: request.id, type: "result", report });
       } else if (request.type === "analyze") {
-        post({ id: request.id, type: "result", report: await analyze(request) });
+        const result = await analyze(request);
+        const transfers = result.preview ? [result.preview] : [];
+        post({ id: request.id, type: "result", ...result }, transfers);
       } else if (request.type === "replan") {
-        post({ id: request.id, type: "result", report: await plan(request.id, request.constraintsJson) });
+        const result = await plan(request.id, request.constraintsJson);
+        const transfers = result.preview ? [result.preview] : [];
+        post({ id: request.id, type: "result", ...result }, transfers);
       } else {
         const result = await adapt(request);
         if ("output" in result && result.output) {

@@ -15,7 +15,22 @@ describe("local magic detection", () => {
     expect(classifyInput(heic)).toBe("heic");
     const avif = heic.slice();
     avif.set(new TextEncoder().encode("avif"), 8);
+    avif.set(new TextEncoder().encode("mif1"), 16);
     expect(classifyInput(avif)).toBe("unsupported");
+    const genericHeif = heic.slice();
+    genericHeif.set(new TextEncoder().encode("mif1"), 8);
+    genericHeif.set(new TextEncoder().encode("msf1"), 16);
+    expect(classifyInput(genericHeif)).toBe("unsupported");
+    const heicCompatible = avif.slice();
+    heicCompatible.set(new TextEncoder().encode("heix"), 20);
+    expect(classifyInput(heicCompatible)).toBe("heic");
+  });
+
+  it("requires a complete bounded ftyp box", () => {
+    const truncated = new Uint8Array(16);
+    truncated.set([0, 0, 0, 24], 0);
+    truncated.set(new TextEncoder().encode("ftypheic"), 4);
+    expect(classifyInput(truncated)).toBe("unsupported");
   });
 
   it("never promotes SVG or HTML text into a renderable type", () => {

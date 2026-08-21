@@ -30,17 +30,17 @@ const STATE_COPY: Record<ProductState, { title: string; tone: string }> = {
 };
 
 function useObjectUrl(blob: Blob | null) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [entry, setEntry] = useState<{ blob: Blob; url: string } | null>(null);
   useEffect(() => {
     if (!blob) {
-      setUrl(null);
+      setEntry(null);
       return;
     }
-    const next = URL.createObjectURL(blob);
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
+    const url = URL.createObjectURL(blob);
+    setEntry({ blob, url });
+    return () => URL.revokeObjectURL(url);
   }, [blob]);
-  return url;
+  return entry?.blob === blob ? entry.url : null;
 }
 
 function outputDetails(format: "jpeg" | "png", originalName: string) {
@@ -52,6 +52,7 @@ function outputDetails(format: "jpeg" | "png", originalName: string) {
 
 export function App() {
   const clientRef = useRef<ImageWorkerClient | null>(null);
+  const operationRef = useRef(0);
   if (!clientRef.current) clientRef.current = new ImageWorkerClient();
   const client = clientRef.current;
   const [requirements, setRequirements] = useState(DEFAULT_REQUIREMENTS);
@@ -64,6 +65,7 @@ export function App() {
   const [plan, setPlan] = useState<PlanReport | null>(null);
   const [adapted, setAdapted] = useState<AdaptReport | null>(null);
   const [outputBuffer, setOutputBuffer] = useState<ArrayBuffer | null>(null);
+  const [previewBuffer, setPreviewBuffer] = useState<ArrayBuffer | null>(null);
   const [cropPosition, setCropPosition] = useState(50);
   const [cropConsent, setCropConsent] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -75,16 +77,26 @@ export function App() {
       plan?.inspection.image?.format &&
       ["image/jpeg", "image/png"].includes(sourceFile.type),
   );
-  const sourceUrl = useObjectUrl(inspectedSafeImage ? sourceFile : null);
+  const previewBlob = useMemo(
+    () => (previewBuffer ? new Blob([previewBuffer], { type: "image/png" }) : null),
+    [previewBuffer],
+  );
+  const sourceUrl = useObjectUrl(previewBlob ?? (inspectedSafeImage ? sourceFile : null));
   const outputFormat = adapted?.output_artifact.image?.format ?? plan?.plan.target.format ?? null;
-  const download = outputFormat && sourceFile ? outputDetails(outputFormat, sourceFile.name) : null;
+  const download = useMemo(
+    () => (outputFormat && sourceFile ? outputDetails(outputFormat, sourceFile.name) : null),
+    [outputFormat, sourceFile],
+  );
   const outputBlob = useMemo(
     () => (outputBuffer && download ? new Blob([outputBuffer], { type: download.mime }) : null),
     [outputBuffer, download],
   );
-  const originalBlob = state === "compatible" && sourceFile && download
-    ? new Blob([sourceFile], { type: download.mime })
-    : null;
+  const originalBlob = useMemo(
+    () => state === "compatible" && !outputBuffer && sourceFile && download
+      ? new Blob([sourceFile], { type: download.mime })
+      : null,
+    [state, outputBuffer, sourceFile, download],
+  );
   const downloadUrl = useObjectUrl(outputBlob ?? originalBlob);
 
   const crop = useMemo(() => {
@@ -98,11 +110,20 @@ export function App() {
     );
   }, [plan, cropPosition]);
 
-  function onProgress(next: ProgressUpdate) {
-    setProgress(next);
+  function beginOperation(replaceWorker = false) {
+    const operation = ++operationRef.current;
+    if (replaceWorker) client.cancel();
+    return operation;
   }
 
-  function handleFailure(caught: unknown) {
+  function onProgress(operation: number) {
+    return (next: ProgressUpdate) => {
+      if (operation === operationRef.current) setProgress(next);
+    };
+  }
+
+  function handleFailure(caught: unknown, operation: number) {
+    if (operation !== operationRef.current) return;
     const failure = caught instanceof WorkerFailure ? caught : null;
     setState(failure?.state ?? "error");
     setError(
@@ -116,13 +137,17 @@ export function App() {
   }
 
   async function parseRequirements() {
+    const operation = beginOperation(true);
     setState("processing");
     setError(null);
+    setSourceFile(null);
     setPlan(null);
     setAdapted(null);
     setOutputBuffer(null);
+    setPreviewBuffer(null);
     try {
-      const { report } = await client.compile<RequirementParse>(requirements, onProgress);
+      const { report } = await client.compile<RequirementParse>(requirements, onProgress(operation));
+      if (operation !== operationRef.current) return;
       setParsed(report);
       if (report.ambiguities.length) {
         setState("error");
@@ -145,9 +170,9 @@ export function App() {
         setState("requirements_ready");
       }
     } catch (caught) {
-      handleFailure(caught);
+      handleFailure(caught, operation);
     } finally {
-      setProgress(null);
+      if (operation === operationRef.current) setProgress(null);
     }
   }
 
@@ -157,6 +182,7 @@ export function App() {
   }
 
   async function analyzeFile(file: File) {
+    if (state === "processing") return;
     if (!target) {
       setError({
         schema: "fitifact.error/v1",
@@ -166,72 +192,98 @@ export function App() {
       setState("error");
       return;
     }
+    const operation = beginOperation(true);
     setSourceFile(file);
     setPlan(null);
     setAdapted(null);
     setOutputBuffer(null);
+    setPreviewBuffer(null);
     setCropConsent(false);
     setError(null);
     setState("processing");
     try {
       const buffer = await file.arrayBuffer();
-      const { report } = await client.analyze<PlanReport>(file.name, buffer, constraintsJson(), onProgress);
+      if (operation !== operationRef.current) return;
+      const { report, preview } = await client.analyze<PlanReport>(
+        file.name,
+        buffer,
+        constraintsJson(),
+        onProgress(operation),
+      );
+      if (operation !== operationRef.current) return;
       setPlan(report);
-      if (report.report.compatible && report.plan.noop) setState("compatible");
+      setPreviewBuffer(preview ?? null);
+      if (report.report.compatible && report.plan.noop) {
+        setOutputBuffer(preview ?? null);
+        setState("compatible");
+      }
       else if (report.plan.target.crop.required) setState("crop_approval_required");
       else setState("planned");
     } catch (caught) {
-      handleFailure(caught);
+      handleFailure(caught, operation);
     } finally {
-      setProgress(null);
+      if (operation === operationRef.current) setProgress(null);
     }
   }
 
   async function replan() {
-    if (!sourceFile) return;
+    if (!sourceFile || state === "processing") return;
+    const operation = beginOperation();
     setState("processing");
     setError(null);
+    setPlan(null);
+    setAdapted(null);
+    setOutputBuffer(null);
     try {
-      const { report } = await client.replan<PlanReport>(constraintsJson(), onProgress);
+      const { report, preview } = await client.replan<PlanReport>(
+        constraintsJson(),
+        onProgress(operation),
+      );
+      if (operation !== operationRef.current) return;
       setPlan(report);
-      setAdapted(null);
-      setOutputBuffer(null);
+      if (preview) setPreviewBuffer(preview);
       setCropConsent(false);
-      if (report.report.compatible && report.plan.noop) setState("compatible");
+      if (report.report.compatible && report.plan.noop) {
+        setOutputBuffer(preview ?? null);
+        setState("compatible");
+      }
       else if (report.plan.target.crop.required) setState("crop_approval_required");
       else setState("planned");
     } catch (caught) {
-      handleFailure(caught);
+      handleFailure(caught, operation);
     } finally {
-      setProgress(null);
+      if (operation === operationRef.current) setProgress(null);
     }
   }
 
   async function adaptImage() {
-    if (!plan) return;
+    if (!plan || state === "processing") return;
     if (plan.plan.target.crop.required && (!crop || !cropConsent)) {
       setState("crop_approval_required");
       return;
     }
+    const operation = beginOperation();
     setState("processing");
     setError(null);
     try {
       const { report, output } = await client.adapt<AdaptReport>(
         constraintsJson(),
         plan.plan.target.crop.required ? crop : null,
-        onProgress,
+        onProgress(operation),
       );
+      if (operation !== operationRef.current) return;
       setAdapted(report);
       setOutputBuffer(output ?? null);
       setState(report.status === "compatible" ? "compatible" : "adapted");
     } catch (caught) {
-      handleFailure(caught);
+      handleFailure(caught, operation);
     } finally {
-      setProgress(null);
+      if (operation === operationRef.current) setProgress(null);
     }
   }
 
   function cancel() {
+    ++operationRef.current;
     client.cancel();
     setState("cancelled");
     setError({
@@ -245,6 +297,7 @@ export function App() {
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
+    if (state === "processing" || !target) return;
     const file = event.dataTransfer.files.item(0);
     if (file) void analyzeFile(file);
   }
@@ -292,18 +345,18 @@ export function App() {
             <div className="step-heading"><span>2</span><h2 id="target-title">Review the target</h2></div>
             {target ? (
               <div className="target-form">
-                <label>Format<select value={target.format} onChange={(event) => setTarget({ ...target, format: event.target.value as "jpeg" | "png" })}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
-                <label>Maximum bytes<input inputMode="numeric" value={target.maxBytes} onChange={(event) => setTarget({ ...target, maxBytes: event.target.value })} placeholder="No limit" /></label>
-                <fieldset><legend>Width</legend><select aria-label="Width rule" value={target.widthOp} onChange={(event) => setTarget({ ...target, widthOp: event.target.value as EditableTarget["widthOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Width in pixels" inputMode="numeric" value={target.width} onChange={(event) => setTarget({ ...target, width: event.target.value })} placeholder="Any" /></fieldset>
-                <fieldset><legend>Height</legend><select aria-label="Height rule" value={target.heightOp} onChange={(event) => setTarget({ ...target, heightOp: event.target.value as EditableTarget["heightOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Height in pixels" inputMode="numeric" value={target.height} onChange={(event) => setTarget({ ...target, height: event.target.value })} placeholder="Any" /></fieldset>
-                {sourceFile ? <button className="secondary" type="button" onClick={() => void replan()} disabled={state === "processing"}>Review target changes</button> : null}
+                <label>Format<select value={target.format} disabled={state === "processing"} onChange={(event) => setTarget({ ...target, format: event.target.value as "jpeg" | "png" })}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
+                <label>Maximum bytes<input inputMode="numeric" value={target.maxBytes} disabled={state === "processing"} onChange={(event) => setTarget({ ...target, maxBytes: event.target.value })} placeholder="No limit" /></label>
+                <fieldset disabled={state === "processing"}><legend>Width</legend><select aria-label="Width rule" value={target.widthOp} onChange={(event) => setTarget({ ...target, widthOp: event.target.value as EditableTarget["widthOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Width in pixels" inputMode="numeric" value={target.width} onChange={(event) => setTarget({ ...target, width: event.target.value })} placeholder="Any" /></fieldset>
+                <fieldset disabled={state === "processing"}><legend>Height</legend><select aria-label="Height rule" value={target.heightOp} onChange={(event) => setTarget({ ...target, heightOp: event.target.value as EditableTarget["heightOp"] })}><option value="eq">Exactly</option><option value="lte">At most</option><option value="gte">At least</option></select><input aria-label="Height in pixels" inputMode="numeric" value={target.height} onChange={(event) => setTarget({ ...target, height: event.target.value })} placeholder="Any" /></fieldset>
+                {plan && sourceFile ? <button className="secondary" type="button" onClick={() => void replan()} disabled={state === "processing"}>Review target changes</button> : null}
               </div>
             ) : <p className="empty-copy">A normalized, editable target will appear here.</p>}
           </section>
 
           <section className="card upload-card" aria-labelledby="image-title">
             <div className="step-heading"><span>3</span><h2 id="image-title">Choose your image</h2></div>
-            <div className={`drop-zone ${dragging ? "is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+            <div className={`drop-zone ${dragging ? "is-dragging" : ""}`} aria-disabled={!target || state === "processing"} onDragOver={(event) => { event.preventDefault(); if (state !== "processing" && target) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
               <p><strong>Drop a JPEG or PNG here</strong></p>
               <p>HEIC is accepted only in an explicitly approved build.</p>
               <label className="button-label" htmlFor="image-file">Choose an image</label>
@@ -325,8 +378,8 @@ export function App() {
                 <h3 id="crop-title">Choose the crop</h3>
                 {sourceUrl && crop ? <div className="crop-stage"><img src={sourceUrl} alt={`Crop preview of ${sourceFile?.name ?? "selected image"}`} /><span className="crop-mask" aria-hidden="true" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` }} /></div> : null}
                 <label htmlFor="crop-position">{cropAxis(plan.plan.source_width, plan.plan.source_height, plan.plan.target.width, plan.plan.target.height) === "horizontal" ? "Horizontal" : "Vertical"} crop position: {cropPosition}%</label>
-                <input id="crop-position" type="range" min="0" max="100" value={cropPosition} onChange={(event) => setCropPosition(Number(event.target.value))} />
-                <label className="check-label"><input type="checkbox" checked={cropConsent} onChange={(event) => setCropConsent(event.target.checked)} /> I approve removing the shaded edges to match {plan.plan.target.width} × {plan.plan.target.height}.</label>
+                <input id="crop-position" type="range" min="0" max="100" value={cropPosition} disabled={state === "processing"} onChange={(event) => setCropPosition(Number(event.target.value))} />
+                <label className="check-label"><input type="checkbox" checked={cropConsent} disabled={state === "processing"} onChange={(event) => setCropConsent(event.target.checked)} /> I approve removing the shaded edges to match {plan.plan.target.width} × {plan.plan.target.height}.</label>
               </div>
             ) : null}
 
@@ -334,7 +387,7 @@ export function App() {
 
             {checklist.length ? <div className="checklist"><h3>Requirement checklist</h3><ul>{checklist.map((check) => <li key={check.constraint_id} className={check.result}><span aria-hidden="true">{check.result === "pass" ? "✓" : check.result === "fail" ? "×" : "?"}</span><span><strong>{check.field}</strong><br />{check.actual ?? "Unknown"} / needs {check.required}</span><span className="sr-result">{check.result}</span></li>)}</ul></div> : null}
 
-            {downloadUrl && download && (state === "adapted" || state === "compatible") ? <a className="download-button" href={downloadUrl} download={download.name}>{state === "compatible" ? "Use original image" : `Download ${download.extension.toUpperCase()}`}</a> : null}
+            {downloadUrl && download && (state === "adapted" || state === "compatible") ? <a className="download-button" href={downloadUrl} download={download.name}>{state === "compatible" && !outputBuffer ? "Use original image" : `Download ${download.extension.toUpperCase()}`}</a> : null}
           </section>
         </div>
       </main>
@@ -349,7 +402,7 @@ function PlanSummary({ plan }: { plan: PlanReport }) {
   return (
     <div className="plan-summary">
       <p><strong>Source:</strong> {image?.format?.toUpperCase()} · {image?.width} × {image?.height} · {formatBytes(plan.inspection.byte_length)}</p>
-      {plan.report.compatible ? <p>No changes are needed. The original bytes remain untouched.</p> : <><p><strong>Proposed:</strong> {plan.plan.target.format.toUpperCase()} · {plan.plan.target.width} × {plan.plan.target.height}{plan.plan.target.max_bytes ? ` · at most ${formatBytes(plan.plan.target.max_bytes)}` : ""}</p><ul>{plan.plan.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></>}
+      {plan.report.compatible ? <p>No target changes are needed.</p> : <><p><strong>Proposed:</strong> {plan.plan.target.format.toUpperCase()} · {plan.plan.target.width} × {plan.plan.target.height}{plan.plan.target.max_bytes ? ` · at most ${formatBytes(plan.plan.target.max_bytes)}` : ""}</p><ul>{plan.plan.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></>}
     </div>
   );
 }
