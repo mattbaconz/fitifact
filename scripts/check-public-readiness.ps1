@@ -142,6 +142,7 @@ try {
         "rust-toolchain.toml",
         "fixtures/media/SHA256SUMS",
         "fixtures/image/SHA256SUMS",
+        "web/package.json",
         "web/package-lock.json",
         "web/.node-version"
     )

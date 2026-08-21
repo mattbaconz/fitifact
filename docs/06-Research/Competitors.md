@@ -91,7 +91,9 @@ macOS optimizer for images, video, PDF and clipboard. It can automatically conve
 Strong local, low-friction compatibility/optimization workflow.
 
 **Difference**  
-Fitifact centers destination constraints and validated acceptance rather than broad optimization.
+Fitifact centers destination constraints and validates output against confirmed
+destination constraints rather than offering broad optimization or promising
+destination acceptance.
 
 Sources:
 - https://lowtechguys.com/clop/
