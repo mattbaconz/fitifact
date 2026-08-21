@@ -51,3 +51,8 @@ contract_schema!(
 contract_schema!(ErrorSchema, ERROR_SCHEMA, "fitifact.error/v1");
 contract_schema!(DoctorSchema, DOCTOR_SCHEMA, "fitifact.doctor/v1");
 contract_schema!(BenchSchema, BENCH_SCHEMA, "fitifact.bench/v1");
+contract_schema!(
+    RequirementsSchema,
+    REQUIREMENTS_SCHEMA,
+    "fitifact.requirements/v1"
+);

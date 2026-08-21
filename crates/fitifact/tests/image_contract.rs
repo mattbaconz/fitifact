@@ -119,3 +119,27 @@ fn materialize_tracked_image_fixtures() {
     assert_eq!(jpeg_art.image.unwrap().format, Some(ImageFormat::Jpeg));
     assert_eq!(png_art.image.unwrap().format, Some(ImageFormat::Png));
 }
+
+#[test]
+fn image_resource_limits_use_exact_boundaries() {
+    use fitifact::image::{
+        MAX_IMAGE_INPUT_BYTES, MAX_IMAGE_PIXELS, enforce_decoded_limit, enforce_encoded_limit,
+    };
+
+    enforce_encoded_limit(MAX_IMAGE_INPUT_BYTES).unwrap();
+    assert_eq!(
+        enforce_encoded_limit(MAX_IMAGE_INPUT_BYTES + 1)
+            .unwrap_err()
+            .code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+    enforce_decoded_limit(6_000, 4_000).unwrap();
+    assert_eq!(
+        u64::from(6_000_u32) * u64::from(4_000_u32),
+        MAX_IMAGE_PIXELS
+    );
+    assert_eq!(
+        enforce_decoded_limit(6_000, 4_001).unwrap_err().code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+}

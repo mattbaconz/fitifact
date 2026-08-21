@@ -2,6 +2,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use image::codecs::jpeg::JpegEncoder;
+use image::metadata::Orientation;
 use image::{ColorType, DynamicImage, ImageDecoder, ImageReader};
 
 use crate::artifact::{
@@ -12,6 +13,8 @@ use crate::plan::{ExpectedFact, ExpectedValue, Plan};
 use crate::runtime::{ExecutionContext, StreamHashes, TransformProvider};
 
 const PNG_SIG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+pub const MAX_IMAGE_INPUT_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_IMAGE_PIXELS: u64 = 24_000_000;
 
 pub fn looks_like_image(bytes: &[u8]) -> bool {
     sniff_format(bytes).is_some()
@@ -46,12 +49,19 @@ pub fn sniff_format(bytes: &[u8]) -> Option<ImageFormat> {
 }
 
 pub fn artifact_from_bytes(path: Option<&Path>, bytes: &[u8]) -> Result<Artifact> {
+    enforce_encoded_limit(bytes.len())?;
     let Some(format) = sniff_format(bytes) else {
         return Err(Error::new(
             ErrorCode::InspectionUnsupported,
             "the input is not a recognized image",
         ));
     };
+    if format == ImageFormat::Jpeg && jpeg_is_multi_image(bytes) {
+        return Err(Error::new(
+            ErrorCode::InspectionUnsupported,
+            "image.multi_image_unsupported: multi-image JPEG/MPO inputs are unsupported",
+        ));
+    }
     let animated = match format {
         ImageFormat::Png => Some(png_is_animated(bytes)),
         ImageFormat::Gif => Some(true),
@@ -105,10 +115,26 @@ fn decode_still(bytes: &[u8]) -> Result<Option<DecodedStill>> {
                 "the image header could not be parsed",
             )
         })?;
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
         .map_err(|_| Error::new(ErrorCode::InputInvalid, "the image could not be decoded"))?;
-    let (width, height) = decoder.dimensions();
+    let (mut width, mut height) = decoder.dimensions();
+    enforce_decoded_limit(width, height)?;
+    let orientation = decoder.orientation().map_err(|_| {
+        Error::new(
+            ErrorCode::InputInvalid,
+            "the image orientation metadata could not be read",
+        )
+    })?;
+    if matches!(
+        orientation,
+        Orientation::Rotate90
+            | Orientation::Rotate270
+            | Orientation::Rotate90FlipH
+            | Orientation::Rotate270FlipH
+    ) {
+        std::mem::swap(&mut width, &mut height);
+    }
     let alpha = matches!(
         decoder.color_type(),
         ColorType::Rgba8 | ColorType::Rgba16 | ColorType::La8 | ColorType::La16
@@ -120,12 +146,145 @@ fn decode_still(bytes: &[u8]) -> Result<Option<DecodedStill>> {
     }))
 }
 
+pub fn enforce_encoded_limit(length: usize) -> Result<()> {
+    if length > MAX_IMAGE_INPUT_BYTES {
+        return Err(Error::new(
+            ErrorCode::InspectionLimit,
+            "image.input_too_large: encoded image exceeds the 32 MiB limit",
+        ));
+    }
+    Ok(())
+}
+
+pub fn enforce_decoded_limit(width: u32, height: u32) -> Result<()> {
+    let pixels = u64::from(width).saturating_mul(u64::from(height));
+    if pixels > MAX_IMAGE_PIXELS {
+        return Err(Error::new(
+            ErrorCode::InspectionLimit,
+            "image.decoded_too_large: decoded image exceeds the 24-megapixel limit",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn decode_oriented(bytes: &[u8]) -> Result<DynamicImage> {
+    enforce_encoded_limit(bytes.len())?;
+    let reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| {
+            Error::new(
+                ErrorCode::InputInvalid,
+                "the image header could not be parsed",
+            )
+        })?;
+    let mut decoder = reader
+        .into_decoder()
+        .map_err(|_| Error::new(ErrorCode::InputInvalid, "the image could not be decoded"))?;
+    let (width, height) = decoder.dimensions();
+    enforce_decoded_limit(width, height)?;
+    let orientation = decoder.orientation().map_err(|_| {
+        Error::new(
+            ErrorCode::InputInvalid,
+            "the image orientation metadata could not be read",
+        )
+    })?;
+    let mut image = DynamicImage::from_decoder(decoder).map_err(|_| {
+        Error::new(
+            ErrorCode::ExecutionFailed,
+            "the image source could not be decoded",
+        )
+    })?;
+    image.apply_orientation(orientation);
+    Ok(image)
+}
+
 fn png_is_animated(bytes: &[u8]) -> bool {
-    bytes.windows(4).any(|window| window == b"acTL")
+    png_chunks(bytes).any(|kind| kind == b"acTL")
 }
 
 fn webp_is_animated(bytes: &[u8]) -> bool {
     bytes.windows(4).any(|window| window == b"ANIM")
+}
+
+pub fn jpeg_is_multi_image(bytes: &[u8]) -> bool {
+    jpeg_segments(bytes).any(|(marker, payload)| marker == 0xe2 && payload.starts_with(b"MPF\0"))
+}
+
+pub(crate) fn contains_image_metadata(bytes: &[u8], format: &ImageFormat) -> bool {
+    match format {
+        ImageFormat::Jpeg => {
+            jpeg_segments(bytes).any(|(marker, _)| matches!(marker, 0xe1 | 0xe2 | 0xed | 0xfe))
+        }
+        ImageFormat::Png => png_chunks(bytes)
+            .any(|kind| matches!(kind, b"eXIf" | b"iCCP" | b"iTXt" | b"tEXt" | b"zTXt")),
+        _ => false,
+    }
+}
+
+fn jpeg_segments(bytes: &[u8]) -> impl Iterator<Item = (u8, &[u8])> {
+    let mut segments = Vec::new();
+    if !bytes.starts_with(&[0xff, 0xd8]) {
+        return segments.into_iter();
+    }
+    let mut cursor = 2_usize;
+    while cursor + 4 <= bytes.len() {
+        if bytes[cursor] != 0xff {
+            cursor += 1;
+            continue;
+        }
+        while cursor < bytes.len() && bytes[cursor] == 0xff {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() {
+            break;
+        }
+        let marker = bytes[cursor];
+        cursor += 1;
+        if matches!(marker, 0xd9 | 0xda) {
+            break;
+        }
+        if matches!(marker, 0x01 | 0xd0..=0xd7) {
+            continue;
+        }
+        if cursor + 2 > bytes.len() {
+            break;
+        }
+        let length = usize::from(u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]));
+        if length < 2 || cursor + length > bytes.len() {
+            break;
+        }
+        segments.push((marker, &bytes[cursor + 2..cursor + length]));
+        cursor += length;
+    }
+    segments.into_iter()
+}
+
+fn png_chunks(bytes: &[u8]) -> impl Iterator<Item = &[u8; 4]> {
+    let mut chunks = Vec::new();
+    let mut cursor = PNG_SIG.len();
+    while bytes.starts_with(PNG_SIG) && cursor + 12 <= bytes.len() {
+        let length = u32::from_be_bytes([
+            bytes[cursor],
+            bytes[cursor + 1],
+            bytes[cursor + 2],
+            bytes[cursor + 3],
+        ]) as usize;
+        let Some(end) = cursor
+            .checked_add(12)
+            .and_then(|value| value.checked_add(length))
+        else {
+            break;
+        };
+        if end > bytes.len() {
+            break;
+        }
+        let kind: &[u8; 4] = bytes[cursor + 4..cursor + 8]
+            .try_into()
+            .expect("four-byte PNG chunk type");
+        chunks.push(kind);
+        cursor = end;
+    }
+    chunks.into_iter()
 }
 
 pub fn encode_jpeg_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
