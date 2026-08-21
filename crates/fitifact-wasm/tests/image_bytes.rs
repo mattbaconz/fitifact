@@ -143,6 +143,27 @@ fn decoded_rgba_rejects_length_mismatch_and_resource_limit() {
 }
 
 #[test]
+fn opaque_decoded_rgba_can_target_jpeg_but_real_alpha_is_preserved_and_refused() {
+    let target = constraints("jpeg", 2, 1);
+    let opaque = [255_u8, 0, 0, 255, 0, 255, 0, 255];
+    let planned = parse(&plan_rgba(&opaque, 2, 1, &target).report_json);
+    assert_eq!(planned["plan"]["target"]["format"], "jpeg");
+    let adapted = adapt_rgba(
+        &opaque,
+        2,
+        1,
+        &target,
+        r#"{"crop":null,"crop_consent":false}"#,
+    );
+    assert_eq!(parse(&adapted.report_json)["status"], "adapted");
+    assert_eq!(&adapted.output.expect("JPEG output")[..3], b"\xff\xd8\xff");
+
+    let translucent = [255_u8, 0, 0, 128, 0, 255, 0, 255];
+    let blocked = parse(&plan_rgba(&translucent, 2, 1, &target).report_json);
+    assert_eq!(blocked["code"], "NO_VALID_PLAN");
+}
+
+#[test]
 fn video_bytes_stay_explicitly_unsupported() {
     let mut bytes = vec![0_u8; 12];
     bytes[4..8].copy_from_slice(b"ftyp");

@@ -3,7 +3,7 @@ title: "Roadmap"
 type: roadmap
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - roadmap
@@ -11,9 +11,9 @@ tags:
 
 # Roadmap
 
-Only the unpublished `0.1.0-rc.1` media freeze plus the later D-025 image and
-local web commits are current. Every later phase below is deferred and is not
-a commitment or claim of implementation.
+The unpublished `0.1.0-rc.3` candidate includes the frozen media matrix and the
+D-026 local consumer image upload MVP. Every later phase below is deferred and
+is not a commitment or implementation claim.
 
 ## v0.1 — CLI/media slice (frozen locally)
 - media inspection;
@@ -27,23 +27,28 @@ a commitment or claim of implementation.
 Exit: no-op/remux/selective transcode chosen correctly. Tag target:
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`.
 
-## After the freeze — image and local web (this tree)
-- JPEG no-op and PNG→JPEG in-process;
-- `fixtures/image`;
-- `fitifact-wasm` plus `web/` static drop page;
-- no ffmpeg.wasm.
+## D-026 — consumer image upload MVP (implemented, human gate pending)
+- deterministic image-requirement parsing and editable typed target;
+- JPEG/PNG no-op, adaptation, crop consent, resize/byte fitting, warnings,
+  metadata disclosure, transparency refusal, and post-validation;
+- `fitifact-wasm`, dedicated module worker, and static Vite/React workflow;
+- 32 MiB encoded/24 MP decoded bounds, cancellation, and explicit failures;
+- default-off lazy approved HEIC decoder with notices and owned fixture;
+- desktop/mobile browser verification and checksum-pinned synthetic fixtures;
+- no ffmpeg.wasm, hosted service, telemetry, or cloud fallback.
 
-## Later public MVP — deferred
+Exit is not engineering tests alone. Run
+[[04-Engineering/Consumer-Image-Moderated-Test]] with ten real tasks and meet
+all 8/10, 8/10, 5/10, and zero-harm thresholds before continuing investment.
+
+## Product expansion — deferred
 - hosted web app;
-- WebP / HEIC / TIFF / animation;
+- WebP / TIFF / animation adaptation and default HEIC enablement;
 - custom destination profiles;
-- explanation UI;
-- approved license;
-- security process.
+- automatic destination requirement capture.
 
-## Rejection compiler — deferred
-- paste error/requirements;
-- deterministic parser;
+## Broader rejection compiler — deferred
+- broader non-image rejection text;
 - evidence spans;
 - conflict UI;
 - optional model-assisted leftovers.

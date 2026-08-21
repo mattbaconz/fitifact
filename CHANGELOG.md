@@ -7,6 +7,25 @@ All notable changes to Fitifact are documented here.
 These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`.
 
+### [added]
+
+- Consumer image upload workflow with local-only browser adaptation, owned
+  synthetic image fixtures (including HEIC), pinned web CI, and a moderated
+  ten-user viability protocol.
+
+### [changed]
+
+- Align the canonical product, specification, legal, competitor, threat, and
+  roadmap surfaces to the confirmed-requirements consumer image boundary.
+- Tighten the web workflow hierarchy, density, state clarity, keyboard focus,
+  and mobile layout while preserving the existing product system.
+
+### [fixed]
+
+- Preserve short byte limits adjacent to dimension limits during natural-
+  language requirement parsing, and allow opaque decoded HEIC pixels to enter
+  the JPEG adaptation path without weakening transparency refusal.
+
 ## [0.1.0-rc.3] - buildable candidate
 
 ### [fixed]

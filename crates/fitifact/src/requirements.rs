@@ -154,9 +154,12 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
         }
         let number_index = unit_index - 1;
         let prefix = size_qualifier_before(tokens, number_index);
-        let suffix = tokens
-            .get(unit_index + 1)
-            .is_some_and(|token| matches!(token.value.as_str(), "max" | "maximum" | "limit"));
+        let suffix = tokens.get(unit_index + 1).is_some_and(|token| {
+            matches!(token.value.as_str(), "max" | "maximum" | "limit")
+                && !text[tokens[unit_index].end..token.start]
+                    .chars()
+                    .any(requirement_clause_separator)
+        });
         if prefix.is_none() && !suffix {
             continue;
         }
@@ -443,7 +446,11 @@ fn parse_sizes(
         }
         let prefix = size_qualifier_before(tokens, number_index);
         let suffix = tokens.get(unit_index + 1).and_then(|token| {
-            matches!(token.value.as_str(), "max" | "maximum" | "limit").then_some(unit_index + 1)
+            (matches!(token.value.as_str(), "max" | "maximum" | "limit")
+                && !text[tokens[unit_index].end..token.start]
+                    .chars()
+                    .any(requirement_clause_separator))
+            .then_some(unit_index + 1)
         });
         let Some(start_index) = prefix.or(Some(number_index).filter(|_| suffix.is_some())) else {
             continue;
@@ -718,6 +725,10 @@ fn unresolved(text: &str, covered: &[bool]) -> Vec<UnresolvedRequirement> {
 
 fn unresolved_separator(character: char) -> bool {
     character.is_whitespace() || matches!(character, ',' | ';' | ':' | '.' | '-' | '(' | ')' | '/')
+}
+
+fn requirement_clause_separator(character: char) -> bool {
+    matches!(character, ',' | ';' | ':')
 }
 
 fn mark(covered: &mut [bool], start: usize, end: usize) {

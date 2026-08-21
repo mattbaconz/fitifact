@@ -36,6 +36,34 @@ if ($badPins.Count -gt 0) {
 }
 
 $releaseWorkflow = [IO.File]::ReadAllText((Join-Path $root ".github\workflows\release.yml"))
+$ciWorkflow = [IO.File]::ReadAllText((Join-Path $root ".github\workflows\ci.yml"))
+$ciRequirements = @(
+    @{ Name = "quality job"; Pattern = '(?m)^  quality:\s*$' },
+    @{ Name = "platform matrix job"; Pattern = '(?m)^  platform:\s*$' },
+    @{ Name = "MSRV job"; Pattern = '(?m)^  msrv:\s*$' },
+    @{ Name = "supply-chain job"; Pattern = '(?m)^  supply-chain:\s*$' },
+    @{ Name = "fixture gate"; Pattern = '\./scripts/check-fixtures\.ps1' },
+    @{ Name = "documentation gate"; Pattern = '\./scripts/check-doc-links\.ps1' },
+    @{ Name = "pinned Node action"; Pattern = 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0' },
+    @{ Name = "pinned Node file"; Pattern = 'node-version-file: web/\.node-version' },
+    @{ Name = "pinned npm"; Pattern = 'npm install --global npm@11\.5\.1' },
+    @{ Name = "WASM target"; Pattern = 'rustup target add wasm32-unknown-unknown' },
+    @{ Name = "locked web install"; Pattern = '(?m)^\s+run: npm ci\s*$' },
+    @{ Name = "web lint"; Pattern = '(?m)^\s+run: npm run lint\s*$' },
+    @{ Name = "web unit tests"; Pattern = '(?m)^\s+run: npm test\s*$' },
+    @{ Name = "default web build"; Pattern = '(?m)^\s+run: npm run build\s*$' },
+    @{ Name = "approved HEIC gate"; Pattern = 'FITIFACT_HEIC_APPROVED: "true"' },
+    @{ Name = "real HEIC browser check"; Pattern = 'npm run test:e2e:heic' },
+    @{ Name = "all-browser workflow"; Pattern = '(?m)^\s+run: npm run test:e2e\s*$' }
+)
+foreach ($requirement in $ciRequirements) {
+    if ($ciWorkflow -notmatch $requirement.Pattern) {
+        throw "CI workflow is missing invariant: $($requirement.Name)"
+    }
+}
+if ($ciWorkflow -match '(?m)^\s*continue-on-error:\s*true\s*$') {
+    throw "CI workflow must not weaken a gate with continue-on-error"
+}
 $releaseRequirements = @(
     @{ Name = "read-only plan job"; Pattern = '(?ms)^  plan:\r?\n.*?^    permissions:\r?\n      "contents": "read"\s*$' },
     @{ Name = "repository publication approval"; Pattern = "vars\.FITIFACT_PUBLICATION_APPROVED == 'true'" },

@@ -2,7 +2,7 @@
 title: "Fitifact Context Pack"
 type: agent-context
 status: active
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - agent-context
@@ -34,12 +34,19 @@ Destination-first + minimum mutation + validation.
 - original preserved.
 
 ## Current v0.1
-CLI + media only: MP4/H.264/AAC no-op, MOV/H.264/AAC remux to MP4, or
-MP4/HEVC-to-H.264 video transcode while copying compatible AAC audio.
-File-size and dimension constraints are check-only. Everything else is refused.
+The frozen native media matrix remains MP4/H.264/AAC no-op,
+MOV/H.264/AAC remux to MP4, or MP4/HEVC-to-H.264 video transcode while copying
+compatible AAC audio. Media file-size and dimension constraints are check-only.
 
-## Later public MVP (deferred)
-Images + one-click web experience.
+D-026 adds a static local consumer image product for parsed/edited JPEG/PNG
+requirements, minimum-change image adaptation, crop consent, warnings, and
+post-validation. HEIC decode is approved-gate only. **Your image stays on this
+device.** Hosted/cloud execution remains absent.
+
+## Human viability gate
+
+The product is not commercially validated until ten real form/application
+photo tasks meet the 8/10, 8/10, 5/10, and zero-harm continuation thresholds.
 
 ## Demo
 MP4 container contains HEVC; target requires H.264. Change video only, preserve audio, validate.

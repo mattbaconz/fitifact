@@ -8,7 +8,7 @@ const fixtures = path.resolve("../fixtures/image");
 async function compile(page: Page, requirement: string) {
   await page.getByLabel("Upload instructions").fill(requirement);
   await page.getByRole("button", { name: "Review requirements" }).click();
-  await expect(page.getByRole("heading", { name: "Requirements ready" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ready for an image" })).toBeVisible();
 }
 
 async function expectRealDownload(
@@ -35,6 +35,7 @@ test("happy path adapts PNG to JPEG and exposes a validated download", async ({ 
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
   await page.getByRole("button", { name: "Adapt and validate" }).click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
+  await expect(page.getByText("validated against the requirements you confirmed", { exact: false })).toBeVisible();
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "mismatch-png.fitifact.jpg");
   await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
@@ -113,6 +114,7 @@ test("active worker processing can be cancelled", async ({ page }) => {
 });
 
 test("off-gate HEIC is explicit and does not load a cloud fallback", async ({ page }) => {
+  test.skip(process.env.FITIFACT_HEIC_APPROVED === "true", "off-gate behavior requires the default build");
   await page.goto("/");
   await compile(page, "JPEG, max 2 MB");
   const heic = Buffer.alloc(24);
@@ -121,4 +123,18 @@ test("off-gate HEIC is explicit and does not load a cloud fallback", async ({ pa
   await page.getByLabel("Choose an image").setInputFiles({ name: "photo.heic", mimeType: "image/heic", buffer: heic });
   await expect(page.getByRole("heading", { name: "HEIC is unsupported in this build" })).toBeVisible();
   await expect(page.getByText("has not approved the optional local decoder")).toBeVisible();
+});
+
+test("approved HEIC fixture decodes and validates through the real worker", async ({ page }) => {
+  test.skip(process.env.FITIFACT_HEIC_APPROVED !== "true", "approved decoder build only");
+  await page.goto("/");
+  await compile(page, "JPEG, max 2 MB");
+  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "synthetic-single.heic"));
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  await page.getByRole("button", { name: "Adapt and validate" }).click();
+  await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
+  await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
+  const download = page.getByRole("link", { name: "Download JPG" });
+  await expect(download).toHaveAttribute("download", "synthetic-single.fitifact.jpg");
+  await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
 });

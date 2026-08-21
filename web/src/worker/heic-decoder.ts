@@ -15,6 +15,21 @@ interface HeifImage {
   free?: () => void;
 }
 
+export function requireSingleHeicImage<T extends { free?: () => void }>(images: T[]): T {
+  if (images.length === 1) return images[0];
+  if (images.length === 0) {
+    throw new HeicDecodeFailure(
+      "INSPECTION_UNSUPPORTED",
+      "The HEIC file did not contain a decodable image.",
+    );
+  }
+  for (const image of images) image.free?.();
+  throw new HeicDecodeFailure(
+    "INSPECTION_UNSUPPORTED",
+    "Animated or multi-image HEIC files are not supported.",
+  );
+}
+
 interface LibHeif {
   HeifDecoder: new () => { decode(bytes: Uint8Array): HeifImage[] };
 }
@@ -51,15 +66,7 @@ export async function decodeSingleHeic(
       "The approved HEIC decoder build could not be initialized.",
     );
   }
-  const images = new libheif.HeifDecoder().decode(bytes);
-  if (images.length !== 1) {
-    for (const image of images) image.free?.();
-    throw new HeicDecodeFailure(
-      "INSPECTION_UNSUPPORTED",
-      "Animated or multi-image HEIC files are not supported.",
-    );
-  }
-  const image = images[0];
+  const image = requireSingleHeicImage(new libheif.HeifDecoder().decode(bytes));
   const width = image.get_width();
   const height = image.get_height();
   let rgbaLength: number;

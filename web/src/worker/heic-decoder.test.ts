@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { decodedRgbaLength, HeicDecodeFailure } from "./heic-decoder";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
+import {
+  decodeSingleHeic,
+  decodedRgbaLength,
+  HeicDecodeFailure,
+  requireSingleHeicImage,
+} from "./heic-decoder";
 import { productStateForError } from "./protocol";
 
 describe("HEIC decoded resource limits", () => {
@@ -20,5 +27,29 @@ describe("HEIC decoded resource limits", () => {
       expect(failure.code).toBe("INSPECTION_LIMIT");
       expect(productStateForError({ code: failure.code })).toBe("resource_limit");
     }
+  });
+
+  it("decodes the owned single-image HEIC fixture through the approved decoder", async () => {
+    const fixture = fileURLToPath(
+      new URL("../../../fixtures/image/synthetic-single.heic", import.meta.url),
+    );
+    const decoded = await decodeSingleHeic(new Uint8Array(await readFile(fixture)), 24_000_000);
+    expect(decoded.width).toBe(16);
+    expect(decoded.height).toBe(12);
+    expect(decoded.rgba).toHaveLength(16 * 12 * 4);
+    expect(new Set(decoded.rgba)).not.toEqual(new Set([0]));
+  });
+
+  it("rejects zero and multiple top-level images and frees every returned handle", () => {
+    expect(() => requireSingleHeicImage([])).toThrowError(
+      "The HEIC file did not contain a decodable image.",
+    );
+    const first = { free: vi.fn() };
+    const second = { free: vi.fn() };
+    expect(() => requireSingleHeicImage([first, second])).toThrowError(
+      "Animated or multi-image HEIC files are not supported.",
+    );
+    expect(first.free).toHaveBeenCalledOnce();
+    expect(second.free).toHaveBeenCalledOnce();
   });
 });

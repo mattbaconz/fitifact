@@ -10,7 +10,7 @@ use fitifact::{
     ConstraintSet, ImageAdaptOptions, NeverCancelled, execute_image_adaptation,
     image_artifact_from_bytes, parse_image_requirements, plan_image_adaptation,
 };
-use image::{DynamicImage, ImageFormat as EncoderFormat, RgbaImage};
+use image::{DynamicImage, ImageFormat as EncoderFormat, RgbImage, RgbaImage};
 
 pub use fitifact::{sample_jpeg_rgb, sample_png_rgb};
 
@@ -191,14 +191,29 @@ fn rgba_as_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, fitifact
             ),
         ));
     }
-    let pixels = RgbaImage::from_raw(width, height, rgba.to_vec()).ok_or_else(|| {
-        fitifact::Error::new(
-            fitifact::ErrorCode::InputInvalid,
-            "image.rgba_invalid: decoded RGBA pixels are invalid",
-        )
-    })?;
+    let image = if rgba.chunks_exact(4).all(|pixel| pixel[3] == u8::MAX) {
+        let rgb = rgba
+            .chunks_exact(4)
+            .flat_map(|pixel| pixel[..3].iter().copied())
+            .collect();
+        let pixels = RgbImage::from_raw(width, height, rgb).ok_or_else(|| {
+            fitifact::Error::new(
+                fitifact::ErrorCode::InputInvalid,
+                "image.rgba_invalid: decoded opaque pixels are invalid",
+            )
+        })?;
+        DynamicImage::ImageRgb8(pixels)
+    } else {
+        let pixels = RgbaImage::from_raw(width, height, rgba.to_vec()).ok_or_else(|| {
+            fitifact::Error::new(
+                fitifact::ErrorCode::InputInvalid,
+                "image.rgba_invalid: decoded RGBA pixels are invalid",
+            )
+        })?;
+        DynamicImage::ImageRgba8(pixels)
+    };
     let mut encoded = Vec::new();
-    DynamicImage::ImageRgba8(pixels)
+    image
         .write_to(&mut Cursor::new(&mut encoded), EncoderFormat::Png)
         .map_err(|error| {
             fitifact::Error::new(

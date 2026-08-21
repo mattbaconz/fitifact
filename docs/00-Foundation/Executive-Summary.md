@@ -152,7 +152,11 @@ This is validation but means Fitifact should **not** claim invention of automati
 
 The potentially under-owned horizontal abstraction is:
 
+Long-term vision, not current MVP copy:
+
 > **Any file + any destination constraints -> minimum-change compatible output.**
+
+The D-026 consumer promise is **“Make your image pass the upload.”**
 
 ## Largest risks
 

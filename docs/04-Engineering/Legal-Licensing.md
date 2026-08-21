@@ -3,7 +3,7 @@ title: "Legal and Licensing"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-16
+updated: 2026-08-21
 canonical: true
 tags:
   - legal
@@ -53,6 +53,20 @@ D-025 JPEG/PNG work uses the Rust `image` crate (MIT OR Apache-2.0) with only
 the `jpeg` and `png` features. It is linked into the Fitifact binary and WASM
 module, not invoked as a subprocess. Re-check `cargo deny` when adding image
 formats. This is not ImageMagick and not FFmpeg.
+
+## Approval-gated HEIC decoder
+
+D-026 pins `libheif-js` 1.19.8. It is LGPL-3.0 and ships an embedded WASM build
+of libheif; package/upstream source, build form, license, and no-CDN behavior
+are recorded in `web/public/THIRD_PARTY_NOTICES.md`, which is copied into the
+static build. It is imported only when HEIC magic is present **and** the build
+sets `FITIFACT_HEIC_APPROVED=true`. Default builds emit no decoder chunk.
+
+The approval flag is a legal/build gate, not a user preference. Before enabling
+it for distribution, re-review LGPL obligations, corresponding-source/notice
+delivery, the exact libheif build configuration and codecs, regional patent
+exposure, and browser redistribution. Do not silently replace the decoder or
+enable it to claim broad HEIC support.
 
 ## PDF/document tooling
 
@@ -117,3 +131,9 @@ Define:
 ## Fixtures
 
 Prefer generated/public-domain/appropriately licensed media. Do not commit random copyrighted files to the test suite.
+
+The D-026 image fixtures are generated from owned synthetic pixels and pinned
+by SHA-256. The HEIC fixture is encoded locally with the installed Microsoft
+HEIF Image Extension; it was not copied from a website or user photo. Its
+generator, codec version, nondeterministic-encoder caveat, and provenance are
+recorded in `fixtures/image/README.md`.

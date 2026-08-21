@@ -3,7 +3,7 @@ title: "Positioning and Messaging"
 type: positioning
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - positioning
@@ -21,7 +21,7 @@ Technical:
 ## One-liners
 
 Consumer:
-> **Make any file fit where you need it.**
+> **Make your image pass the upload.**
 
 Developer:
 > **Stop rejecting incompatible uploads. Adapt them.**
@@ -32,8 +32,23 @@ Technical:
 Infrastructure:
 > **A compatibility layer between arbitrary files and arbitrary destinations.**
 
-## Preferred tagline
-> **Any file. Any destination. Make it work.**
+## Current MVP promise
+> **Make your image pass the upload.**
+
+Trust line:
+> **Your image stays on this device.**
+
+Result boundary:
+> **validated against the requirements you confirmed**
+
+Do not promise that a destination server will accept the result. Hidden rules
+can exist beyond the requirements the user supplied.
+
+## Long-term vision only
+> **Any file. Any destination.**
+
+This is strategy, not MVP copy. Do not use it as the current product promise,
+headline, feature claim, or acceptance guarantee.
 
 Alternative:
 > **Stop converting files. Make them compatible.**

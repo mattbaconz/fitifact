@@ -47,6 +47,15 @@ try {
         "fixtures/media/unsupported-extra-video.mp4",
         "fixtures/image/compatible-jpeg.jpg",
         "fixtures/image/mismatch-png.png",
+        "fixtures/image/transparent-png.png",
+        "fixtures/image/crop-grid.png",
+        "fixtures/image/malformed-image.jpg",
+        "fixtures/image/oversized-pixels.png",
+        "fixtures/image/synthetic-single.heic",
+        "docs/04-Engineering/evidence/consumer-image-upload-mvp/before-desktop.png",
+        "docs/04-Engineering/evidence/consumer-image-upload-mvp/before-mobile.png",
+        "docs/04-Engineering/evidence/consumer-image-upload-mvp/after-desktop.png",
+        "docs/04-Engineering/evidence/consumer-image-upload-mvp/after-mobile.png",
         "docs/brand/ft-mark-light.png",
         "docs/brand/ft-icon-dark.png",
         "docs/brand/ft-mark-simple.png"
@@ -131,7 +140,10 @@ try {
         "deny.toml",
         "dist-workspace.toml",
         "rust-toolchain.toml",
-        "fixtures/media/SHA256SUMS"
+        "fixtures/media/SHA256SUMS",
+        "fixtures/image/SHA256SUMS",
+        "web/package-lock.json",
+        "web/.node-version"
     )
     foreach ($path in $requiredReleaseInputs) {
         git ls-files --error-unmatch -- $path 1>$null 2>$null

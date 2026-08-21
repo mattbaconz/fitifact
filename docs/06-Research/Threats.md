@@ -2,7 +2,7 @@
 title: "Threats"
 type: research
 status: active
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - threats
@@ -98,3 +98,28 @@ Messaging: smallest necessary change, not zero loss.
 
 ## T20 — AI feature creep
 A model is a parser fallback, not the product.
+
+## T21 — False destination confidence
+Passing confirmed typed requirements does not prove undocumented server rules.
+Use the exact boundary **“validated against the requirements you confirmed”**,
+never guaranteed acceptance, and measure real destination acceptance in the
+ten-task moderated gate.
+
+## T22 — Browser image harm
+Unapproved cropping, silent metadata behavior, transparency flattening, or
+hidden quality/upscale loss can make a technically valid output harmful.
+Mitigate with explicit crop consent, metadata disclosure, transparency refusal,
+warnings, original preservation, requirement-by-requirement validation, and a
+zero-harm continuation threshold.
+
+## T23 — Local-processing claim drift
+Third-party scripts, telemetry, CDN decoders, or a cloud fallback would make
+“Your image stays on this device” false. Keep static assets same-origin, decoder
+imports local and gated, CSP restrictive, payload network activity absent, and
+browser flows verified.
+
+## T24 — HEIC redistribution exposure
+Decoder licensing, codec patents, multi-image semantics, and large decoded
+allocations create separate risk. Default the decoder off, pin/review notices,
+load only after HEIC magic, refuse zero/multiple images, enforce the core pixel
+limit, and require `FITIFACT_HEIC_APPROVED=true` for an approved build.

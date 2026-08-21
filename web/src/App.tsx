@@ -14,8 +14,8 @@ import { ImageWorkerClient, WorkerFailure, type ProgressUpdate } from "./worker/
 const DEFAULT_REQUIREMENTS = "JPEG, max 2 MB, max 2000 x 2000";
 
 const STATE_COPY: Record<ProductState, { title: string; tone: string }> = {
-  idle: { title: "Describe the upload requirement", tone: "neutral" },
-  requirements_ready: { title: "Requirements ready", tone: "neutral" },
+  idle: { title: "Waiting for reviewed requirements", tone: "neutral" },
+  requirements_ready: { title: "Ready for an image", tone: "neutral" },
   processing: { title: "Working locally", tone: "neutral" },
   planned: { title: "Minimum changes ready", tone: "neutral" },
   compatible: { title: "Already compatible", tone: "success" },
@@ -316,7 +316,7 @@ export function App() {
         <section className="hero" aria-labelledby="page-title">
           <p className="eyebrow">Local image compatibility</p>
           <h1 id="page-title">Make your image pass the upload</h1>
-          <p className="lede">Paste what the upload form asks for. Fitifact finds the smallest change, shows it to you, then validates the result.</p>
+          <p className="lede">Paste what the upload form asks for. Fitifact finds the smallest change, shows it to you, then validates the output against your confirmed requirements.</p>
           <p className="local-badge">Your image stays on this device. Uploads to Fitifact: 0 bytes.</p>
         </section>
 
@@ -356,18 +356,20 @@ export function App() {
 
           <section className="card upload-card" aria-labelledby="image-title">
             <div className="step-heading"><span>3</span><h2 id="image-title">Choose your image</h2></div>
-            <div className={`drop-zone ${dragging ? "is-dragging" : ""}`} aria-disabled={!target || state === "processing"} onDragOver={(event) => { event.preventDefault(); if (state !== "processing" && target) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+            <div className={`drop-zone ${dragging ? "is-dragging" : ""} ${!target ? "is-disabled" : ""}`} aria-disabled={!target || state === "processing"} onDragOver={(event) => { event.preventDefault(); if (state !== "processing" && target) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
               <p><strong>Drop a JPEG or PNG here</strong></p>
-              <p>HEIC is accepted only in an explicitly approved build.</p>
+              <p id="image-help">HEIC is accepted only in an explicitly approved build.</p>
+              {!target ? <p id="image-prerequisite" className="prerequisite">Review the requirements before choosing a file.</p> : null}
               <label className="button-label" htmlFor="image-file">Choose an image</label>
-              <input id="image-file" className="visually-hidden" type="file" accept="image/jpeg,image/png,.heic,.heif" onChange={(event) => { const file = event.currentTarget.files?.item(0); if (file) void analyzeFile(file); event.currentTarget.value = ""; }} disabled={!target || state === "processing"} />
+              <input id="image-file" className="visually-hidden" type="file" accept="image/jpeg,image/png,.heic,.heif" aria-describedby={!target ? "image-help image-prerequisite" : "image-help"} onChange={(event) => { const file = event.currentTarget.files?.item(0); if (file) void analyzeFile(file); event.currentTarget.value = ""; }} disabled={!target || state === "processing"} />
             </div>
             {sourceFile ? <p className="file-row"><span>{sourceFile.name}</span><span>{formatBytes(sourceFile.size)}</span></p> : null}
           </section>
 
           <section className={`card status-card ${status.tone}`} aria-labelledby="status-title">
-            <div className="step-heading"><span>4</span><h2 id="status-title">{status.title}</h2></div>
+            <div className="step-heading"><span>4</span><h2 id="status-title">Review and download</h2></div>
             <div role="status" aria-live="polite" aria-atomic="true">
+              <h3 className="status-title">{status.title}</h3>
               {state === "processing" && progress ? <><p>{progress.stage}</p><progress max="100" value={progress.percent}>{progress.percent}%</progress><p className="privacy-reminder">Your image stays on this device.</p><button className="danger-link" type="button" onClick={cancel}>Cancel processing</button></> : null}
               {error ? <p className="error-copy"><strong>{error.code}</strong><br />{error.message}</p> : null}
               {plan ? <PlanSummary plan={plan} /> : <p className="empty-copy">The inspection, minimum changes, and validation checklist will appear here.</p>}
@@ -386,6 +388,8 @@ export function App() {
             {(state === "planned" || state === "crop_approval_required") ? <button type="button" onClick={() => void adaptImage()} disabled={Boolean(plan?.plan.target.crop.required && !cropConsent)}>Adapt and validate</button> : null}
 
             {checklist.length ? <div className="checklist"><h3>Requirement checklist</h3><ul>{checklist.map((check) => <li key={check.constraint_id} className={check.result}><span aria-hidden="true">{check.result === "pass" ? "✓" : check.result === "fail" ? "×" : "?"}</span><span><strong>{check.field}</strong><br />{check.actual ?? "Unknown"} / needs {check.required}</span><span className="sr-result">{check.result}</span></li>)}</ul></div> : null}
+
+            {(state === "adapted" || state === "compatible") ? <p className="validation-boundary">This output was validated against the requirements you confirmed. A destination may still have undocumented rules.</p> : null}
 
             {downloadUrl && download && (state === "adapted" || state === "compatible") ? <a className="download-button" href={downloadUrl} download={download.name}>{state === "compatible" && !outputBuffer ? "Use original image" : `Download ${download.extension.toUpperCase()}`}</a> : null}
           </section>

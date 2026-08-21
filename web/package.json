@@ -3,14 +3,21 @@
   "version": "0.1.0-rc.3",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.5.1",
+  "engines": {
+    "node": "24.6.0",
+    "npm": "11.5.1"
+  },
   "scripts": {
     "build:wasm": "wasm-pack build ../crates/fitifact-wasm --target web --out-dir ../../web/src/wasm --release",
     "dev": "vite",
     "lint": "eslint . && tsc --noEmit",
     "test": "vitest run",
+    "test:heic": "vitest run src/worker/heic-decoder.test.ts",
     "build": "npm run build:wasm && vite build",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:heic": "playwright test --project=chromium-desktop --grep \"approved HEIC\""
   },
   "dependencies": {
     "libheif-js": "1.19.8",

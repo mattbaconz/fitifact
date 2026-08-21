@@ -94,6 +94,22 @@ fn jpg_is_canonicalized_and_decimal_bytes_are_exact() {
 }
 
 #[test]
+fn adjacent_short_size_and_dimension_rules_do_not_overlap() {
+    let parsed = parse_image_requirements("JPEG, max 2 MB, max 2000 x 2000").unwrap();
+    let constraints = parsed.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::FileBytes
+            && constraint.value == ConstraintValue::Integer(2_000_000)
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageWidth
+            && constraint.op == Operator::Lte
+            && constraint.value == ConstraintValue::Integer(2000)
+    }));
+    assert!(parsed.unresolved.is_empty());
+}
+
+#[test]
 fn min_and_max_dimension_language_compiles_to_ranges() {
     let parsed = parse_image_requirements(
         "width at least 640 px, width no more than 1920 pixels, at most 1080 high",

@@ -2,7 +2,7 @@
 title: "Next Actions"
 type: action-plan
 status: active
-updated: 2026-08-19
+updated: 2026-08-21
 canonical: true
 tags:
   - next
@@ -44,16 +44,23 @@ historical rename/collision context.
    `fitifact doctor`, and the three canonical media fixtures. See the
    `v0.1.0-rc.1` section of the release checklist.
 
-4. **Image then local-only web** — landed on commits after the freeze SHA
+4. **D-026 consumer image upload MVP** — landed on commits after the freeze SHA
    (do not tag them `v0.1.0-rc.1`):
-   - JPEG no-op and PNG→JPEG (D-025);
-   - static WASM drop flow for that image matrix only;
-   - no ffmpeg.wasm, no uploads, no cloud in this repository.
+   - deterministic requirements parsing and typed JPEG/PNG adaptation;
+   - static worker/WASM workflow, crop consent, warnings, and post-validation;
+   - default-off approved HEIC decoder with notices and owned fixture;
+   - no ffmpeg.wasm, uploads, telemetry, or cloud fallback.
 
-5. **Do not build cloud in the public repository**
+5. **Run the human continuation gate** — post-build, not fabricated:
+   - execute [[04-Engineering/Consumer-Image-Moderated-Test]] with ten real
+     form/application photo tasks;
+   - require 8/10 completion, 8/10 real destination acceptance, 5/10 return
+     intent, and zero harmful outcomes.
+
+6. **Do not build cloud in the public repository**
    - managed operations stay in the separate private checkout.
 
-6. **After traction (deferred)**
+7. **After traction (deferred)**
    - destination profiles and registry workflow;
    - extension;
    - hosted API;
