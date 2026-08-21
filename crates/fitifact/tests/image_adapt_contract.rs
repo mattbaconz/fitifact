@@ -92,6 +92,7 @@ fn resize_only_preserves_png_and_aspect_ratio() {
     let plan = plan_for(&input, &target);
     assert_eq!(plan.target.format, ImageFormat::Png);
     assert_eq!((plan.target.width, plan.target.height), (60, 30));
+    assert!(!plan.target.crop.required);
     let result = execute_image_adaptation(
         &input,
         &target,
@@ -103,6 +104,46 @@ fn resize_only_preserves_png_and_aspect_ratio() {
     let facts = result.output_artifact.image.unwrap();
     assert_eq!((facts.width, facts.height), (Some(60), Some(30)));
     assert_eq!(facts.format, Some(ImageFormat::Png));
+}
+
+#[test]
+fn near_equal_aspect_change_requires_and_honors_crop_consent() {
+    let input = sample_png_rgb(100, 100);
+    let target = constraints(serde_json::json!([
+        {"id":"width","field":"image.width","op":"eq","value":100},
+        {"id":"height","field":"image.height","op":"eq","value":101}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert!(plan.target.crop.required);
+
+    let missing = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap_err();
+    assert_eq!(missing.code, ErrorCode::SecurityBlocked);
+
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions {
+            crop: Some(NormalizedCropRectangle {
+                x: 0.0,
+                y: 0.0,
+                width: 0.99,
+                height: 1.0,
+            }),
+            crop_consent: true,
+        },
+        &NeverCancelled,
+    )
+    .unwrap();
+    let facts = result.output_artifact.image.unwrap();
+    assert_eq!(facts.width.zip(facts.height), Some((100, 101)));
 }
 
 #[test]

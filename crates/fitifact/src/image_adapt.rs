@@ -603,7 +603,7 @@ fn crop_image(
     let height = (crop.height * f64::from(source_height)).round().max(1.0) as u32;
     let width = width.min(source_width.saturating_sub(x));
     let height = height.min(source_height.saturating_sub(y));
-    if !same_aspect(
+    if !crop_aspect_matches(
         width,
         height,
         requirement.target_aspect_width,
@@ -766,8 +766,19 @@ fn scaled(value: u32, numerator: u32, denominator: u32) -> u32 {
 fn same_aspect(first_width: u32, first_height: u32, second_width: u32, second_height: u32) -> bool {
     let left = u128::from(first_width) * u128::from(second_height);
     let right = u128::from(second_width) * u128::from(first_height);
+    left == right
+}
+
+fn crop_aspect_matches(
+    crop_width: u32,
+    crop_height: u32,
+    target_width: u32,
+    target_height: u32,
+) -> bool {
+    let left = u128::from(crop_width) * u128::from(target_height);
+    let right = u128::from(target_width) * u128::from(crop_height);
     let difference = left.abs_diff(right);
-    difference == 0 || difference * 100 <= left.max(right)
+    difference == 0 || difference * 2 < u128::from(target_width.max(target_height).max(1))
 }
 
 fn integer_value(value: &ConstraintValue) -> Option<u64> {

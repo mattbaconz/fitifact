@@ -92,3 +92,36 @@ Fix-round files changed:
 - `.superpowers/sdd/consumer-image-upload-mvp/task-1-report.md`
 
 Fix-round self-review found no remaining correctness concern. Resource gates now exist at every public execution/allocation boundary in scope, and all changed output still follows inspect → check → plan → execute → re-inspect → validate.
+
+## Fix Round 2
+
+Scoped re-review found two remaining edge cases. Both were fixed with focused regressions:
+
+- Declared target aspect ratios are now compared by exact `u128` cross-products. Therefore every genuine ratio change, including 100×100→100×101, is planned as a crop and fails with `SECURITY_BLOCKED` without explicit consent. Approved normalized crops retain a narrowly bounded integer-pixel rounding allowance before exact target rendering. Same-ratio scaled dimensions remain crop-free.
+- Malformed `W×H` prevalidation now requires either two numeric neighbors or an explicit dimension qualifier/adjacent dimension term. Unsupported multiplier prose such as `make it 2x faster` remains unresolved, while dimension-qualified incomplete input such as `exactly 2x` and the previously covered malformed numeric pairs still return `INPUT_INVALID`.
+
+Test-first evidence:
+
+- `cargo test -p fitifact --test image_adapt_contract near_equal_aspect_change_requires_and_honors_crop_consent --locked` — RED before the source fix because `plan.target.crop.required` was false; PASS after the fix.
+- `cargo test -p fitifact --test requirements_contract unsupported_prose_with_an_x_suffix_remains_unresolved --locked` — RED before the source fix because parsing returned `INPUT_INVALID`; PASS after the fix.
+- `cargo test -p fitifact --test requirements_contract dimension_qualified_incomplete_exact_pair_is_rejected --locked` — PASS, locking the existing rejection side of the narrowed parser boundary.
+
+Focused regression verification:
+
+- `cargo test -p fitifact --test constraints_contract --test requirements_contract --test image_contract --test image_adapt_contract --locked` — PASS, 60 passed, 0 failed (17 constraint, 12 requirements, 11 legacy image, 20 image-adapt).
+
+Final verification after the last source/test edit:
+
+- `cargo fmt --all -- --check` — PASS.
+- `cargo test --workspace --all-targets --locked` — PASS, 172 passed, 0 failed, 11 ignored (the pre-existing 10 opt-in live FFmpeg tests and 1 opt-in bench test).
+- `cargo clippy --workspace --all-targets --locked -- -D warnings` — PASS, zero warnings.
+
+Fix-round files changed:
+
+- `crates/fitifact/src/image_adapt.rs`
+- `crates/fitifact/src/requirements.rs`
+- `crates/fitifact/tests/image_adapt_contract.rs`
+- `crates/fitifact/tests/requirements_contract.rs`
+- `.superpowers/sdd/consumer-image-upload-mvp/task-1-report.md`
+
+Fix-round self-review found no remaining correctness or scope concern. Exact target planning cannot take a non-crop path for a changed ratio, crop quantization remains explicit and consent-gated, and unsupported numeric-looking prose is no longer promoted into the supported requirement grammar.

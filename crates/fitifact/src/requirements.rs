@@ -94,7 +94,15 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
         if matches!(tokens[index].value.as_str(), "x" | "×") {
             let left = index.checked_sub(1).and_then(|value| tokens.get(value));
             let right = tokens.get(index + 1);
-            if left.is_some_and(looks_numeric) || right.is_some_and(looks_numeric) {
+            let left_numeric = left.is_some_and(looks_numeric);
+            let right_numeric = right.is_some_and(looks_numeric);
+            let dimension_context = left_numeric && right_numeric
+                || index
+                    .checked_sub(1)
+                    .is_some_and(|left_index| qualifier_before(tokens, left_index).is_some())
+                || qualifier_before(tokens, index).is_some()
+                || adjacent_dimension_word(tokens, index, left_numeric, right_numeric);
+            if dimension_context && (left_numeric || right_numeric) {
                 let valid = left.is_some_and(|token| {
                     integer(token).is_some() && !has_attached_sign_or_decimal(text, token)
                 }) && right.is_some_and(|token| {
@@ -184,6 +192,33 @@ fn validate_dimension_number(text: &str, token: Option<&Token>) -> Result<()> {
 
 fn looks_numeric(token: &Token) -> bool {
     token.value.bytes().any(|byte| byte.is_ascii_digit())
+}
+
+fn adjacent_dimension_word(
+    tokens: &[Token],
+    separator: usize,
+    left_numeric: bool,
+    right_numeric: bool,
+) -> bool {
+    let is_dimension_word = |token: &Token| {
+        axis_field(&token.value).is_some()
+            || matches!(token.value.as_str(), "dimension" | "dimensions" | "image")
+    };
+    if left_numeric && !right_numeric {
+        return separator
+            .checked_sub(2)
+            .and_then(|index| tokens.get(index))
+            .is_some_and(is_dimension_word)
+            || tokens.get(separator + 1).is_some_and(is_dimension_word);
+    }
+    if right_numeric && !left_numeric {
+        return separator
+            .checked_sub(1)
+            .and_then(|index| tokens.get(index))
+            .is_some_and(is_dimension_word)
+            || tokens.get(separator + 2).is_some_and(is_dimension_word);
+    }
+    false
 }
 
 fn has_attached_sign_or_decimal(text: &str, token: &Token) -> bool {

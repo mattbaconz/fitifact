@@ -160,6 +160,20 @@ fn recognizable_malformed_numeric_language_is_rejected_not_unresolved() {
 }
 
 #[test]
+fn unsupported_prose_with_an_x_suffix_remains_unresolved() {
+    let parsed = parse_image_requirements("make it 2x faster").unwrap();
+    assert!(parsed.constraints.is_none());
+    assert!(parsed.source_spans.is_empty());
+    assert_eq!(parsed.unresolved[0].text, "make it 2x faster");
+}
+
+#[test]
+fn dimension_qualified_incomplete_exact_pair_is_rejected() {
+    let error = parse_image_requirements("exactly 2x").unwrap_err();
+    assert_eq!(error.code, fitifact::ErrorCode::InputInvalid);
+}
+
+#[test]
 fn no_supported_rule_returns_only_unresolved_text() {
     let parsed = parse_image_requirements("make it beautiful").unwrap();
     assert!(parsed.constraints.is_none());
