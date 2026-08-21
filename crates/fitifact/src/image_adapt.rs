@@ -15,7 +15,8 @@ use crate::check::{CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field, Operator};
 use crate::error::{Error, ErrorCode, Result};
 use crate::image::{
-    artifact_from_bytes, contains_image_metadata, decode_oriented, jpeg_is_multi_image,
+    artifact_from_bytes, contains_image_metadata, decode_oriented, enforce_decoded_limit,
+    jpeg_is_multi_image,
 };
 use crate::plan::PlanSchema;
 
@@ -256,6 +257,7 @@ pub fn plan_image_adaptation(
     let height_range = dimension_range(constraints, Field::ImageHeight)?;
     let (target_width, target_height) =
         choose_dimensions(source_width, source_height, width_range, height_range);
+    enforce_decoded_limit(target_width, target_height)?;
     let crop_required = !same_aspect(source_width, source_height, target_width, target_height);
     let max_bytes = constraints
         .hard
@@ -457,6 +459,7 @@ impl ImageAdaptProvider for BuiltinImageProvider {
         cancellation: &dyn CancellationSignal,
     ) -> Result<ImageProviderOutput> {
         cancelled(cancellation)?;
+        enforce_decoded_limit(plan.target.width, plan.target.height)?;
         let mut image = decode_oriented(input)?;
         cancelled(cancellation)?;
         if plan.target.crop.required {
@@ -469,7 +472,11 @@ impl ImageAdaptProvider for BuiltinImageProvider {
             image = crop_image(image, crop, &plan.target.crop)?;
         }
         if image.dimensions() != (plan.target.width, plan.target.height) {
-            image = image.resize_exact(plan.target.width, plan.target.height, FilterType::Lanczos3);
+            image = if plan.target.crop.required {
+                image.resize_exact(plan.target.width, plan.target.height, FilterType::Lanczos3)
+            } else {
+                image.resize(plan.target.width, plan.target.height, FilterType::Lanczos3)
+            };
         }
         cancelled(cancellation)?;
         match plan.target.format {
@@ -515,7 +522,7 @@ fn encode_fitted_jpeg(
         if (width, height) == image.dimensions() {
             break;
         }
-        image = image.resize_exact(width, height, FilterType::Lanczos3);
+        image = image.resize(width, height, FilterType::Lanczos3);
         stats.dimension_reductions += 1;
         cancelled(cancellation)?;
         let bytes = encode_jpeg(&image, 50)?;
@@ -550,7 +557,7 @@ fn encode_fitted_png(
         if (width, height) == image.dimensions() {
             break;
         }
-        image = image.resize_exact(width, height, FilterType::Lanczos3);
+        image = image.resize(width, height, FilterType::Lanczos3);
         stats.dimension_reductions += 1;
         bytes = encode_png(&image)?;
     }
@@ -757,9 +764,10 @@ fn scaled(value: u32, numerator: u32, denominator: u32) -> u32 {
 }
 
 fn same_aspect(first_width: u32, first_height: u32, second_width: u32, second_height: u32) -> bool {
-    let left = u64::from(first_width) * u64::from(second_height);
-    let right = u64::from(second_width) * u64::from(first_height);
-    left.abs_diff(right) <= u64::from(first_width.max(second_width).max(1))
+    let left = u128::from(first_width) * u128::from(second_height);
+    let right = u128::from(second_width) * u128::from(first_height);
+    let difference = left.abs_diff(right);
+    difference == 0 || difference * 100 <= left.max(right)
 }
 
 fn integer_value(value: &ConstraintValue) -> Option<u64> {

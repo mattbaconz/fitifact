@@ -6,7 +6,7 @@ use crate::constraints::{
     validate_and_normalize,
 };
 pub use crate::contract::{REQUIREMENTS_SCHEMA, RequirementsSchema};
-use crate::error::Result;
+use crate::error::{Error, ErrorCode, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequirementSourceSpan {
@@ -51,6 +51,7 @@ struct Token {
 /// Anything outside the supported grammar is returned as unresolved text.
 pub fn parse_image_requirements(text: &str) -> Result<RequirementParse> {
     let tokens = tokenize(text);
+    reject_malformed_numeric_targets(text, &tokens)?;
     let mut covered = vec![false; text.len()];
     let mut constraints = Vec::new();
     let mut spans = Vec::new();
@@ -88,6 +89,120 @@ pub fn parse_image_requirements(text: &str) -> Result<RequirementParse> {
     })
 }
 
+fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> {
+    for index in 0..tokens.len() {
+        if matches!(tokens[index].value.as_str(), "x" | "×") {
+            let left = index.checked_sub(1).and_then(|value| tokens.get(value));
+            let right = tokens.get(index + 1);
+            if left.is_some_and(looks_numeric) || right.is_some_and(looks_numeric) {
+                let valid = left.is_some_and(|token| {
+                    integer(token).is_some() && !has_attached_sign_or_decimal(text, token)
+                }) && right.is_some_and(|token| {
+                    integer(token).is_some() && !has_attached_sign_or_decimal(text, token)
+                });
+                if !valid {
+                    return Err(invalid_numeric(
+                        "exact image dimensions must contain two positive whole integers",
+                    ));
+                }
+            }
+        }
+
+        if axis_field(&tokens[index].value).is_some() {
+            if qualifier_before(tokens, index).is_some() {
+                let value_index = if tokens
+                    .get(index + 1)
+                    .is_some_and(|token| token.value == "of")
+                {
+                    index + 2
+                } else {
+                    index + 1
+                };
+                validate_dimension_number(text, tokens.get(value_index))?;
+            }
+            if let Some((_, qualifier_end)) = qualifier_after(tokens, index + 1) {
+                validate_dimension_number(text, tokens.get(qualifier_end + 1))?;
+            }
+            let value_index = if index > 1 && pixel_word(&tokens[index - 1].value) {
+                Some(index - 2)
+            } else {
+                index.checked_sub(1)
+            };
+            if let Some(value_index) = value_index
+                && qualifier_before(tokens, value_index).is_some()
+            {
+                validate_dimension_number(text, tokens.get(value_index))?;
+            }
+        }
+    }
+
+    for unit_index in 0..tokens.len() {
+        if !matches!(
+            tokens[unit_index].value.as_str(),
+            "mb" | "mib" | "byte" | "bytes"
+        ) || unit_index == 0
+        {
+            continue;
+        }
+        let number_index = unit_index - 1;
+        let prefix = size_qualifier_before(tokens, number_index);
+        let suffix = tokens
+            .get(unit_index + 1)
+            .is_some_and(|token| matches!(token.value.as_str(), "max" | "maximum" | "limit"));
+        if prefix.is_none() && !suffix {
+            continue;
+        }
+        let start = prefix.unwrap_or(number_index);
+        let numeric_tokens: Vec<_> = tokens[start..unit_index]
+            .iter()
+            .filter(|token| looks_numeric(token))
+            .collect();
+        let number = &tokens[number_index];
+        if numeric_tokens.len() != 1
+            || decimal(number).is_none()
+            || has_attached_sign_or_decimal(text, number)
+        {
+            return Err(invalid_numeric(
+                "byte limits require one valid decimal MB/MiB or whole-byte value",
+            ));
+        }
+        parse_size_bytes(&format!("{} {}", number.value, tokens[unit_index].value))?;
+    }
+    Ok(())
+}
+
+fn validate_dimension_number(text: &str, token: Option<&Token>) -> Result<()> {
+    if token
+        .is_none_or(|token| integer(token).is_none() || has_attached_sign_or_decimal(text, token))
+    {
+        return Err(invalid_numeric(
+            "image dimensions require positive whole integers",
+        ));
+    }
+    Ok(())
+}
+
+fn looks_numeric(token: &Token) -> bool {
+    token.value.bytes().any(|byte| byte.is_ascii_digit())
+}
+
+fn has_attached_sign_or_decimal(text: &str, token: &Token) -> bool {
+    let prefix = &text[..token.start];
+    prefix.ends_with('.')
+        || prefix
+            .chars()
+            .rev()
+            .find(|character| !character.is_whitespace())
+            .is_some_and(|character| matches!(character, '+' | '-'))
+}
+
+fn invalid_numeric(message: &str) -> Error {
+    Error::new(
+        ErrorCode::InputInvalid,
+        format!("requirements.invalid_numeric: {message}"),
+    )
+}
+
 fn parse_formats(
     text: &str,
     tokens: &[Token],
@@ -111,31 +226,41 @@ fn parse_formats(
     formats.sort();
     formats.dedup();
 
-    let ambiguous = formats.len() > 1
-        && matches.windows(2).any(|pair| {
-            let connector = text[pair[0].end..pair[1].start].to_ascii_lowercase();
-            !connector.contains("or") && !connector.contains('/')
-        });
-    if formats.len() > 1 {
-        mark(
-            covered,
-            matches.first().expect("nonempty").start,
-            matches.last().expect("nonempty").end,
-        );
-    } else {
-        for item in &matches {
-            mark(covered, item.start, item.end);
+    let mut ambiguous_pairs = Vec::new();
+    for pair in matches.windows(2) {
+        let connectors: Vec<_> = tokens
+            .iter()
+            .filter(|token| token.start >= pair[0].end && token.end <= pair[1].start)
+            .filter(|token| matches!(token.value.as_str(), "or" | "/"))
+            .collect();
+        for conjunction in tokens
+            .iter()
+            .filter(|token| token.start >= pair[0].end && token.end <= pair[1].start)
+            .filter(|token| token.value == "and")
+        {
+            mark(covered, conjunction.start, conjunction.end);
+        }
+        if connectors.is_empty() && formats.len() > 1 {
+            ambiguous_pairs.push((pair[0], pair[1]));
+        }
+        for connector in connectors {
+            mark(covered, connector.start, connector.end);
         }
     }
-    if ambiguous {
-        let start = matches.first().expect("nonempty").start;
-        let end = matches.last().expect("nonempty").end;
-        ambiguities.push(RequirementAmbiguity {
-            start,
-            end,
-            text: text[start..end].to_string(),
-            message: "multiple image formats need an explicit 'or' to mean alternatives".into(),
-        });
+    for item in &matches {
+        mark(covered, item.start, item.end);
+    }
+    if !ambiguous_pairs.is_empty() {
+        for (first, second) in ambiguous_pairs {
+            let start = first.start;
+            let end = second.end;
+            ambiguities.push(RequirementAmbiguity {
+                start,
+                end,
+                text: text[start..end].to_string(),
+                message: "multiple image formats need an explicit 'or' to mean alternatives".into(),
+            });
+        }
         return;
     }
 

@@ -226,6 +226,84 @@ fn exact_aspect_change_requires_approved_normalized_crop() {
 }
 
 #[test]
+fn tiny_two_to_one_source_cannot_be_distorted_to_square_without_crop_consent() {
+    let input = sample_png_rgb(2, 1);
+    let target = constraints(serde_json::json!([
+        {"id":"width","field":"image.width","op":"eq","value":1},
+        {"id":"height","field":"image.height","op":"eq","value":1}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert!(plan.target.crop.required);
+    let error = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::SecurityBlocked);
+
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions {
+            crop: Some(NormalizedCropRectangle {
+                x: 0.0,
+                y: 0.0,
+                width: 0.5,
+                height: 1.0,
+            }),
+            crop_consent: true,
+        },
+        &NeverCancelled,
+    )
+    .unwrap();
+    let facts = result.output_artifact.image.unwrap();
+    assert_eq!(facts.width.zip(facts.height), Some((1, 1)));
+}
+
+#[test]
+fn small_but_material_aspect_changes_also_require_crop() {
+    let input = sample_png_rgb(3, 2);
+    let target = constraints(serde_json::json!([
+        {"id":"width","field":"image.width","op":"eq","value":2},
+        {"id":"height","field":"image.height","op":"eq","value":1}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert!(plan.target.crop.required);
+}
+
+#[test]
+fn planner_and_renderer_reject_targets_over_twenty_four_megapixels() {
+    let input = sample_png_rgb(2, 1);
+    let target = constraints(serde_json::json!([
+        {"id":"width","field":"image.width","op":"eq","value":6001},
+        {"id":"height","field":"image.height","op":"eq","value":4000}
+    ]));
+    let artifact = artifact_from_bytes(None, &input).unwrap();
+    assert_eq!(
+        plan_image_adaptation(&artifact, &target).unwrap_err().code,
+        ErrorCode::InspectionLimit
+    );
+
+    let safe_target = format_target("jpeg");
+    let mut forged = plan_for(&input, &safe_target);
+    forged.target.width = 6001;
+    forged.target.height = 4000;
+    let error = fitifact::BuiltinImageProvider
+        .render(
+            &input,
+            &forged,
+            &ImageAdaptOptions::default(),
+            &NeverCancelled,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InspectionLimit);
+}
+
+#[test]
 fn impossible_exact_byte_target_is_refused() {
     let input = noisy_jpeg(128, 128, 95);
     let target = constraints(serde_json::json!([

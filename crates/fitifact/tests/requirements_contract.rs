@@ -36,6 +36,40 @@ fn parses_supported_image_language_with_normalized_constraints_and_spans() {
 }
 
 #[test]
+fn format_alternatives_do_not_swallow_intervening_dimension_evidence() {
+    let input = "JPEG, exactly 1200×630, or PNG";
+    let parsed = parse_image_requirements(input).unwrap();
+    let constraints = parsed.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageFormat
+            && constraint.value == ConstraintValue::List(vec!["jpeg".into(), "png".into()])
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageWidth
+            && constraint.op == Operator::Eq
+            && constraint.value == ConstraintValue::Integer(1200)
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageHeight
+            && constraint.op == Operator::Eq
+            && constraint.value == ConstraintValue::Integer(630)
+    }));
+    assert!(parsed.ambiguities.is_empty());
+    assert!(parsed.unresolved.is_empty());
+    assert!(parsed.source_spans.iter().all(|span| {
+        span.text == "JPEG" || span.text == "PNG" || span.text == "exactly 1200×630"
+    }));
+}
+
+#[test]
+fn words_containing_or_are_not_format_alternative_connectors() {
+    let parsed = parse_image_requirements("JPEG for PNG").unwrap();
+    assert!(parsed.constraints.is_none());
+    assert_eq!(parsed.ambiguities.len(), 1);
+    assert_eq!(parsed.unresolved[0].text, "for");
+}
+
+#[test]
 fn jpg_is_canonicalized_and_decimal_bytes_are_exact() {
     let parsed = parse_image_requirements("JPG; maximum file size 2.25 MB").unwrap();
     let constraints = parsed.constraints.unwrap();
@@ -103,6 +137,26 @@ fn malformed_or_contradictory_numeric_targets_are_rejected() {
     assert!(parse_image_requirements("maximum 0×800").is_err());
     assert!(parse_image_requirements("max 0.0000001 MB").is_err());
     assert!(parse_image_requirements("minimum width 1200, maximum width 1000").is_err());
+}
+
+#[test]
+fn recognizable_malformed_numeric_language_is_rejected_not_unresolved() {
+    for input in [
+        "maximum width 12.5",
+        "maximum width - 12",
+        "height at most nope",
+        "exactly 12.5×630",
+        "exactly - 1200×630",
+        "exactly 1200×630.5",
+        "max 1.2.3 MiB",
+        "max 1,5 MiB",
+        "max .5 MB",
+        "max - 1 MB",
+        "max 1.5 bytes",
+    ] {
+        let error = parse_image_requirements(input).unwrap_err();
+        assert_eq!(error.code, fitifact::ErrorCode::InputInvalid, "{input}");
+    }
 }
 
 #[test]

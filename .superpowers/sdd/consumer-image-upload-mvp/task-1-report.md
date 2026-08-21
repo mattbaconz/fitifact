@@ -60,3 +60,35 @@ The added contracts cover no-op; format-only; resize-only; JPEG byte fitting; PN
 ## Concerns
 
 None. The natural-language grammar is intentionally bounded: unsupported wording is returned in `unresolved`, and multiple formats without an explicit “or” are returned as an ambiguity rather than inferred.
+
+## Fix Round 1
+
+Independent review identified five blocking gaps. All were fixed with regressions that would have failed before this round:
+
+- The public `encode_jpeg_bytes` path now enforces the 32 MiB encoded and 24 MP decoded limits before pixel allocation. `ImageProvider` checks file metadata before reading an oversized file, then inherits decoded-limit enforcement. The typed planner and built-in renderer both reject targets above 24 MP before resize allocation.
+- The legacy PNG→JPEG path now inspects alpha and returns an explicit transparency-flattening refusal instead of calling `to_rgb8` on alpha-bearing PNG input.
+- Format-alternative parsing now recognizes only standalone `or` or `/` connectors and marks only precise connector/format spans. It no longer covers intervening evidence, so `JPEG, exactly 1200×630, or PNG` retains both format and exact-dimension constraints. Words such as `for` no longer count as `or`.
+- Recognizable malformed numeric dimension and MB/MiB/byte targets now return `INPUT_INVALID`, including fractional width/height, malformed exact pairs, signs, repeated/locale decimal separators, and fractional raw bytes.
+- Aspect comparison now uses `u128` cross-products with a bounded 1% near-equality allowance. Material changes including 2:1→1:1 and small 3:2→2:1 require approved crop consent. Uncropped rendering and proportional fitting use the aspect-preserving `resize` path; only an explicitly approved crop may use exact target resampling.
+
+Focused regression verification:
+
+- `cargo test -p fitifact --test constraints_contract --test requirements_contract --test image_contract --test image_adapt_contract --locked` — PASS, 57 passed, 0 failed (17 constraint, 10 requirements, 11 legacy image, 19 image-adapt).
+
+Final verification after the last fix:
+
+- `cargo fmt --all -- --check` — PASS.
+- `cargo test --workspace --all-targets --locked` — PASS, 169 passed, 0 failed, 11 ignored (the pre-existing 10 opt-in live FFmpeg tests and 1 opt-in bench test).
+- `cargo clippy --workspace --all-targets --locked -- -D warnings` — PASS, zero warnings.
+
+Fix-round files changed:
+
+- `crates/fitifact/src/image.rs`
+- `crates/fitifact/src/image_adapt.rs`
+- `crates/fitifact/src/requirements.rs`
+- `crates/fitifact/tests/image_contract.rs`
+- `crates/fitifact/tests/image_adapt_contract.rs`
+- `crates/fitifact/tests/requirements_contract.rs`
+- `.superpowers/sdd/consumer-image-upload-mvp/task-1-report.md`
+
+Fix-round self-review found no remaining correctness concern. Resource gates now exist at every public execution/allocation boundary in scope, and all changed output still follows inspect → check → plan → execute → re-inspect → validate.

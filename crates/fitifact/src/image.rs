@@ -288,6 +288,7 @@ fn png_chunks(bytes: &[u8]) -> impl Iterator<Item = &[u8; 4]> {
 }
 
 pub fn encode_jpeg_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
+    enforce_encoded_limit(bytes.len())?;
     let format = sniff_format(bytes).ok_or_else(|| {
         Error::new(
             ErrorCode::InputInvalid,
@@ -306,12 +307,19 @@ pub fn encode_jpeg_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
             "v0.1 refuses animated PNG",
         ));
     }
-    let image = image::load_from_memory(bytes).map_err(|_| {
-        Error::new(
-            ErrorCode::ExecutionFailed,
-            "the PNG source could not be decoded",
-        )
-    })?;
+    let artifact = artifact_from_bytes(None, bytes)?;
+    if artifact
+        .image
+        .as_ref()
+        .and_then(|facts| facts.alpha)
+        .unwrap_or(false)
+    {
+        return Err(Error::new(
+            ErrorCode::NoValidPlan,
+            "image.transparency_flattening_refused: PNG alpha cannot be flattened implicitly",
+        ));
+    }
+    let image = decode_oriented(bytes)?;
     encode_dynamic_jpeg(&image)
 }
 
@@ -349,6 +357,20 @@ impl TransformProvider for ImageProvider {
             return Err(Error::new(
                 ErrorCode::InputInvalid,
                 "the image provider only executes JPEG encode plans",
+            ));
+        }
+        let input_length = std::fs::metadata(input)
+            .map_err(|err| {
+                Error::new(
+                    ErrorCode::InputInvalid,
+                    format!("cannot inspect image input metadata: {err}"),
+                )
+            })?
+            .len();
+        if input_length > MAX_IMAGE_INPUT_BYTES as u64 {
+            return Err(Error::new(
+                ErrorCode::InspectionLimit,
+                "image.input_too_large: encoded image exceeds the 32 MiB limit",
             ));
         }
         let bytes = std::fs::read(input).map_err(|err| {
