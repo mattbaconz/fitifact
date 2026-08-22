@@ -11,7 +11,7 @@ description = "Fitifact local WASM bindings for the D-026 consumer image workflo
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-fitifact = { version = "=0.1.0-rc.4", path = "../fitifact" }
+fitifact = { version = "=0.1.0-rc.5", path = "../fitifact" }
 image = { version = "=0.25.9", default-features = false, features = ["png"] }
 serde_json = "1"
 

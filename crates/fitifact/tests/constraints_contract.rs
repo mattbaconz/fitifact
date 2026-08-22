@@ -145,11 +145,13 @@ fn parses_raw_decimal_and_binary_sizes_without_float_ambiguity() {
     assert_eq!(parse_size_bytes("1.5 mb").unwrap(), 1_500_000);
     assert_eq!(parse_size_bytes("1 MiB").unwrap(), 1_048_576);
     assert_eq!(parse_size_bytes("1.5mIb").unwrap(), 1_572_864);
+    assert_eq!(parse_size_bytes("500 KB").unwrap(), 500_000);
+    assert_eq!(parse_size_bytes("1 kib").unwrap(), 1_024);
 }
 
 #[test]
 fn size_parser_rejects_unitless_fractions_bad_units_fractional_bytes_and_overflow() {
-    for value in ["1.5", "1 KB", "0.0000001 MB", "18446744073709551616"] {
+    for value in ["1.5", "1 GB", "0.0000001 MB", "18446744073709551616"] {
         assert!(parse_size_bytes(value).is_err(), "accepted {value}");
     }
 }

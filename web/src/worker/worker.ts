@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import type { ErrorReport } from "../types";
+import type { Artifact, ErrorReport, ImageKind, InspectReport } from "../types";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
 import { classifyInput } from "./magic";
 import { productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
@@ -13,8 +13,8 @@ import { StaleConstraints, withMatchingConstraints } from "./snapshot";
 
 type Engine = typeof WasmEngine;
 type StoredSource =
-  | { kind: "bytes"; value: Uint8Array; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string }
-  | { kind: "rgba"; value: Uint8Array; width: number; height: number; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string };
+  | { kind: "bytes"; value: Uint8Array; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string | null }
+  | { kind: "rgba"; value: Uint8Array; width: number; height: number; generation: number; encodedLength: number; maxEncodedBytes: number; constraintsSnapshot: string | null };
 interface ImageLimits {
   schema: "fitifact.image-limits/v1";
   max_encoded_bytes: number;
@@ -107,7 +107,7 @@ function enterSourceWasm<T>(selected: StoredSource, operation: () => T): T {
   }
 }
 
-function requireConstraintsMatch<T>(stored: string, expected: string, operation: () => T): T {
+function requireConstraintsMatch<T>(stored: string | null, expected: string, operation: () => T): T {
   try {
     return withMatchingConstraints(stored, expected, operation);
   } catch (error) {
@@ -116,7 +116,22 @@ function requireConstraintsMatch<T>(stored: string, expected: string, operation:
   }
 }
 
-async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
+function heicArtifact(bytes: Uint8Array, width: number, height: number): Artifact {
+  return {
+    schema: "fitifact.artifact/v1",
+    byte_length: bytes.byteLength,
+    family: "image",
+    image: {
+      format: "heif",
+      width,
+      height,
+      alpha: true,
+      animated: false,
+    },
+  };
+}
+
+async function inspect(request: Extract<WorkerRequest, { type: "inspect" }>) {
   const generation = ++sourceGeneration;
   source = null;
   try {
@@ -138,24 +153,19 @@ async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
       throw localFailure("EXECUTION_CANCELLED", "A newer image replaced this operation.");
     }
     const bytes = new Uint8Array(buffer);
-    const constraintsSnapshot = enterWasmWithEncodedLimit(
-      bytes.byteLength,
-      limits.max_encoded_bytes,
-      () => canonicalConstraints(wasm, request.constraintsJson),
-    );
     const kind = classifyInput(bytes);
     progress(request.id, "Checking the file type", 18);
     if (kind === "unsupported") {
       throw localFailure(
         "INSPECTION_UNSUPPORTED",
-        "This file is not a supported JPEG or PNG. SVG and HTML are never rendered.",
+        "This file is not a supported JPEG, PNG, WebP, or HEIC. SVG and HTML are never rendered.",
       );
     }
     if (kind === "heic") {
       if (!__FITIFACT_HEIC_APPROVED__) {
         throw localFailure(
           "UNSUPPORTED_HEIC",
-          "HEIC was detected, but this build has not approved the optional local decoder.",
+          "This is a phone photo this build cannot decode yet.",
         );
       }
       progress(request.id, "Loading the approved HEIC decoder", 28);
@@ -178,19 +188,31 @@ async function analyze(request: Extract<WorkerRequest, { type: "analyze" }>) {
         generation,
         encodedLength: bytes.byteLength,
         maxEncodedBytes: limits.max_encoded_bytes,
-        constraintsSnapshot,
+        constraintsSnapshot: null,
       };
-    } else {
-      source = {
-        kind: "bytes",
-        value: bytes,
-        generation,
-        encodedLength: bytes.byteLength,
-        maxEncodedBytes: limits.max_encoded_bytes,
-        constraintsSnapshot,
+      progress(request.id, "Inspection ready", 100);
+      const report: InspectReport = {
+        schema: "fitifact.inspect/v1",
+        kind,
+        artifact: heicArtifact(bytes, decoded.width, decoded.height),
       };
+      return { report };
     }
-    return await plan(request.id, constraintsSnapshot, generation, constraintsSnapshot);
+    const artifact = parseReport<Artifact>(enterWasmWithEncodedLimit(
+      bytes.byteLength,
+      limits.max_encoded_bytes,
+      () => wasm.inspect_bytes(bytes),
+    ));
+    source = {
+      kind: "bytes",
+      value: bytes,
+      generation,
+      encodedLength: bytes.byteLength,
+      maxEncodedBytes: limits.max_encoded_bytes,
+      constraintsSnapshot: null,
+    };
+    progress(request.id, "Inspection ready", 100);
+    return { report: { schema: "fitifact.inspect/v1", kind: kind as ImageKind, artifact } satisfies InspectReport };
   } catch (error) {
     if (sourceGeneration === generation) source = null;
     throw error;
@@ -286,8 +308,11 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         progress(request.id, "Checking the edited target", 55);
         const report = parseReport(wasm.compile_constraints(request.constraintsJson));
         post({ id: request.id, type: "result", report });
-      } else if (request.type === "analyze") {
-        const result = await analyze(request);
+      } else if (request.type === "inspect") {
+        const result = await inspect(request);
+        post({ id: request.id, type: "result", ...result });
+      } else if (request.type === "plan") {
+        const result = await plan(request.id, request.constraintsJson);
         const transfers = result.preview ? [result.preview] : [];
         post({ id: request.id, type: "result", ...result }, transfers);
       } else if (request.type === "replan") {

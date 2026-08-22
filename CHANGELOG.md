@@ -2,9 +2,31 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] — after `0.1.0-rc.4`
+## [Unreleased] — after `0.1.0-rc.5`
 
 No changes yet.
+
+## [0.1.0-rc.5] - 0.2 usable session
+
+Docs call this the 0.2 session. Do not invent a `v0.2.0` tag. Existing
+`v0.1.0-rc.1` through `v0.1.0-rc.4` tags stay where they are.
+
+### [added]
+
+- File-first web session: inspect without a target, auto-parse rejection text,
+  hide the schema behind Looks right / Edit, and adapt with **Fix image**.
+- Still WebP as an adapt source (JPEG/PNG out; animated WebP refused).
+- Local named saved targets in `localStorage` only.
+- D-028 public/default lazy HEIC decoder with notices and a decoder-free CI job.
+
+### [changed]
+
+- Public Pages and default web builds include the pinned lazy `libheif-js`
+  decoder; `FITIFACT_HEIC_APPROVED=false` remains the decoder-free proof.
+- README, GitHub metadata, and consumer docs describe drop-then-paste instead
+  of a CLI-first product.
+- Compact the landing so the drop zone is visible on first paint; the paste
+  field stays empty so people paste their own rejection text.
 
 ## [0.1.0-rc.4] - consumer image upload candidate
 

@@ -1,6 +1,6 @@
 {
   "name": "fitifact-web",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.5.1",
@@ -17,7 +17,8 @@
     "build": "npm run build:wasm && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "test:e2e:heic": "playwright test --project=chromium-desktop --grep \"approved HEIC\""
+    "test:e2e:heic": "playwright test --project=chromium-desktop --grep \"approved HEIC\"",
+    "test:e2e:heic-off": "playwright test --project=chromium-desktop --grep \"off-gate HEIC\""
   },
   "dependencies": {
     "libheif-js": "1.19.8",

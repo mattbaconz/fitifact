@@ -70,6 +70,7 @@ pub fn artifact_from_bytes(path: Option<&Path>, bytes: &[u8]) -> Result<Artifact
     };
     let decoded = match format {
         ImageFormat::Jpeg | ImageFormat::Png => decode_still(bytes)?,
+        ImageFormat::Webp if animated != Some(true) => decode_still(bytes)?,
         _ => None,
     };
     Ok(Artifact {
@@ -437,6 +438,26 @@ pub fn sample_jpeg_rgb(width: u32, height: u32) -> Vec<u8> {
         image::Rgb([200, 40, 40]),
     )))
     .expect("jpeg encode")
+}
+
+pub fn sample_webp_rgb(width: u32, height: u32) -> Vec<u8> {
+    use image::{ImageFormat, Rgb, RgbImage};
+    let img = RgbImage::from_pixel(width, height, Rgb([200, 40, 40]));
+    let mut out = Cursor::new(Vec::new());
+    DynamicImage::ImageRgb8(img)
+        .write_to(&mut out, ImageFormat::WebP)
+        .expect("webp encode");
+    out.into_inner()
+}
+
+pub fn animated_webp_header() -> Vec<u8> {
+    let mut bytes = b"RIFF\0\0\0\0WEBPVP8X".to_vec();
+    bytes.extend_from_slice(&[0x0a, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    bytes.extend_from_slice(b"ANIM");
+    bytes.extend_from_slice(&[0, 0, 0, 0]);
+    let payload = (bytes.len() - 8) as u32;
+    bytes[4..8].copy_from_slice(&payload.to_le_bytes());
+    bytes
 }
 
 #[cfg(test)]

@@ -3,7 +3,8 @@ import type { CropRectangle, ErrorReport, ProductState } from "../types";
 export type WorkerRequest =
   | { id: number; type: "compile"; requirements: string }
   | { id: number; type: "compile_constraints"; constraintsJson: string }
-  | { id: number; type: "analyze"; file: File; constraintsJson: string }
+  | { id: number; type: "inspect"; file: File }
+  | { id: number; type: "plan"; constraintsJson: string }
   | { id: number; type: "replan"; previousConstraintsJson: string; constraintsJson: string }
   | { id: number; type: "adapt"; constraintsJson: string; crop: CropRectangle | null };
 

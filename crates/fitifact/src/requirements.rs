@@ -147,7 +147,7 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
     for unit_index in 0..tokens.len() {
         if !matches!(
             tokens[unit_index].value.as_str(),
-            "mb" | "mib" | "byte" | "bytes"
+            "kb" | "kib" | "mb" | "mib" | "byte" | "bytes"
         ) || unit_index == 0
         {
             continue;
@@ -174,7 +174,7 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
             || has_attached_sign_or_decimal(text, number)
         {
             return Err(invalid_numeric(
-                "byte limits require one valid decimal MB/MiB or whole-byte value",
+                "byte limits require one valid decimal KB/KiB/MB/MiB or whole-byte value",
             ));
         }
         parse_size_bytes(&format!("{} {}", number.value, tokens[unit_index].value))?;
@@ -437,7 +437,7 @@ fn parse_sizes(
     for unit_index in 0..tokens.len() {
         if !matches!(
             tokens[unit_index].value.as_str(),
-            "mb" | "mib" | "byte" | "bytes"
+            "kb" | "kib" | "mb" | "mib" | "byte" | "bytes"
         ) || unit_index == 0
         {
             continue;

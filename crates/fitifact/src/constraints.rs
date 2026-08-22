@@ -483,10 +483,14 @@ pub fn parse_size_bytes(raw: &str) -> Result<u64> {
         return Err(invalid("size.invalid", "size cannot be empty"));
     }
     let lower = value.to_ascii_lowercase();
-    let (number, multiplier) = if lower.ends_with("mib") {
-        (&value[..value.len() - 3], Some(1_048_576_u64))
-    } else if lower.ends_with("mb") {
-        (&value[..value.len() - 2], Some(1_000_000_u64))
+    let (number, multiplier) = if let Some(rest) = lower.strip_suffix("kib") {
+        (rest, Some(1_024_u64))
+    } else if let Some(rest) = lower.strip_suffix("kb") {
+        (rest, Some(1_000_u64))
+    } else if let Some(rest) = lower.strip_suffix("mib") {
+        (rest, Some(1_048_576_u64))
+    } else if let Some(rest) = lower.strip_suffix("mb") {
+        (rest, Some(1_000_000_u64))
     } else {
         (value, None)
     };

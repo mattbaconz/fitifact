@@ -1,5 +1,6 @@
 export type ProductState =
   | "idle"
+  | "inspected"
   | "requirements_ready"
   | "processing"
   | "planned"
@@ -12,6 +13,9 @@ export type ProductState =
   | "cancelled"
   | "unsupported_heic"
   | "error";
+
+export type ImageKind = "jpeg" | "png" | "webp" | "heic";
+export type RasterFormat = "jpeg" | "png" | "webp" | "heif";
 
 export interface ErrorReport {
   schema: "fitifact.error/v1";
@@ -60,12 +64,18 @@ export interface Artifact {
   byte_length: number;
   family: string;
   image?: {
-    format: "jpeg" | "png" | null;
+    format: RasterFormat | null;
     width: number | null;
     height: number | null;
     alpha: boolean | null;
     animated: boolean | null;
   };
+}
+
+export interface InspectReport {
+  schema: "fitifact.inspect/v1";
+  kind: ImageKind;
+  artifact: Artifact;
 }
 
 export interface CropRectangle {
@@ -83,7 +93,7 @@ export interface ImagePlan {
     steps: Array<{ operation: "image.adapt" }>;
   };
   noop: boolean;
-  source_format: "jpeg" | "png";
+  source_format: "jpeg" | "png" | "webp";
   source_width: number;
   source_height: number;
   target: {

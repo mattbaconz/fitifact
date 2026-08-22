@@ -6,6 +6,10 @@ describe("local magic detection", () => {
     expect(classifyInput(Uint8Array.from([0xff, 0xd8, 0xff, 0x00]))).toBe("jpeg");
     expect(classifyInput(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]))).toBe("png");
     expect(classifyInput(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))).toBe("unsupported");
+    const webp = new Uint8Array(12);
+    webp.set(new TextEncoder().encode("RIFF"), 0);
+    webp.set(new TextEncoder().encode("WEBP"), 8);
+    expect(classifyInput(webp)).toBe("webp");
   });
 
   it("detects HEIC from ISO BMFF brands rather than extensions", () => {
