@@ -25,8 +25,8 @@ use tar.gz. Shell and PowerShell installers, per-archive and unified SHA-256
 checksums, a CycloneDX XML SBOM, a source archive, and GitHub artifact
 attestations are prepared release outputs.
 
-The GitHub-only `v0.1.0-rc.3` prerelease proved the artifact pipeline. RC4 adds
-the D-026 source and deploys the default-off-HEIC static web artifact through
+The GitHub-only `v0.1.0-rc.3` prerelease proved the artifact pipeline. RC5 adds
+the 0.2 usable session and deploys the default lazy-HEIC static web artifact through
 GitHub Pages. Crates remain `publish = false`; crates.io, npm registry,
 Homebrew/WinGet publication, bundled FFmpeg, native signing, and notarization
 are not configured. System FFmpeg remains an external runtime dependency.

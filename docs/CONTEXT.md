@@ -38,9 +38,9 @@ The frozen native media matrix remains MP4/H.264/AAC no-op,
 MOV/H.264/AAC remux to MP4, or MP4/HEVC-to-H.264 video transcode while copying
 compatible AAC audio. Media file-size and dimension constraints are check-only.
 
-D-026 adds a static local consumer image product for parsed/edited JPEG/PNG
-requirements, minimum-change image adaptation, crop consent, warnings, and
-post-validation. HEIC decode is approved-gate only. **Your image stays on this
+D-026/D-028 add a static local consumer image product for parsed/edited JPEG/PNG
+requirements, still-WebP and HEIC input, minimum-change image adaptation, crop consent, warnings, and
+post-validation. HEIC decode is lazy after local magic (D-028). **Your image stays on this
 device.** Hosted/cloud execution remains absent.
 
 ## Human viability gate

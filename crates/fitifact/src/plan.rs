@@ -598,12 +598,12 @@ fn image_mutation_blocker(
     let image = artifact.image.as_ref();
     let format = image.and_then(|facts| facts.format.clone());
     match format {
-        Some(ImageFormat::Jpeg) | Some(ImageFormat::Png) => {}
+        Some(ImageFormat::Jpeg) | Some(ImageFormat::Png) | Some(ImageFormat::Webp) => {}
         Some(_) => {
             return Some(blocking(
                 BlockingCode::UnsupportedImageFormat,
                 ids_for(report, Field::ImageFormat),
-                "the first image slice encodes only PNG to JPEG and no-ops JPEG",
+                "the image slice adapts JPEG, PNG, and still WebP to JPEG or PNG",
             ));
         }
         None => {

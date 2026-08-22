@@ -13,8 +13,8 @@ tags:
 
 # MVP scope
 
-The `0.1.0-rc.4` public candidate combines the frozen native media slice with
-the D-026 local consumer image upload MVP. It produces static
+The `0.1.0-rc.5` public candidate combines the frozen native media slice with
+the D-026/D-028 local consumer image upload MVP (0.2 usable session). It produces static
 web assets only; no deployment or publication is implied.
 
 ## Native CLI/media matrix
@@ -50,11 +50,11 @@ the minimum plan and any crop, adapt locally, review validation, and download.
 - Keep **“Your image stays on this device.”** visible. The static product has no
   telemetry, payload upload, CDN decoder, account, or cloud fallback.
 
-HEIC detection is present, but decoding is disabled by default. An approved
-build may set `FITIFACT_HEIC_APPROVED=true` to include pinned `libheif-js`
-1.19.8 as an isolated lazy decoder. Approval includes LGPL-3.0 notices and
-build review. Decoded pixels enter the same Rust validation path; multiple
-images are refused. HEIC is not a default-format-support claim.
+Public and default web builds include the pinned lazy `libheif-js` 1.19.8
+decoder (D-028). It loads only after HEIC magic. Approval includes LGPL-3.0
+notices. Decoded pixels enter the same Rust validation path; multiple images
+are refused. `FITIFACT_HEIC_APPROVED=false` remains the decoder-free proof.
+Still WebP may be decoded as an adapt source; outputs stay JPEG/PNG.
 
 ## Public/private boundary
 
@@ -74,6 +74,6 @@ people and live form/application photo requirements. Do not fabricate results.
 ## Deferred
 
 Hosted processing, destination profiles, automatic requirement capture,
-WebP/TIFF/animation adaptation, media in the browser, accounts, billing,
+WebP output, TIFF, animation adaptation, media in the browser, accounts, billing,
 browser extensions, PWA/share targets, desktop/mobile shells, and the broad
 “Any file. Any destination.” vision are outside this MVP.

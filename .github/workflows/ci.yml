@@ -74,15 +74,33 @@ jobs:
         run: npm run lint
       - name: Web unit tests and real HEIC decode
         run: npm test
-      - name: Default-gate static build
+      - name: Default static build
         run: npm run build
-      - name: Approved-gate HEIC decoder check
-        env:
-          FITIFACT_HEIC_APPROVED: "true"
+      - name: Verify default artifact includes lazy HEIC decoder
+        shell: pwsh
         run: |
-          npm run test:heic
+          $assets = @(Get-ChildItem -LiteralPath dist/assets -File | ForEach-Object Name)
+          if (-not ($assets -match '^(?:heic-decoder|wasm-bundle)-')) {
+            throw "Default artifact is missing the lazy HEIC decoder"
+          }
+          $html = Get-Content -Raw -LiteralPath dist/index.html
+          if ($html -match 'heic-decoder|wasm-bundle') {
+            throw "index.html eagerly references the HEIC decoder"
+          }
+      - name: Decoder-free HEIC gate
+        env:
+          FITIFACT_HEIC_APPROVED: "false"
+        run: npm run test:e2e:heic-off
+      - name: Decoder-free static build proof
+        env:
+          FITIFACT_HEIC_APPROVED: "false"
+        shell: pwsh
+        run: |
           npm run build
-          npm run test:e2e:heic
+          $assets = @(Get-ChildItem -LiteralPath dist/assets -File | ForEach-Object Name)
+          if ($assets -match '^(?:heic-decoder|wasm-bundle)-') {
+            throw "Decoder-free build unexpectedly contains the gated HEIC decoder"
+          }
       - name: Browser workflow tests
         run: npm run test:e2e
       - name: Build GitHub Pages artifact
@@ -95,10 +113,13 @@ jobs:
         shell: pwsh
         run: |
           $assets = @(Get-ChildItem -LiteralPath dist/assets -File | ForEach-Object Name)
-          if ($assets -match '^(?:heic-decoder|wasm-bundle)-') {
-            throw "Default public artifact unexpectedly contains the gated HEIC decoder"
+          if (-not ($assets -match '^(?:heic-decoder|wasm-bundle)-')) {
+            throw "Public Pages artifact is missing the lazy HEIC decoder"
           }
           $html = Get-Content -Raw -LiteralPath dist/index.html
+          if ($html -match 'heic-decoder|wasm-bundle') {
+            throw "Pages index.html eagerly references the HEIC decoder"
+          }
           if (-not $html.Contains('/fitifact/assets/')) {
             throw "Pages artifact does not use the /fitifact/ base path"
           }

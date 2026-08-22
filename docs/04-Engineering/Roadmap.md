@@ -11,8 +11,8 @@ tags:
 
 # Roadmap
 
-The public `0.1.0-rc.4` candidate includes the frozen media matrix and the
-D-026 local consumer image upload MVP. Every later phase below is deferred and
+The public `0.1.0-rc.5` candidate includes the frozen media matrix and the
+D-026/D-028 local consumer image upload MVP (0.2 usable session). Every later phase below is deferred and
 is not a commitment or implementation claim.
 
 ## v0.1 — CLI/media slice (frozen locally)
@@ -29,11 +29,11 @@ Exit: no-op/remux/selective transcode chosen correctly. Tag target:
 
 ## D-026 — consumer image upload MVP (implemented, human gate pending)
 - deterministic image-requirement parsing and editable typed target;
-- JPEG/PNG no-op, adaptation, crop consent, resize/byte fitting, warnings,
+- JPEG/PNG/still WebP no-op, adaptation, crop consent, resize/byte fitting, warnings,
   metadata disclosure, transparency refusal, and post-validation;
 - `fitifact-wasm`, dedicated module worker, and static Vite/React workflow;
 - 32 MiB encoded/24 MP decoded bounds, cancellation, and explicit failures;
-- default-off lazy approved HEIC decoder with notices and owned fixture;
+- D-028 public lazy HEIC decoder with notices, owned fixture, and decoder-free CI;
 - desktop/mobile browser verification and checksum-pinned synthetic fixtures;
 - no ffmpeg.wasm, hosted service, telemetry, or cloud fallback.
 
@@ -43,7 +43,7 @@ all 8/10, 8/10, 5/10, and zero-harm thresholds before continuing investment.
 
 ## Product expansion — deferred
 - hosted web app;
-- WebP / TIFF / animation adaptation and default HEIC enablement;
+- TIFF / animation adaptation and WebP output;
 - custom destination profiles;
 - automatic destination requirement capture.
 

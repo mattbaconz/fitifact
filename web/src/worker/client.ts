@@ -59,12 +59,12 @@ export class ImageWorkerClient {
     return this.call<T>({ type: "compile_constraints", constraintsJson }, [], onProgress);
   }
 
-  analyze<T>(
-    file: File,
-    constraintsJson: string,
-    onProgress?: (progress: ProgressUpdate) => void,
-  ) {
-    return this.call<T>({ type: "analyze", file, constraintsJson }, [], onProgress);
+  inspect<T>(file: File, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "inspect", file }, [], onProgress);
+  }
+
+  plan<T>(constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "plan", constraintsJson }, [], onProgress);
   }
 
   replan<T>(previousConstraintsJson: string, constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {

@@ -113,6 +113,21 @@ release creation/upload operation and must remain after successful attestation.
 - [ ] Run the ten-person D-026 moderated gate and the four-platform clean-
       machine CLI acceptance before considering immutable `v0.1.0`.
 
+## `v0.1.0-rc.5`
+
+- [ ] Merge the reviewed RC5 version commit through the protected `main` path
+      and require quality, static web, four native platforms, MSRV, and
+      supply-chain jobs to pass.
+- [ ] Confirm `Cargo.toml`, `Cargo.lock`, `fitifact --version`, web package
+      metadata, changelog, and the annotated tag all identify `0.1.0-rc.5`.
+      Do not invent a `v0.2.0` tag.
+- [ ] Deploy the default lazy-HEIC static artifact to
+      `https://mattbaconz.github.io/fitifact/`; confirm the decoder chunk exists,
+      `index.html` does not eagerly load it, and drop-then-paste completes.
+- [ ] Keep `FITIFACT_HEIC_APPROVED=false` as a decoder-free CI proof.
+- [ ] Run the ten-person moderated gate (Not run until executed) before
+      `@fitifact/browser` or cloud work.
+
 ## Immutable `v0.1.0`
 
 - [ ] Accept the RC only after every required clean-machine and provenance check

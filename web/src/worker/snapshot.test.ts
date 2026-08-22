@@ -7,5 +7,6 @@ describe("worker constraint snapshot", () => {
     expect(() => withMatchingConstraints("canonical-a", "canonical-b", operation)).toThrow(StaleConstraints);
     expect(operation).not.toHaveBeenCalled();
     expect(withMatchingConstraints("canonical-a", "canonical-a", operation)).toBe("entered");
+    expect(withMatchingConstraints(null, "canonical-a", operation)).toBe("entered");
   });
 });

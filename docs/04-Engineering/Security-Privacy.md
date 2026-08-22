@@ -53,8 +53,8 @@ isolated so stale bytes cannot be adapted under a new filename or target.
 ### Local-only integrity
 
 The static image product has no telemetry, payload upload, external decoder,
-or cloud fallback. HEIC code is absent from default builds and loaded lazily
-only after HEIC magic in a build approved by `FITIFACT_HEIC_APPROVED=true`.
+or cloud fallback. The public HEIC decoder (D-028) is local, lazy after HEIC
+magic, and omitted only when `FITIFACT_HEIC_APPROVED=false`.
 “Your image stays on this device” must be removed if this boundary changes.
 
 ### Cross-tenant cloud leakage

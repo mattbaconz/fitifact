@@ -203,3 +203,17 @@ RC4 is a public prerelease, not immutable `v0.1.0`. Stable remains blocked on
 the documented clean-machine acceptance across Windows x64, Linux GNU x64,
 macOS Intel, and macOS Apple Silicon. The GitHub Release publication variable
 is opened only for the RC4 tag workflow and reset immediately afterward.
+
+## D-028 — Public lazy HEIC decoder
+**Status:** accepted; owner directed usability.
+**Recorded:** 2026-08-22.
+
+Public Pages and default web builds include the pinned lazy `libheif-js` 1.19.8
+decoder. LGPL notices stay in `web/public/THIRD_PARTY_NOTICES.md`. The decoder
+still loads only after HEIC magic and still accepts a single image. This is an
+explicit redistribution decision, not a silent flag flip.
+
+`FITIFACT_HEIC_APPROVED=false` remains a decoder-free CI/proof build. Eager
+loading of `libheif-js` is still forbidden. Outputs stay JPEG/PNG. The engine
+primitive `adapt(file, constraints)` is unchanged. Still WebP may be an adapt
+source; animated WebP is refused. The ten-person human gate remains Not run.

@@ -3,7 +3,7 @@ title: "Legal and Licensing"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-21
+updated: 2026-08-22
 canonical: true
 tags:
   - legal
@@ -50,23 +50,24 @@ Action:
 ## In-process image crate
 
 D-025 JPEG/PNG work uses the Rust `image` crate (MIT OR Apache-2.0) with only
-the `jpeg` and `png` features. It is linked into the Fitifact binary and WASM
+the `jpeg`, `png`, and `webp` features. It is linked into the Fitifact binary and WASM
 module, not invoked as a subprocess. Re-check `cargo deny` when adding image
-formats. This is not ImageMagick and not FFmpeg.
+formats. This is not ImageMagick and not FFmpeg. WebP is decode-only; outputs
+stay JPEG or PNG.
 
-## Approval-gated HEIC decoder
+## Public HEIC decoder (D-028)
 
-D-026 pins `libheif-js` 1.19.8. It is LGPL-3.0 and ships an embedded WASM build
-of libheif; package/upstream source, build form, license, and no-CDN behavior
-are recorded in `web/public/THIRD_PARTY_NOTICES.md`, which is copied into the
-static build. It is imported only when HEIC magic is present **and** the build
-sets `FITIFACT_HEIC_APPROVED=true`. Default builds emit no decoder chunk.
+D-028 pins `libheif-js` 1.19.8 for public Pages and default web builds. It is
+LGPL-3.0 and ships an embedded WASM build of libheif; package/upstream source,
+build form, license, and no-CDN behavior are recorded in
+`web/public/THIRD_PARTY_NOTICES.md`, which is copied into the static build. It
+is imported only after HEIC magic. Decoder-free CI sets
+`FITIFACT_HEIC_APPROVED=false` and must emit no decoder chunk.
 
-The approval flag is a legal/build gate, not a user preference. Before enabling
-it for distribution, re-review LGPL obligations, corresponding-source/notice
-delivery, the exact libheif build configuration and codecs, regional patent
-exposure, and browser redistribution. Do not silently replace the decoder or
-enable it to claim broad HEIC support.
+Do not silently replace the decoder or claim broad HEIC support: single-image
+only, lazy load, notices required. Re-review LGPL obligations, corresponding
+source/notice delivery, the exact libheif build configuration and codecs,
+regional patent exposure, and browser redistribution when changing the pin.
 
 ## PDF/document tooling
 

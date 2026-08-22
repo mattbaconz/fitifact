@@ -3,7 +3,7 @@ title: "Product Definition"
 type: product
 status: active
 implementation: mixed
-updated: 2026-08-21
+updated: 2026-08-22
 canonical: true
 tags:
   - product
@@ -37,8 +37,8 @@ It returns:
 
 For the consumer image workflow:
 
-> **Make your image pass the upload.** Paste the form's requirements, review
-> the normalized target and any crop, adapt locally, then download an output
+> **Make your image pass the upload.** Drop the file, paste what the form told
+> you, confirm the one-line target, adapt locally, then download an output
 > validated against the requirements you confirmed.
 
 ## Product modes
@@ -86,8 +86,9 @@ consent. Lossy quality reduction and upscaling are always warned.
 
 ## Current consumer boundary
 
-- JPEG/PNG are supported; HEIC decoding exists only in an explicitly approved
-  build and remains disabled by default.
+- JPEG, PNG, still WebP, and single-image HEIC can be inputs; outputs stay
+  JPEG or PNG. Public/default web builds include the D-028 lazy HEIC decoder;
+  `FITIFACT_HEIC_APPROVED=false` remains the decoder-free proof.
 - Files are processed in a dedicated browser worker. **Your image stays on this
   device.** There is no telemetry, upload, or cloud fallback.
 - The encoded input limit is 32 MiB and the decoded limit is 24 megapixels.

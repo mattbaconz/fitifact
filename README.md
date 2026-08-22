@@ -2,10 +2,15 @@
 
 # Fitifact
 
+**Make your image pass the upload.**
+
+[Try Fitifact](https://mattbaconz.github.io/fitifact/)
+
 Fitifact is a destination-first file compatibility engine with a CLI and a
-local-only image web app. It inspects what a file actually contains, checks
-typed destination constraints, chooses the smallest supported change, executes
-it, and validates the result.
+local-only image web app. Drop the rejected file, paste what the form told you,
+and it makes only the changes needed. JPEG, PNG, still WebP, and single-image
+HEIC can be inputs; outputs stay JPEG or PNG. Image bytes stay in the browser
+worker and are never uploaded to Fitifact.
 
 ```text
 inspect -> constraints -> check -> plan -> execute -> validate
@@ -13,10 +18,9 @@ inspect -> constraints -> check -> plan -> execute -> validate
 
 ## v0.1 scope
 
-This prerelease preserves the frozen CLI/media matrix and adds the D-026 local
-consumer image workflow. The public app is available at
-[`mattbaconz.github.io/fitifact`](https://mattbaconz.github.io/fitifact/); image
-bytes stay in the browser worker and are never uploaded to Fitifact.
+This prerelease preserves the frozen CLI/media matrix and adds the D-026/D-028
+local consumer image workflow. Cargo/web version is `0.1.0-rc.5` (the 0.2
+usable session). Do not invent a `v0.2.0` tag.
 
 | Input and requested result | Behavior |
 | --- | --- |
@@ -24,7 +28,8 @@ bytes stay in the browser worker and are never uploaded to Fitifact.
 | MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding |
 | MP4 with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
 | JPEG/PNG already satisfying the confirmed target | No-op |
-| JPEG/PNG requiring format, bounded resize, crop consent, or byte fitting | In-process adaptation with re-inspection and validation |
+| JPEG/PNG/still WebP/HEIC requiring format, bounded resize, crop consent, or byte fitting | In-process adaptation to JPEG or PNG with re-inspection and validation |
+| Animated WebP, GIF animation, TIFF, AVIF, RAW, ZIP, PDF | Refuse explicitly |
 | Any other mutation | Refuse explicitly |
 
 The native CLI/media provider checks file-size and dimension constraints but
@@ -33,10 +38,12 @@ does execute bounded image fitting. Neither surface overwrites the input or an
 existing output, silently drops streams, or treats provider success as proof of
 compatibility.
 
-WebP, TIFF, animation, destination profiles, hosted APIs, bundled FFmpeg,
-ffmpeg.wasm, package registries, OS signing, and package-manager formulae are
-deferred. HEIC support exists only in a separately approved, lazy decoder build;
-the public Pages artifact omits it and returns an explicit unsupported result.
+Public and default web builds include a lazy single-image HEIC decoder
+(`libheif-js` 1.19.8) after local magic detection; notices ship with the app.
+`FITIFACT_HEIC_APPROVED=false` remains a decoder-free proof build. TIFF,
+animation as an output, destination profiles, hosted APIs, bundled FFmpeg,
+ffmpeg.wasm, package registries, OS signing, and package-manager formulae stay
+deferred.
 
 ## Requirements
 
@@ -124,7 +131,7 @@ archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
 `fitifact-cli.cdx.xml` SBOM.
 
 The checked-in package and binary version is the public
-`0.1.0-rc.4` candidate. Stable `0.1.0` requires a later reviewed version-bump
+`0.1.0-rc.5` candidate. Stable `0.1.0` requires a later reviewed version-bump
 commit after RC acceptance; this commit must not receive the stable tag.
 
 Download `sha256.sum` and the one archive for your target into the same

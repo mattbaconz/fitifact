@@ -120,6 +120,7 @@ browser flows verified.
 
 ## T24 — HEIC redistribution exposure
 Decoder licensing, codec patents, multi-image semantics, and large decoded
-allocations create separate risk. Default the decoder off, pin/review notices,
-load only after HEIC magic, refuse zero/multiple images, enforce the core pixel
-limit, and require `FITIFACT_HEIC_APPROVED=true` for an approved build.
+allocations create separate risk. Pin/review notices, load only after HEIC
+magic, refuse zero/multiple images, enforce the core pixel limit, ship notices
+with the public build, and keep `FITIFACT_HEIC_APPROVED=false` as a
+decoder-free proof.

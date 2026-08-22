@@ -1,7 +1,10 @@
 use fitifact::artifact::{Artifact, ImageFormat};
 use fitifact::capability::default_catalog;
 use fitifact::constraints::image_jpeg;
-use fitifact::image::{artifact_from_bytes, encode_jpeg_bytes, sample_jpeg_rgb, sample_png_rgb};
+use fitifact::image::{
+    animated_webp_header, artifact_from_bytes, encode_jpeg_bytes, sample_jpeg_rgb, sample_png_rgb,
+    sample_webp_rgb,
+};
 use fitifact::plan::{BlockingCode, plan};
 
 #[test]
@@ -25,18 +28,35 @@ fn png_plans_jpeg_encode_without_ffmpeg_capability() {
 }
 
 #[test]
-fn webp_magic_is_refused() {
-    let mut bytes = b"RIFF....WEBPVP8 ".to_vec();
-    bytes[4..8].copy_from_slice(&[8, 0, 0, 0]);
-    let artifact = artifact_from_bytes(None, &bytes).unwrap();
+fn still_webp_plans_jpeg_without_ffmpeg() {
+    let artifact = artifact_from_bytes(None, &sample_webp_rgb(8, 8)).unwrap();
     assert_eq!(
         artifact.image.as_ref().unwrap().format,
         Some(ImageFormat::Webp)
     );
-    assert_eq!(
-        plan(&artifact, &image_jpeg(), &default_catalog()).blocking_codes(),
-        vec![BlockingCode::UnsupportedImageFormat]
+    assert_eq!(artifact.image.as_ref().unwrap().width, Some(8));
+    assert_eq!(artifact.image.as_ref().unwrap().animated, Some(false));
+    let outcome = plan(&artifact, &image_jpeg(), &default_catalog());
+    assert!(
+        !outcome
+            .blocking_codes()
+            .contains(&BlockingCode::UnsupportedImageFormat)
     );
+    let adapted = fitifact::plan_image_adaptation(&artifact, &image_jpeg()).unwrap();
+    assert!(!adapted.noop);
+    assert_eq!(adapted.source_format, ImageFormat::Webp);
+    assert_eq!(adapted.target.format, ImageFormat::Jpeg);
+}
+
+#[test]
+fn animated_webp_is_refused() {
+    let artifact = artifact_from_bytes(None, &animated_webp_header()).unwrap();
+    assert_eq!(
+        artifact.image.as_ref().unwrap().format,
+        Some(ImageFormat::Webp)
+    );
+    assert_eq!(artifact.image.as_ref().unwrap().animated, Some(true));
+    assert!(fitifact::plan_image_adaptation(&artifact, &image_jpeg()).is_err());
 }
 
 #[test]

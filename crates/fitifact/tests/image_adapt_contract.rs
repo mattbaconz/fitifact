@@ -4,7 +4,7 @@ use fitifact::adapt::AdaptationStatus;
 use fitifact::artifact::ImageFormat;
 use fitifact::constraints::{ConstraintSet, compile_from_json};
 use fitifact::error::ErrorCode;
-use fitifact::image::{artifact_from_bytes, sample_jpeg_rgb, sample_png_rgb};
+use fitifact::image::{artifact_from_bytes, sample_jpeg_rgb, sample_png_rgb, sample_webp_rgb};
 use fitifact::image_adapt::{
     AtomicCancellation, ImageAdaptOptions, ImageAdaptProvider, ImageProviderOutput, NeverCancelled,
     NormalizedCropRectangle, execute_image_adaptation, execute_image_adaptation_with_provider,
@@ -107,6 +107,28 @@ fn png_to_jpeg_is_format_only_and_discloses_metadata_stripping() {
             .iter()
             .any(|text| text.contains("metadata"))
     );
+}
+
+#[test]
+fn still_webp_to_jpeg_executes_without_ffmpeg() {
+    let input = sample_webp_rgb(16, 12);
+    let target = format_target("jpeg");
+    let plan = plan_for(&input, &target);
+    assert_eq!(plan.source_format, ImageFormat::Webp);
+    assert_eq!(plan.target.format, ImageFormat::Jpeg);
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap();
+    assert_eq!(
+        result.output_artifact.image.unwrap().format,
+        Some(ImageFormat::Jpeg)
+    );
+    assert_eq!(result.stats.jpeg_encodes, 1);
 }
 
 #[test]

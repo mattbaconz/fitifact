@@ -254,9 +254,12 @@ pub fn plan_image_adaptation(
         .format
         .clone()
         .ok_or_else(|| no_plan("image.format_unknown: source format is unknown"))?;
-    if !matches!(source_format, ImageFormat::Jpeg | ImageFormat::Png) {
+    if !matches!(
+        source_format,
+        ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp
+    ) {
         return Err(no_plan(
-            "image.format_unsupported: only JPEG and PNG inputs can be adapted",
+            "image.format_unsupported: only JPEG, PNG, and still WebP inputs can be adapted",
         ));
     }
     let source_width = facts
@@ -733,8 +736,11 @@ fn choose_format(
     source_alpha: bool,
     allowed: &Option<Vec<ImageFormat>>,
 ) -> Result<ImageFormat> {
-    let allowed = allowed.clone().unwrap_or_else(|| vec![source.clone()]);
-    if allowed.contains(source) {
+    let allowed = allowed.clone().unwrap_or_else(|| match source {
+        ImageFormat::Jpeg | ImageFormat::Png => vec![source.clone()],
+        _ => vec![ImageFormat::Jpeg, ImageFormat::Png],
+    });
+    if allowed.contains(source) && matches!(source, ImageFormat::Jpeg | ImageFormat::Png) {
         return Ok(source.clone());
     }
     if source_alpha {

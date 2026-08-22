@@ -141,6 +141,6 @@ proportional dimension reductions, 32 MiB encoded input, and 24 megapixels
 decoded. The produced bytes are re-inspected and checked against the same
 constraints. Provider success cannot substitute for validation.
 
-HEIC decoding is an approval-gated pre-inspection adapter, not a new plan
-operation. Exactly one HEIC image is decoded to RGBA/PNG and then receives the
+HEIC decoding is a D-028 pre-inspection adapter, not a new plan
+operation. Public/default builds include the lazy decoder. Exactly one HEIC image is decoded to RGBA/PNG and then receives the
 same typed image plan. Zero/multiple images are refused.

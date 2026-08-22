@@ -5,10 +5,21 @@ import path from "node:path";
 
 const fixtures = path.resolve("../fixtures/image");
 
-async function compile(page: Page, requirement: string) {
-  await page.getByLabel("Upload instructions").fill(requirement);
-  await page.getByRole("button", { name: "Review requirements" }).click();
-  await expect(page.getByRole("heading", { name: "Ready for an image" })).toBeVisible();
+async function dropImage(page: Page, name: string) {
+  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, name));
+  await expect(page.getByLabel("Rejection message or requirements")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.locator(".file-row")).toContainText(/JPEG|PNG|WebP|HEIC/);
+}
+
+async function pasteRequirements(page: Page, requirement: string) {
+  await page.getByLabel("Rejection message or requirements").fill(requirement);
+  await expect(page.getByRole("heading", { name: "I understood this as" })).toBeVisible();
+  await expect(page.locator(".target-summary")).not.toHaveText("", { timeout: 15_000 });
+}
+
+async function openEditor(page: Page) {
+  const edit = page.getByRole("button", { name: "Edit" });
+  if (await edit.count()) await edit.click();
 }
 
 async function expectRealDownload(
@@ -28,28 +39,41 @@ async function expectRealDownload(
   if (original) expect(saved.equals(original)).toBe(true);
 }
 
-test("happy path adapts PNG to JPEG and exposes a validated download", async ({ page }) => {
+test("drop zone is visible on first paint without a requirements placeholder", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "mismatch-png.png"));
+  await expect(page.locator(".drop-zone")).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Drop your image" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review requirements" })).toHaveCount(0);
+  const paste = page.getByLabel("Rejection message or requirements");
+  await expect(paste).toBeVisible();
+  await expect(paste).not.toHaveAttribute("placeholder");
+  await expect(paste).toHaveValue("");
+});
+
+test("happy path drops first, auto-parses, and exposes a validated download", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "mismatch-png.png");
+  await expect(page.locator(".file-row")).toContainText("PNG");
+  await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt and validate" }).click();
+  await page.getByRole("button", { name: "Fix image" }).click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
   await expect(page.getByText("validated against the requirements you confirmed", { exact: false })).toBeVisible();
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "mismatch-png.fitifact.jpg");
   await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
   await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
+  await openEditor(page);
   await page.getByLabel("Maximum bytes").fill("1999999");
   await expect(download).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Adapt and validate" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Fix image" })).toHaveCount(0);
 });
 
 test("already-compatible path preserves the original", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "compatible-jpeg.jpg"));
+  await dropImage(page, "compatible-jpeg.jpg");
+  await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Already compatible" })).toBeVisible();
   const download = page.getByRole("link", { name: "Use original image" });
   await expect(download).toHaveAttribute("download", "compatible-jpeg.fitifact.jpg");
@@ -60,6 +84,7 @@ test("already-compatible path preserves the original", async ({ page }) => {
     [0xff, 0xd8, 0xff],
     await readFile(path.join(fixtures, "compatible-jpeg.jpg")),
   );
+  await openEditor(page);
   await page.getByLabel("Maximum bytes").fill("1999999");
   await expect(download).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
@@ -69,8 +94,8 @@ test("already-compatible path preserves the original", async ({ page }) => {
 
 test("a failed replacement clears the previous source and is never rendered", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "compatible-jpeg.jpg"));
+  await dropImage(page, "compatible-jpeg.jpg");
+  await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("link", { name: "Use original image" })).toBeVisible();
   await page.getByLabel("Choose an image").setInputFiles({
     name: "attack.svg",
@@ -87,14 +112,14 @@ test("a failed replacement clears the previous source and is never rendered", as
 
 test("crop approval is keyboard operable and required before adaptation", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "PNG, exactly 8 x 4");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "mismatch-png.png"));
+  await dropImage(page, "mismatch-png.png");
+  await pasteRequirements(page, "PNG, exactly 8 x 4");
   await expect(page.getByRole("heading", { name: "Crop approval required" })).toBeVisible();
   const position = page.getByLabel(/crop position/i);
   await position.focus();
   await page.keyboard.press("Home");
   await expect(position).toHaveValue("0");
-  const adapt = page.getByRole("button", { name: "Adapt and validate" });
+  const adapt = page.getByRole("button", { name: "Fix image" });
   await expect(adapt).toBeDisabled();
   await page.getByLabel(/I approve removing/).check();
   await adapt.click();
@@ -103,14 +128,13 @@ test("crop approval is keyboard operable and required before adaptation", async 
 
 test("active worker processing can be cancelled", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, exactly 4000 x 4000");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "mismatch-png.png"));
+  await dropImage(page, "mismatch-png.png");
+  await pasteRequirements(page, "JPEG, exactly 4000 x 4000");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt and validate" }).click();
+  await page.getByRole("button", { name: "Fix image" }).click();
   const cancel = page.getByRole("button", { name: "Cancel processing" });
-  await expect(page.getByLabel("JPEG")).toBeDisabled();
-  await expect(page.locator(".drop-zone")).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByLabel("Choose an image")).toBeDisabled();
+  await expect(page.locator(".drop-zone")).toHaveAttribute("aria-disabled", "true");
   await cancel.click();
   await expect(page.getByRole("heading", { name: "Processing cancelled" })).toBeVisible();
   await expect(page.getByText("No output was saved")).toBeVisible();
@@ -118,7 +142,8 @@ test("active worker processing can be cancelled", async ({ page }) => {
 
 test("complete range and format alternatives survive compile, plan, and adaptation", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG or PNG, min 640 x 480, max 1920 x 1080, max 2 MB");
+  await pasteRequirements(page, "JPEG or PNG, min 640 x 480, max 1920 x 1080, max 2 MB");
+  await openEditor(page);
   await expect(page.getByLabel("JPEG")).toBeChecked();
   await expect(page.getByLabel("PNG")).toBeChecked();
   await expect(page.getByLabel("Minimum width")).toHaveValue("640");
@@ -126,15 +151,14 @@ test("complete range and format alternatives survive compile, plan, and adaptati
   await expect(page.getByLabel("Minimum height")).toHaveValue("480");
   await expect(page.getByLabel("Maximum height")).toHaveValue("1080");
   await expect(page.getByLabel("Maximum bytes")).toHaveValue("2000000");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "transparent-png.png"));
-  await expect(page.locator(".plan-summary p", { hasText: "Proposed:" })).toContainText("PNG");
+  await dropImage(page, "transparent-png.png");
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  await expect(page.locator(".plan-summary li", { hasText: "Convert to" })).toHaveCount(0);
   await page.getByLabel("Maximum bytes").fill("1999999");
-  await expect(page.locator(".plan-summary")).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Adapt and validate" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Fix image" })).toHaveCount(0);
   await page.getByRole("button", { name: "Review target changes" }).click();
-  await expect(page.locator(".plan-summary p", { hasText: "Proposed:" })).toContainText("PNG");
-  await page.getByRole("button", { name: "Adapt and validate" }).click();
+  await page.getByRole("button", { name: "Fix image" }).click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
   await expect(page.locator(".checklist li")).toHaveCount(6);
   await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
@@ -145,22 +169,17 @@ test("complete range and format alternatives survive compile, plan, and adaptati
 
 test("requirements and target edits immediately invalidate stale contracts", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "compatible-jpeg.jpg"));
+  await dropImage(page, "compatible-jpeg.jpg");
+  await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("link", { name: "Use original image" })).toBeVisible();
-  await page.getByLabel("Upload instructions").fill("JPEG, exactly 12.5 x 4");
+  await page.getByLabel("Rejection message or requirements").fill("JPEG, exactly 12.5 x 4");
   await expect(page.getByRole("link", { name: /Use original|Download/ })).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByLabel("Choose an image")).toBeDisabled();
-  await expect(page.locator(".target-form")).toHaveCount(0);
-  await page.getByRole("button", { name: "Review requirements" }).click();
-  await expect(page.getByText("INPUT_INVALID")).toBeVisible();
-  await expect(page.locator(".target-form")).toHaveCount(0);
+  await expect(page.getByText("INPUT_INVALID")).toBeVisible({ timeout: 15_000 });
 });
 
 test("oversized File is refused before main-thread arrayBuffer allocation", async ({ page }) => {
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
   await page.evaluate(() => {
     File.prototype.arrayBuffer = () => Promise.reject(new Error("main-thread arrayBuffer must not run"));
     const bytes = new Uint8Array(32 * 1024 * 1024 + 1);
@@ -177,27 +196,37 @@ test("oversized File is refused before main-thread arrayBuffer allocation", asyn
 });
 
 test("off-gate HEIC is explicit and does not load a cloud fallback", async ({ page }) => {
-  test.skip(process.env.FITIFACT_HEIC_APPROVED === "true", "off-gate behavior requires the default build");
+  test.skip(process.env.FITIFACT_HEIC_APPROVED !== "false", "off-gate behavior requires an explicit decoder-free build");
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
   const heic = Buffer.alloc(24);
   heic.writeUInt32BE(24, 0);
   heic.write("ftypheic", 4, "ascii");
   await page.getByLabel("Choose an image").setInputFiles({ name: "photo.heic", mimeType: "image/heic", buffer: heic });
-  await expect(page.getByRole("heading", { name: "HEIC is unsupported in this build" })).toBeVisible();
-  await expect(page.getByText("has not approved the optional local decoder")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "This is a phone photo this build cannot decode yet" })).toBeVisible();
+  await expect(page.getByText("UNSUPPORTED_HEIC")).toBeVisible();
 });
 
 test("approved HEIC fixture decodes and validates through the real worker", async ({ page }) => {
-  test.skip(process.env.FITIFACT_HEIC_APPROVED !== "true", "approved decoder build only");
+  test.skip(process.env.FITIFACT_HEIC_APPROVED === "false", "decoder-free build");
   await page.goto("/");
-  await compile(page, "JPEG, max 2 MB");
-  await page.getByLabel("Choose an image").setInputFiles(path.join(fixtures, "synthetic-single.heic"));
+  await dropImage(page, "synthetic-single.heic");
+  await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt and validate" }).click();
+  await page.getByRole("button", { name: "Fix image" }).click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
   await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "synthetic-single.fitifact.jpg");
+  await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
+});
+
+test("still WebP adapts to JPEG", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "still-webp.webp");
+  await pasteRequirements(page, "JPEG, max 2 MB");
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  await page.getByRole("button", { name: "Fix image" }).click();
+  await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
+  const download = page.getByRole("link", { name: "Download JPG" });
   await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
 });

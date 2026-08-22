@@ -22,7 +22,7 @@ Real tiny files with known properties.
 
 The tracked canonical media set is under `fixtures/media`; its generator,
 provider provenance, and SHA-256 manifest are committed with it. The image set
-under `fixtures/image` contains owned synthetic JPEG, PNG, transparent PNG,
+under `fixtures/image` contains owned synthetic JPEG, PNG, still WebP, transparent PNG,
 crop-grid, malformed, decoded-limit, and single-image HEIC fixtures with a
 generator, provenance, and SHA-256 manifest. Generated-temp provider tests
 remain in addition to these canonical fixtures.
@@ -75,8 +75,8 @@ Windows, macOS, Linux, browsers, ARM/x64 where relevant.
 
 CI covers native Windows x64, Linux GNU x64, macOS Intel, and macOS Apple
 Silicon, plus Chromium, Firefox, and WebKit at desktop and mobile widths for the
-static image product. The HEIC approved-gate test decodes the owned fixture;
-default builds keep the decoder absent.
+static image product. Default builds decode the owned HEIC fixture lazily;
+`FITIFACT_HEIC_APPROVED=false` keeps the decoder absent.
 
 ## Performance regressions
 

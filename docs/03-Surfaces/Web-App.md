@@ -3,7 +3,7 @@ title: "Web App"
 type: surface
 status: active
 implementation: implemented-static-local
-updated: 2026-08-21
+updated: 2026-08-22
 canonical: true
 tags:
   - web
@@ -15,21 +15,24 @@ tags:
 ## Implemented surface
 
 `web/` is a static Vite + React + TypeScript product backed by
-`fitifact-wasm`. The default-off-HEIC build is deployed from a fully green
+`fitifact-wasm`. The default D-028 build (lazy HEIC decoder included) is
+deployed from a fully green
 `main` commit to [GitHub Pages](https://mattbaconz.github.io/fitifact/). The
 deployment contains static files only and does not add a server, upload path,
 telemetry endpoint, or cloud fallback.
 
 ```text
-parse requirements -> review target -> choose image -> inspect/check/plan
-                   -> approve crop if needed -> execute -> re-inspect/validate
-                   -> download
+drop file -> inspect -> paste what the form said -> auto-summarize target
+         -> plan minimum changes -> approve crop if needed -> Fix image
+         -> re-inspect/validate -> download
 ```
 
-The consumer headline is **“Make your image pass the upload.”** The persistent
-privacy disclosure is **“Your image stays on this device.”** Successful results
-are described as **“validated against the requirements you confirmed”**, never
-as guaranteed acceptance by the destination server.
+The consumer headline is **“Make your image pass the upload.”** The drop zone
+is visible on first paint. The paste field stays empty so people paste their
+own rejection text. The persistent privacy disclosure is **“Your image stays on
+this device.”** Successful results are described as **“validated against the
+requirements you confirmed”**, never as guaranteed acceptance by the destination
+server.
 
 ## Execution and trust boundary
 
@@ -40,7 +43,8 @@ previews use revocable object URLs only after inspection; SVG/HTML input is
 never rendered. There are no telemetry calls, payload uploads, CDN fonts,
 remote decoders, or implicit cloud fallback.
 
-JPEG and PNG use the in-process Rust provider. Changed outputs normalize EXIF
+JPEG, PNG, and still WebP use the in-process Rust provider. Single-image HEIC
+uses the lazy decoder, then the same provider. Changed outputs normalize EXIF
 orientation and strip other metadata with disclosure. PNG transparency is
 preserved only when PNG remains valid; converting transparent pixels to JPEG
 is refused. Aspect-changing crop controls require explicit consent. Lossy
@@ -52,12 +56,15 @@ validated against the confirmed target before download.
 
 ## HEIC gate
 
-HEIC magic detection does not load a decoder. Default builds produce an honest
-unsupported state and emit no decoder chunk. Only
-`FITIFACT_HEIC_APPROVED=true` includes the isolated, lazy `libheif-js` 1.19.8
-decoder. The approval decision must cover its LGPL-3.0 notice and embedded WASM
-build. One decoded image is accepted; zero/multiple images are refused. Decoded
-RGBA pixels then enter the same core plan/execute/validate path.
+Public and default builds include the pinned lazy `libheif-js` 1.19.8 decoder
+(D-028). It is imported only after HEIC magic; `index.html` must not reference
+it eagerly. Notices ship as `THIRD_PARTY_NOTICES.md`. One decoded image is
+accepted; zero/multiple images are refused. Decoded RGBA pixels then enter the
+same core plan/execute/validate path.
+
+`FITIFACT_HEIC_APPROVED=false` is a decoder-free proof build used in CI. It
+must omit the `heic-decoder` / `wasm-bundle` chunks and keep the honest
+unsupported heading.
 
 ## Build and verify
 
@@ -80,11 +87,10 @@ CI performs a second default-gate build with `FITIFACT_BASE_PATH=/fitifact/`
 and deploys that artifact only after the Rust, web, native-platform, MSRV, and
 supply-chain jobs all pass on `main`.
 
-To audit the approved decoder without publishing it:
+To build without the decoder:
 
 ```powershell
-$env:FITIFACT_HEIC_APPROVED = "true"
-npm run test:heic
+$env:FITIFACT_HEIC_APPROVED = "false"
 npm run build
 Remove-Item Env:FITIFACT_HEIC_APPROVED
 ```

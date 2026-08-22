@@ -3,7 +3,7 @@ title: "Consumer Image Moderated Test"
 type: validation-protocol
 status: ready-not-run
 implementation: post-build-human-gate
-updated: 2026-08-21
+updated: 2026-08-22
 canonical: true
 tags:
   - testing
@@ -43,8 +43,8 @@ said **“validated against the requirements you confirmed.”**
 - Use an actual application/form photo requirement the participant currently
   needs to satisfy. Record the destination and requirement text with consent;
   redact account identifiers.
-- Include a practical mix of JPEG, PNG, phone-origin HEIC where the approved
-  build is legally enabled, size limits, dimension limits, and at least two
+- Include a practical mix of JPEG, PNG, still WebP, phone-origin HEIC on the
+  public decoder, size limits, dimension limits, and at least two
   tasks that require crop consent. Do not manufacture a crop just to pass a
   quota.
 - Use the participant's own device where practical. Do not move their image to
@@ -56,8 +56,9 @@ said **“validated against the requirements you confirmed.”**
 
 1. Say: “Use this page to make your image meet the form's instructions. Think
    aloud. I won't explain image formats, but you can stop at any time.”
-2. Ask the participant to paste/type the destination requirement, review the
-   normalized target, choose the photo, and proceed as they think appropriate.
+2. Ask the participant to drop their photo first, then paste what the upload
+   form told them. Let them confirm or edit the one-line target and proceed as
+   they think appropriate.
 3. Do not explain the four workflow steps, interpret warnings, select crop
    consent, or tell them which button to press. Record any takeover.
 4. Before download, ask: “What will Fitifact change? What stays on this device?

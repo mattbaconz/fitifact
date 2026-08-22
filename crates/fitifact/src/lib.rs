@@ -42,7 +42,7 @@ pub use ffmpeg::{FfmpegProvider, ffmpeg_args};
 pub use image::{
     ImageProvider, MAX_IMAGE_INPUT_BYTES, MAX_IMAGE_PIXELS,
     artifact_from_bytes as image_artifact_from_bytes, encode_jpeg_bytes, sample_jpeg_rgb,
-    sample_png_rgb,
+    sample_png_rgb, sample_webp_rgb,
 };
 pub use image_adapt::{
     AtomicCancellation, BuiltinImageProvider, CancellationSignal, ImageAdaptExecution,

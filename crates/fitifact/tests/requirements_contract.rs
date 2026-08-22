@@ -196,3 +196,42 @@ fn no_supported_rule_returns_only_unresolved_text() {
     assert!(parsed.source_spans.is_empty());
     assert_eq!(parsed.unresolved[0].text, "make it beautiful");
 }
+
+#[test]
+fn rejection_messages_compile_without_a_review_click() {
+    let square =
+        parse_image_requirements("Photo must be JPG. Maximum 500KB. 600×600 pixels.").unwrap();
+    assert!(square.ambiguities.is_empty());
+    let constraints = square.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageFormat
+            && constraint.value == ConstraintValue::List(vec!["jpeg".into()])
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::FileBytes
+            && constraint.value == ConstraintValue::Integer(500_000)
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageWidth
+            && constraint.op == Operator::Eq
+            && constraint.value == ConstraintValue::Integer(600)
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageHeight
+            && constraint.op == Operator::Eq
+            && constraint.value == ConstraintValue::Integer(600)
+    }));
+
+    let alternatives =
+        parse_image_requirements("Unsupported file. Image must be JPEG or PNG. Max 2 MB.").unwrap();
+    assert!(alternatives.ambiguities.is_empty());
+    let constraints = alternatives.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageFormat
+            && constraint.value == ConstraintValue::List(vec!["jpeg".into(), "png".into()])
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::FileBytes
+            && constraint.value == ConstraintValue::Integer(2_000_000)
+    }));
+}

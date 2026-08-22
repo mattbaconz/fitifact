@@ -57,10 +57,11 @@ streams; it refuses unsafe topology rather than dropping streams.
 ## Image facts
 
 The first image inspector sniffs magic bytes (not the extension) and records
-format, dimensions, alpha, and animation. JPEG and PNG decode for dimensions.
-WebP, HEIC/HEIF, TIFF, and GIF are recognized as formats and refused by the
-planner. Frame count, ICC profile, orientation, and metadata-size execution
-remain later.
+format, dimensions, alpha, and animation. JPEG, PNG, and still WebP decode for
+dimensions. Animated WebP is refused. HEIC/HEIF is recognized by magic; the
+public web product may decode a single image through the lazy D-028 adapter.
+TIFF and GIF are recognized as formats and refused by the planner. Frame count,
+ICC profile, orientation, and metadata-size execution remain later.
 
 Image inspection does not start ffprobe.
 

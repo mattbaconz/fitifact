@@ -39,7 +39,8 @@ Implemented:
 - post-execution re-inspection and validation;
 - deterministic JPEG/PNG requirement parsing, bounded adaptation, explicit
   crop consent, and output validation in the local static web product;
-- default-off gated HEIC decoding with owned fixture and license notices;
+- default lazy HEIC decoding (D-028) with owned fixture and license notices;
+  decoder-free CI remains available;
 - GitHub-only distribution, Apache-2.0, no telemetry or network activity.
 
 The CLI can **check** file-size and video-dimension constraints, but its v0.1

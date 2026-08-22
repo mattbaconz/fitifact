@@ -39,8 +39,8 @@ describe("worker protocol", () => {
     const fake = new FakeWorker();
     const client = new ImageWorkerClient(() => fake);
     const file = new File([new Uint8Array(8)], "photo.png", { type: "image/png" });
-    const pending = client.analyze<{ schema: string }>(file, "{}", () => undefined);
-    expect(fake.messages[0].request).toMatchObject({ type: "analyze", file });
+    const pending = client.inspect<{ schema: string }>(file, () => undefined);
+    expect(fake.messages[0].request).toMatchObject({ type: "inspect", file });
     expect(fake.messages[0].transfer).toEqual([]);
     const id = fake.messages[0].request.id;
     const preview = new ArrayBuffer(4);

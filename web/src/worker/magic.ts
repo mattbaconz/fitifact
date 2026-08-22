@@ -1,4 +1,4 @@
-export type InputKind = "jpeg" | "png" | "heic" | "unsupported";
+export type InputKind = "jpeg" | "png" | "webp" | "heic" | "unsupported";
 
 const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
 
@@ -18,6 +18,9 @@ export function classifyInput(bytes: Uint8Array): InputKind {
     bytes[7] === 0x0a
   ) {
     return "png";
+  }
+  if (bytes.length >= 12 && ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP") {
+    return "webp";
   }
   if (bytes.length >= 16 && ascii(bytes, 4, 8) === "ftyp") {
     const boxSize = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0);

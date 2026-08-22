@@ -47,6 +47,12 @@ fn main() {
         "malformed-image.jpg",
         b"\xff\xd8\xff\xe0\0\x10JFIF\0fitifact-truncated".to_vec(),
     );
+
+    let mut webp = Cursor::new(Vec::new());
+    DynamicImage::ImageRgb8(RgbImage::from_pixel(8, 8, Rgb([200, 40, 40])))
+        .write_to(&mut webp, ImageFormat::WebP)
+        .expect("encode WebP fixture");
+    write(&output, "still-webp.webp", webp.into_inner());
 }
 
 fn write_png(output: &std::path::Path, name: &str, image: DynamicImage) {
