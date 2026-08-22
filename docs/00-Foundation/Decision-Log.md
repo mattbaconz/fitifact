@@ -187,3 +187,19 @@ service, destination profile, or server-acceptance guarantee.
 The media matrix and provider rules in D-020/D-021 remain frozen. Broader file
 families, hosted operation, automatic destination discovery, and the long-term
 “Any file. Any destination.” vision remain deferred.
+
+## D-027 — Public RC4 and static Pages distribution
+**Status:** accepted; owner directed full release.
+**Recorded:** 2026-08-22.
+
+Release D-026 as `v0.1.0-rc.4`, preserving the frozen CLI/media matrix and
+keeping every Cargo package unpublished. The public static build is deployed
+from a fully green `main` commit to GitHub Pages at
+`https://mattbaconz.github.io/fitifact/`. It retains the local-only trust
+boundary and compiles without the HEIC decoder unless the separate legal gate
+is explicitly enabled.
+
+RC4 is a public prerelease, not immutable `v0.1.0`. Stable remains blocked on
+the documented clean-machine acceptance across Windows x64, Linux GNU x64,
+macOS Intel, and macOS Apple Silicon. The GitHub Release publication variable
+is opened only for the RC4 tag workflow and reset immediately afterward.

@@ -2,7 +2,11 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] — after `0.1.0-rc.3`
+## [Unreleased] — after `0.1.0-rc.4`
+
+No changes yet.
+
+## [0.1.0-rc.4] - consumer image upload candidate
 
 These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`.

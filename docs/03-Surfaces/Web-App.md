@@ -15,8 +15,10 @@ tags:
 ## Implemented surface
 
 `web/` is a static Vite + React + TypeScript product backed by
-`fitifact-wasm`. It is built for local/static delivery and is not deployed by
-this repository.
+`fitifact-wasm`. The default-off-HEIC build is deployed from a fully green
+`main` commit to [GitHub Pages](https://mattbaconz.github.io/fitifact/). The
+deployment contains static files only and does not add a server, upload path,
+telemetry endpoint, or cloud fallback.
 
 ```text
 parse requirements -> review target -> choose image -> inspect/check/plan
@@ -73,6 +75,10 @@ npm run test:e2e
 `npm run build` invokes the local pinned wasm-pack package and emits static
 assets under `web/dist`. Browser verification covers Chromium, Firefox, and
 WebKit at 1280 × 900 and 390 × 844.
+
+CI performs a second default-gate build with `FITIFACT_BASE_PATH=/fitifact/`
+and deploys that artifact only after the Rust, web, native-platform, MSRV, and
+supply-chain jobs all pass on `main`.
 
 To audit the approved decoder without publishing it:
 

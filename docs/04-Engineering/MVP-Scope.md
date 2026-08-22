@@ -13,8 +13,8 @@ tags:
 
 # MVP scope
 
-The current unpublished `0.1.0-rc.3` candidate combines the frozen native
-media slice with the D-026 local consumer image upload MVP. It produces static
+The `0.1.0-rc.4` public candidate combines the frozen native media slice with
+the D-026 local consumer image upload MVP. It produces static
 web assets only; no deployment or publication is implied.
 
 ## Native CLI/media matrix

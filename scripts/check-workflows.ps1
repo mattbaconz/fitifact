@@ -54,7 +54,13 @@ $ciRequirements = @(
     @{ Name = "default web build"; Pattern = '(?m)^\s+run: npm run build\s*$' },
     @{ Name = "approved HEIC gate"; Pattern = 'FITIFACT_HEIC_APPROVED: "true"' },
     @{ Name = "real HEIC browser check"; Pattern = 'npm run test:e2e:heic' },
-    @{ Name = "all-browser workflow"; Pattern = '(?m)^\s+run: npm run test:e2e\s*$' }
+    @{ Name = "all-browser workflow"; Pattern = '(?m)^\s+run: npm run test:e2e\s*$' },
+    @{ Name = "Pages base path"; Pattern = 'FITIFACT_BASE_PATH: /fitifact/' },
+    @{ Name = "default-off-HEIC Pages assertion"; Pattern = 'Default public artifact unexpectedly contains the gated HEIC decoder' },
+    @{ Name = "Pages asset-path assertion"; Pattern = 'Pages artifact does not use the /fitifact/ base path' },
+    @{ Name = "pinned Pages artifact upload"; Pattern = 'actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4' },
+    @{ Name = "post-gate Pages deploy job"; Pattern = '(?ms)^  deploy-pages:\r?\n.*?^    needs:\r?\n      - quality\r?\n      - web\r?\n      - platform\r?\n      - msrv\r?\n      - supply-chain\s*$' },
+    @{ Name = "pinned Pages deployment"; Pattern = 'actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4' }
 )
 foreach ($requirement in $ciRequirements) {
     if ($ciWorkflow -notmatch $requirement.Pattern) {

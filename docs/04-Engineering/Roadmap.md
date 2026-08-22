@@ -11,7 +11,7 @@ tags:
 
 # Roadmap
 
-The unpublished `0.1.0-rc.3` candidate includes the frozen media matrix and the
+The public `0.1.0-rc.4` candidate includes the frozen media matrix and the
 D-026 local consumer image upload MVP. Every later phase below is deferred and
 is not a commitment or implementation claim.
 
