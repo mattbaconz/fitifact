@@ -58,7 +58,8 @@ try {
         "docs/04-Engineering/evidence/consumer-image-upload-mvp/after-mobile.png",
         "docs/brand/ft-mark-light.png",
         "docs/brand/ft-icon-dark.png",
-        "docs/brand/ft-mark-simple.png"
+        "docs/brand/ft-mark-simple.png",
+        "web/public/ft-logo.png"
     )
     $unexpectedBinaries = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @(git ls-files)) {
