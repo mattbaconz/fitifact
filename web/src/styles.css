@@ -182,8 +182,8 @@ input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: #f1
 .crop-stage img { display: block; max-width: 100%; max-height: 280px; object-fit: contain; }
 .crop-mask { position: absolute; border: 2px solid #ffffff; box-shadow: 0 0 0 999px rgb(0 0 0 / 65%); pointer-events: none; }
 .crop-editor input[type="range"] { width: 100%; min-height: 44px; accent-color: var(--ink); }
-.check-label { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0.75rem 0 0; color: #c1c6c4; line-height: 1.45; }
-.check-label input { flex: 0 0 auto; width: 1.05rem; height: 1.05rem; margin-top: 0.12rem; }
+.check-label { display: flex; gap: 0.6rem; align-items: center; min-height: 44px; margin: 0.75rem 0 0; color: #c1c6c4; line-height: 1.45; }
+.check-label input { flex: 0 0 auto; width: 1.25rem; height: 1.25rem; margin: 0; }
 
 .checklist { margin-top: 1.25rem; padding-top: 0.2rem; border-top: 1px solid var(--line); }
 .checklist ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }

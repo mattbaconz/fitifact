@@ -121,7 +121,10 @@ test("crop approval is keyboard operable and required before adaptation", async 
   await expect(position).toHaveValue("0");
   const adapt = page.getByRole("button", { name: "Fix image" });
   await expect(adapt).toBeDisabled();
-  await page.getByLabel(/I approve removing/).check();
+  const consent = page.getByLabel(/I approve removing/);
+  await consent.focus();
+  await page.keyboard.press("Space");
+  await expect(consent).toBeChecked();
   await adapt.click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
 });

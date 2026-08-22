@@ -28,6 +28,12 @@ Docs call this the 0.2 session. Do not invent a `v0.2.0` tag. Existing
 - Compact the landing so the drop zone is visible on first paint; the paste
   field stays empty so people paste their own rejection text.
 
+### [fixed]
+
+- Allow the owned still-WebP fixture in the public-readiness binary allowlist.
+- Make crop consent a 44px keyboard-operable control so WebKit mobile can
+  approve it before **Fix image**.
+
 ## [0.1.0-rc.4] - consumer image upload candidate
 
 These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains

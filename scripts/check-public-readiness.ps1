@@ -52,6 +52,7 @@ try {
         "fixtures/image/malformed-image.jpg",
         "fixtures/image/oversized-pixels.png",
         "fixtures/image/synthetic-single.heic",
+        "fixtures/image/still-webp.webp",
         "docs/04-Engineering/evidence/consumer-image-upload-mvp/before-desktop.png",
         "docs/04-Engineering/evidence/consumer-image-upload-mvp/before-mobile.png",
         "docs/04-Engineering/evidence/consumer-image-upload-mvp/after-desktop.png",
