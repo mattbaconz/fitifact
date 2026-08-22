@@ -6,3 +6,8 @@
 Thumbs.db
 fixtures/media/.generate-*
 /web/pkg
+/web/node_modules
+/web/dist
+/web/src/wasm
+/web/playwright-report
+/web/test-results

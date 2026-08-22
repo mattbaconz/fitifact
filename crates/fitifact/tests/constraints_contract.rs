@@ -83,6 +83,40 @@ fn rejects_invalid_field_operator_and_value_combinations() {
 }
 
 #[test]
+fn image_dimensions_accept_exact_minimum_and_maximum_integer_targets() {
+    let constraints = compile_from_yaml(&yaml(
+        "  - id: exact-width\n    field: image.width\n    op: eq\n    value: 1200\n  - id: min-height\n    field: image.height\n    op: gte\n    value: 630\n  - id: max-height\n    field: image.height\n    op: lte\n    value: 900\n",
+    ))
+    .unwrap();
+    assert_eq!(constraints.hard.len(), 3);
+}
+
+#[test]
+fn image_dimension_ranges_reject_contradictions_and_malformed_numbers() {
+    for hard in [
+        "  - id: min\n    field: image.width\n    op: gte\n    value: 1201\n  - id: max\n    field: image.width\n    op: lte\n    value: 1200\n",
+        "  - id: exact\n    field: image.height\n    op: eq\n    value: 800\n  - id: max\n    field: image.height\n    op: lte\n    value: 799\n",
+        "  - id: first\n    field: image.width\n    op: eq\n    value: 100\n  - id: second\n    field: image.width\n    op: eq\n    value: 101\n",
+    ] {
+        let error = compile_from_yaml(&yaml(hard)).unwrap_err();
+        assert_eq!(error.code, ErrorCode::RequirementsConflict);
+    }
+
+    for value in ["12.5", "-1", "wide", "[1200]", "4294967296"] {
+        input_error(&yaml(&format!(
+            "  - id: malformed\n    field: image.width\n    op: eq\n    value: {value}\n"
+        )));
+    }
+}
+
+#[test]
+fn media_dimensions_remain_lte_only() {
+    input_error(&yaml(
+        "  - id: exact\n    field: media.video.width\n    op: eq\n    value: 1920\n",
+    ));
+}
+
+#[test]
 fn rejects_empty_lists_and_zero_numeric_limits() {
     input_error(&yaml(
         "  - id: empty\n    field: media.container\n    op: in\n    value: []\n",

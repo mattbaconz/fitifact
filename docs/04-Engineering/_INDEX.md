@@ -2,7 +2,7 @@
 title: "Engineering Index"
 type: index
 status: active
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - index
@@ -13,6 +13,7 @@ tags:
 - [[04-Engineering/MVP-Scope]]
 - [[04-Engineering/Roadmap]]
 - [[04-Engineering/Testing-QA]]
+- [[04-Engineering/Consumer-Image-Moderated-Test]]
 - [[04-Engineering/Security-Privacy]]
 - [[04-Engineering/Performance]]
 - [[04-Engineering/Observability]]

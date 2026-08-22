@@ -2,7 +2,7 @@
 title: "Next Actions"
 type: action-plan
 status: active
-updated: 2026-08-19
+updated: 2026-08-21
 canonical: true
 tags:
   - next
@@ -11,24 +11,28 @@ tags:
 
 # Next actions
 
-The v0.1 CLI/media slice is frozen locally as `0.1.0-rc.1`. The
-**only allowed RC tag target** is commit
+The v0.1 CLI/media slice remains frozen at `0.1.0-rc.1`. The
+**only allowed `v0.1.0-rc.1` tag target** is commit
 `b033552cb2729e96ca97c649a7bb4a223f2ad900`
 (`feat: freeze unpublished 0.1.0-rc.1 local candidate`). Annotated tag
 `v0.1.0-rc.1` peels to that SHA. Do not tag later image/web commits as
 `v0.1.0-rc.1`. Do not reopen the media matrix unless a review finds a
 false-safe defect. Keep crates `publish = false`. GitHub Release stays off until `FITIFACT_PUBLICATION_APPROVED`. The freeze tree
 is missing `[profile.dist]`; artifact jobs for that tag failed. Do not move
-the tag. The first buildable public candidate is `0.1.0-rc.3`. `v0.1.0-rc.2` built
-native archives but failed the global SBOM step because cargo-cyclonedx also
-wrote a wasm `.cdx.xml`. Do not move either existing tag.
+the tag. `v0.1.0-rc.3` is the first published buildable candidate.
+`v0.1.0-rc.4` is the D-026 consumer image candidate; create it only from the
+reviewed RC4 version commit after `main` CI passes. `v0.1.0-rc.2` built native
+archives but failed the global SBOM step because cargo-cyclonedx also wrote a
+wasm `.cdx.xml`. Do not move any existing tag.
 
 Local identity: the public name is Fitifact; the product git checkout is
 `C:\fitifact\fitifact` under the `C:\fitifact` umbrella; in-repo `docs/` is
 canonical. Do not edit the sibling vault copy. Preserve Shoehorn only as
 historical rename/collision context.
 
-1. **Local RC verification** — done on the freeze commit; stay unpublished.
+1. **RC4 release** — publish the protected `v0.1.0-rc.4` prerelease and deploy
+   the default-off-HEIC static build to GitHub Pages after every required CI
+   job passes.
 
 2. **Publication gate** (owner directed public GitHub 2026-08-18)
    - 2026-08-16 naming packet is in [[01-Product/Naming-Brand]]; it is not
@@ -44,16 +48,23 @@ historical rename/collision context.
    `fitifact doctor`, and the three canonical media fixtures. See the
    `v0.1.0-rc.1` section of the release checklist.
 
-4. **Image then local-only web** — landed on commits after the freeze SHA
-   (do not tag them `v0.1.0-rc.1`):
-   - JPEG no-op and PNG→JPEG (D-025);
-   - static WASM drop flow for that image matrix only;
-   - no ffmpeg.wasm, no uploads, no cloud in this repository.
+4. **D-026 consumer image upload MVP** — included in RC4, after the freeze SHA
+   (never tag it `v0.1.0-rc.1`):
+   - deterministic requirements parsing and typed JPEG/PNG adaptation;
+   - static worker/WASM workflow, crop consent, warnings, and post-validation;
+   - default-off approved HEIC decoder with notices and owned fixture;
+   - no ffmpeg.wasm, uploads, telemetry, or cloud fallback.
 
-5. **Do not build cloud in the public repository**
+5. **Run the human continuation gate** — post-build, not fabricated:
+   - execute [[04-Engineering/Consumer-Image-Moderated-Test]] with ten real
+     form/application photo tasks;
+   - require 8/10 completion, 8/10 real destination acceptance, 5/10 return
+     intent, and zero harmful outcomes.
+
+6. **Do not build cloud in the public repository**
    - managed operations stay in the separate private checkout.
 
-6. **After traction (deferred)**
+7. **After traction (deferred)**
    - destination profiles and registry workflow;
    - extension;
    - hosted API;

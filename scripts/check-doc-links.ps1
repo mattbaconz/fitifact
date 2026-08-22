@@ -49,3 +49,30 @@ if ($missing.Count -gt 0) {
 }
 
 Write-Host "Local Markdown and wiki-link targets: PASS ($($markdownFiles.Count) files)"
+
+$copyPaths = @(
+    "docs/00-Foundation/Decision-Log.md",
+    "docs/01-Product/Positioning-Messaging.md",
+    "docs/01-Product/Product-Definition.md",
+    "docs/03-Surfaces/Web-App.md",
+    "docs/04-Engineering/MVP-Scope.md",
+    "docs/06-Research/Competitors.md",
+    "docs/06-Research/Threats.md",
+    "web/src/App.tsx"
+)
+$copyText = ($copyPaths | ForEach-Object {
+    [IO.File]::ReadAllText((Join-Path $root $_))
+}) -join "`n"
+foreach ($requiredCopy in @(
+    "Make your image pass the upload",
+    "Your image stays on this device",
+    "validated against the requirements you confirmed"
+)) {
+    if (-not $copyText.Contains($requiredCopy)) {
+        throw "Product copy boundary is missing: $requiredCopy"
+    }
+}
+if ($copyText -match '(?i)validated acceptance') {
+    throw "Product copy must not describe confirmed-constraint validation as validated acceptance"
+}
+Write-Host "Product copy boundaries and acceptance caveat: PASS"

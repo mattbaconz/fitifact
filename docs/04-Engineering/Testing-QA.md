@@ -3,7 +3,7 @@ title: "Testing and QA"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - testing
@@ -21,9 +21,11 @@ Constraints, compatibility predicates, planner, profile resolution, schema valid
 Real tiny files with known properties.
 
 The tracked canonical media set is under `fixtures/media`; its generator,
-provider provenance, and SHA-256 manifest are committed with it. The D-025
-image pair is under `fixtures/image` with its own SHA-256 manifest. Generated-temp
-provider tests remain in addition to these canonical fixtures.
+provider provenance, and SHA-256 manifest are committed with it. The image set
+under `fixtures/image` contains owned synthetic JPEG, PNG, transparent PNG,
+crop-grid, malformed, decoded-limit, and single-image HEIC fixtures with a
+generator, provenance, and SHA-256 manifest. Generated-temp provider tests
+remain in addition to these canonical fixtures.
 
 ### Provider integration
 Execute actual providers.
@@ -71,8 +73,10 @@ Fuzz parsers, schema, profile parser, text normalization and archive readers if 
 
 Windows, macOS, Linux, browsers, ARM/x64 where relevant.
 
-v0.1 CI narrows that claim to native Windows x64, Linux GNU x64, macOS Intel,
-and macOS Apple Silicon runners. Browser testing remains deferred.
+CI covers native Windows x64, Linux GNU x64, macOS Intel, and macOS Apple
+Silicon, plus Chromium, Firefox, and WebKit at desktop and mobile widths for the
+static image product. The HEIC approved-gate test decodes the owned fixture;
+default builds keep the decoder absent.
 
 ## Performance regressions
 
@@ -91,7 +95,10 @@ Source + schema validation + valid/invalid/boundary fixtures where possible.
 
 ## Human QA
 
-Ask a nontechnical person to make a file work without explaining codecs first.
+The exact ten-task, real-destination protocol and continuation scorecard are in
+[[04-Engineering/Consumer-Image-Moderated-Test]]. Its 8/10, 8/10, 5/10, and
+zero-harm gates are post-build human validation. No engineering test can fill
+or pass that scorecard.
 
 ## Failure injection
 

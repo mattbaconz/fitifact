@@ -2,8 +2,8 @@
 title: "MVP Scope"
 type: engineering
 status: active
-implementation: mixed
-updated: 2026-08-15
+implementation: implemented
+updated: 2026-08-21
 canonical: true
 tags:
   - mvp
@@ -13,74 +13,67 @@ tags:
 
 # MVP scope
 
-This document separates the implemented **v0.1 CLI/media release** from the
-broader **later public MVP**. “Public MVP” elsewhere in the vault does not mean
-the feature exists in v0.1.
+The `0.1.0-rc.4` public candidate combines the frozen native media slice with
+the D-026 local consumer image upload MVP. It produces static
+web assets only; no deployment or publication is implied.
 
-## v0.1 CLI/media slice — implemented
+## Native CLI/media matrix
 
-v0.1 proves real inspection, typed destination constraints, compatibility
-diagnosis, minimum-mutation planning, safe local execution, post-validation,
-human explanation, and structured JSON reports.
+1. MP4/H.264/AAC already satisfying the target: no-op.
+2. MOV/H.264/AAC targeting MP4/H.264/AAC: remux.
+3. MP4/HEVC/AAC targeting MP4/H.264/AAC: transcode video, copy AAC.
+4. Every other media mutation: explicit refusal.
 
-Executable adaptation behavior is limited to:
+Media dimension and byte constraints remain check-only. System FFmpeg/ffprobe
+remain external providers under D-020/D-021.
 
-1. MP4/H.264/AAC that already satisfies the target: no-op without starting an
-   encoder;
-2. MOV/H.264/AAC targeting MP4/H.264/AAC: remux without re-encoding;
-3. MP4/HEVC/AAC targeting MP4/H.264/AAC: transcode video and copy audio;
-4. JPEG targeting JPEG: no-op without starting FFmpeg;
-5. PNG targeting JPEG: in-process encode without resizing;
-6. all other requested mutations: explicit refusal.
+## Consumer image matrix
 
-The CLI accepts file-size and dimension constraints for inspection and
-compatibility checking. They are **check-only**: this slice cannot resize,
-change frame rate, or fit a byte target. A plan must never pretend otherwise.
+The product promise is **“Make your image pass the upload.”** Users paste
+requirements, review normalized format/size/dimensions, choose an image, review
+the minimum plan and any crop, adapt locally, review validation, and download.
 
-Media uses system FFmpeg/ffprobe. Images use the in-process Rust provider
-(D-025) and must not construct `FfmpegProvider`. The unpublished package is
-still `0.1.0-rc.1`. Publication remains GitHub-only after D-023 sign-off.
+- Parse JPEG/JPG/PNG, decimal/binary byte ceilings, exact dimensions, and
+  minimum/maximum width/height language into deterministic typed constraints.
+- Inspect JPEG/PNG, no-op compatible inputs, preserve JPEG/PNG source format
+  where valid, encode PNG/JPEG, crop only with explicit consent, resize with an
+  upscale warning, fit JPEG quality from 95 down to 50 in at most seven
+  encodes, and perform at most three proportional dimension-reduction rounds.
+- Normalize EXIF orientation, disclose that changed image outputs strip
+  metadata, preserve alpha only through PNG, and refuse implicit transparency
+  flattening.
+- Re-inspect and validate every output against the same hard constraints.
+  Successful copy must say the result was **“validated against the requirements
+  you confirmed”** and must not guarantee destination-server acceptance.
+- Enforce 32 MiB encoded input and 24-megapixel decoded limits. Refuse
+  animation/multi-image content and surface cancellation/resource errors.
+- Keep **“Your image stays on this device.”** visible. The static product has no
+  telemetry, payload upload, CDN decoder, account, or cloud fallback.
 
-## Later public MVP — deferred
+HEIC detection is present, but decoding is disabled by default. An approved
+build may set `FITIFACT_HEIC_APPROVED=true` to include pinned `libheif-js`
+1.19.8 as an isolated lazy decoder. Approval includes LGPL-3.0 notices and
+build review. Decoded pixels enter the same Rust validation path; multiple
+images are refused. HEIC is not a default-format-support claim.
 
-The broader public MVP may add common image formats beyond JPEG/PNG (WebP,
-HEIC/HEIF where viable, and TIFF), destination profiles, a hosted web app, and
-richer explanation UI. Those formats, transforms, providers, and packaging are
-not implemented here.
-
-A few sourced destination profiles, profile registry workflows, browser-local
-processing, and richer explanation UI are also deferred. Natural-language
-requirements parsing is not part of v0.1.
-
-## Public and private boundary
+## Public/private boundary
 
 The public Apache-2.0 repository owns the engine, schemas, planner, local
-provider framework, CLI, tests, fixtures, and public docs. Managed cloud/API
-execution, private profiles, credentials, infrastructure, metering, continuous
-verification operations, and enterprise controls are deferred to a separate
-private checkout. They must not be added here or presented as available.
+providers, CLI, WASM bridge, static UI, tests, legal synthetic fixtures, and
+documentation. Managed APIs/cloud execution, credentials, metering, private
+profiles, registry operations, and enterprise control-plane code remain
+deferred outside this repository.
 
-## Acceptance criteria
+## Human continuation gate
 
-### v0.1
+Engineering verification is necessary but not the viability result. The
+post-build ten-task moderated protocol in
+[[04-Engineering/Consumer-Image-Moderated-Test]] must be executed with real
+people and live form/application photo requirements. Do not fabricate results.
 
-- detect codec inside the real container;
-- no-op when valid without provider execution;
-- preserve compatible streams;
-- choose remux before lossy transcode when sufficient;
-- refuse unsupported mutations;
-- never overwrite originals or existing outputs;
-- post-validate against the same hard constraints;
-- return deterministic structured results;
-- work without telemetry, network calls, or implicit cloud upload.
+## Deferred
 
-### Later public MVP (deferred)
-
-- hosted one-click web flow;
-- WebP, HEIC/HEIF, TIFF, animation, and resize/byte-fitting;
-- destination profiles and natural-language requirements.
-
-## Anti-scope rule
-
-A new format or surface is not enough reason to expand v0.1. Any expansion
-requires an explicit decision that updates D-019 or D-020.
+Hosted processing, destination profiles, automatic requirement capture,
+WebP/TIFF/animation adaptation, media in the browser, accounts, billing,
+browser extensions, PWA/share targets, desktop/mobile shells, and the broad
+“Any file. Any destination.” vision are outside this MVP.

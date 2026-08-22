@@ -25,7 +25,9 @@ use tar.gz. Shell and PowerShell installers, per-archive and unified SHA-256
 checksums, a CycloneDX XML SBOM, a source archive, and GitHub artifact
 attestations are prepared release outputs.
 
-No assets have been published. Crates remain `publish = false`; crates.io,
+The GitHub-only `v0.1.0-rc.3` prerelease proved the artifact pipeline. RC4 adds
+the D-026 source and deploys the default-off-HEIC static web artifact through
+GitHub Pages. Crates remain `publish = false`; crates.io, npm registry,
 Homebrew/WinGet publication, bundled FFmpeg, native signing, and notarization
 are not configured. System FFmpeg remains an external runtime dependency.
 
@@ -126,6 +128,7 @@ After update:
 
 ## Naming
 
-Fitifact is the selected executable name, but public publication is blocked
-until owner/legal sign-off. v0.1 remains GitHub-only; crates.io, npm,
+Fitifact is the selected executable name. Owner-directed GitHub prerelease
+publication is permitted only through the protected release window; this is
+not billed trademark clearance. v0.1 remains GitHub-only; crates.io, npm,
 package-manager formulae, bundled FFmpeg, and OS signing are deferred.

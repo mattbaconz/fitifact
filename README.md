@@ -2,9 +2,10 @@
 
 # Fitifact
 
-Fitifact is a destination-first file compatibility CLI. It inspects what a
-file actually contains, checks typed destination constraints, chooses the
-smallest supported change, executes it, and validates the result.
+Fitifact is a destination-first file compatibility engine with a CLI and a
+local-only image web app. It inspects what a file actually contains, checks
+typed destination constraints, chooses the smallest supported change, executes
+it, and validates the result.
 
 ```text
 inspect -> constraints -> check -> plan -> execute -> validate
@@ -12,27 +13,30 @@ inspect -> constraints -> check -> plan -> execute -> validate
 
 ## v0.1 scope
 
-This release is intentionally narrow. The unpublished `0.1.0-rc.1` freeze is
-the media matrix below. Later commits on the same version string add D-025
-images and a local-only web drop page.
+This prerelease preserves the frozen CLI/media matrix and adds the D-026 local
+consumer image workflow. The public app is available at
+[`mattbaconz.github.io/fitifact`](https://mattbaconz.github.io/fitifact/); image
+bytes stay in the browser worker and are never uploaded to Fitifact.
 
 | Input and requested result | Behavior |
 | --- | --- |
 | MP4 with H.264 video and AAC audio already satisfying the target | No-op; no encoder starts |
 | MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding |
 | MP4 with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
-| JPEG already satisfying a JPEG target | No-op; FFmpeg is not started |
-| PNG targeting JPEG | In-process encode; no resize |
+| JPEG/PNG already satisfying the confirmed target | No-op |
+| JPEG/PNG requiring format, bounded resize, crop consent, or byte fitting | In-process adaptation with re-inspection and validation |
 | Any other mutation | Refuse explicitly |
 
-File-size and dimension constraints are supported by `inspect` and `check`,
-but this slice cannot execute size fitting or resizing. It never overwrites
-the input or an existing output, never silently drops streams, and never treats
-an FFmpeg success code as proof of compatibility.
+The native CLI/media provider checks file-size and dimension constraints but
+does not execute media size fitting or resizing. The browser image provider
+does execute bounded image fitting. Neither surface overwrites the input or an
+existing output, silently drops streams, or treats provider success as proof of
+compatibility.
 
-WebP, HEIC/HEIF, TIFF, animation, destination profiles, natural-language
-parsing, hosted APIs, bundled FFmpeg, ffmpeg.wasm, package registries, OS
-signing, and package-manager formulae are deferred.
+WebP, TIFF, animation, destination profiles, hosted APIs, bundled FFmpeg,
+ffmpeg.wasm, package registries, OS signing, and package-manager formulae are
+deferred. HEIC support exists only in a separately approved, lazy decoder build;
+the public Pages artifact omits it and returns an explicit unsupported result.
 
 ## Requirements
 
@@ -80,9 +84,15 @@ cargo run -p fitifact-cli -- adapt photo.png --image-format jpeg
 cargo run -p fitifact-cli -- bench
 ```
 
-The optional local web drop page is `web/index.html`. It needs a wasm-pack
-build of `crates/fitifact-wasm` into `web/pkg`; native `cargo test -p fitifact-wasm`
-does not require a wasm target.
+The local web product lives under `web/`. Its pinned build invokes wasm-pack and
+emits static assets under `web/dist`:
+
+```console
+cd web
+npm ci
+npm run build
+npm run test:e2e
+```
 
 Use `--json` with every command for structured output; engine failures use
 `fitifact.error/v1`. `fitifact bench` (and `fitifact bench --json`) is the
@@ -108,14 +118,13 @@ cargo run -p fitifact-cli -- check video.mp4 --constraints fixtures/constraints/
 
 ## Prepared release installation and verification
 
-No release assets exist yet. After owner/legal approval and publication, the
-prepared GitHub release workflow is configured to produce ZIP or tar.gz
+The public RC workflow produces ZIP or tar.gz
 archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
 `sha256.sum`, per-archive SHA-256 files, and a CycloneDX
 `fitifact-cli.cdx.xml` SBOM.
 
-The checked-in package and binary version is the unpublished
-`0.1.0-rc.3` candidate. Stable `0.1.0` requires a later reviewed version-bump
+The checked-in package and binary version is the public
+`0.1.0-rc.4` candidate. Stable `0.1.0` requires a later reviewed version-bump
 commit after RC acceptance; this commit must not receive the stable tag.
 
 Download `sha256.sum` and the one archive for your target into the same
@@ -163,14 +172,16 @@ If no prebuilt archive is suitable, the exact prepared source fallback is:
 cargo install --git https://github.com/mattbaconz/fitifact --locked fitifact-cli
 ```
 
-This command becomes usable only after the public repository exists.
+This installs the current reviewed source from the public repository; release
+archives remain the reproducible, attested distribution path.
 
 ## Project status and distribution
 
 The intended public home is
 [`mattbaconz/fitifact`](https://github.com/mattbaconz/fitifact). v0.1
 distribution is GitHub-only; the Cargo packages are not published. Public
-publication remains blocked until owner/legal sign-off on the Fitifact name.
+prerelease publication remains restricted to a protected, explicitly approved
+release window.
 
 The release procedure and clean-machine acceptance gates are documented in
 [`docs/04-Engineering/Release-Checklist.md`](docs/04-Engineering/Release-Checklist.md).

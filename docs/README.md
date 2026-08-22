@@ -2,7 +2,7 @@
 title: "Fitifact documentation"
 type: root-index
 status: active
-updated: 2026-08-18
+updated: 2026-08-22
 canonical: true
 tags:
   - fitifact
@@ -25,7 +25,7 @@ claim; all other feature designs are deferred. The repository-root
 [`AGENTS.md`](../AGENTS.md) and the decision log take precedence over design
 examples.
 
-## Current public release: v0.1 CLI/media slice
+## Current public candidate: v0.1 CLI/media + local image workflow
 
 Implemented:
 
@@ -37,6 +37,9 @@ Implemented:
 - MOV/H.264/AAC remux to MP4;
 - MP4/HEVC-to-H.264 video transcode while copying compatible AAC audio;
 - post-execution re-inspection and validation;
+- deterministic JPEG/PNG requirement parsing, bounded adaptation, explicit
+  crop consent, and output validation in the local static web product;
+- default-off gated HEIC decoding with owned fixture and license notices;
 - GitHub-only distribution, Apache-2.0, no telemetry or network activity.
 
 The CLI can **check** file-size and video-dimension constraints, but its v0.1
@@ -45,14 +48,13 @@ mutations are refused. Originals and existing outputs are never overwritten,
 streams are never silently discarded, and provider success alone never counts
 as compatibility.
 
-## Later public MVP (deferred)
+## Implemented static consumer surface
 
-The broader public MVP described in product and design notes adds images and a
-one-click web experience only after the CLI/media milestone is reliable.
-Browser/desktop/mobile surfaces, profiles, natural-language parsing, WASM,
-bundled providers, registry publication, signing, and package-manager
-distribution are also deferred. Examples of those features are design sketches,
-not working interfaces.
+The D-026 Vite/React worker product and WASM bridge are implemented and
+deployed at `https://mattbaconz.github.io/fitifact/`. Processing stays on the
+device. Hosted processing, profiles, browser extensions, desktop/mobile shells,
+registry publication, signing, and package-manager distribution remain
+deferred.
 
 ## Open-core and private operations boundary
 
@@ -73,7 +75,7 @@ exists as part of v0.1.
 - [[07-Specs/CLI-Spec]]
 - [[04-Engineering/Roadmap]]
 
-The strongest current launch description remains **“I Made an Adapter for
-Files.”** Owner directed public GitHub on 2026-08-18; the name is still not
-billed-cleared. GitHub Release publication stays gated. See
-[[01-Product/Naming-Brand]].
+The consumer launch description is **“Make your image pass the upload.”** Owner
+directed public GitHub on 2026-08-18 and RC4 release on 2026-08-22; the name is
+still not billed-cleared. GitHub Release publication stays protected by its
+one-window gate. See [[01-Product/Naming-Brand]].

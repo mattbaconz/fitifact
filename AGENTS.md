@@ -44,24 +44,27 @@ update the decision log.
 
 ## v0.1 release boundary (D-018 through D-022)
 
-The current public candidate is a Rust workspace containing the `fitifact`
-library, `fitifact-cli` binary, and `fitifact-wasm` bindings. The unpublished
-`0.1.0-rc.1` freeze SHA is media-only (D-020). Later commits on the same
-version string add the D-025 image slice and a local-only static web drop page.
-Media still uses system `ffmpeg`/`ffprobe` from `PATH`; they are never bundled.
-Images use an in-process Rust provider and must not construct `FfmpegProvider`.
+The current public candidate is `0.1.0-rc.4`: a Rust workspace containing the
+`fitifact` library, `fitifact-cli` binary, and `fitifact-wasm` bindings plus the
+D-026 static consumer image product. The `0.1.0-rc.1` freeze SHA remains the
+media-only D-020 boundary. Media still uses system `ffmpeg`/`ffprobe` from
+`PATH`; they are never bundled. Images use an in-process Rust provider and must
+not construct `FfmpegProvider`.
 
 The executable adaptation catalog is deliberately small:
 
 - MP4/H.264/AAC that already satisfies the constraints is a no-op;
 - MOV/H.264/AAC can be remuxed to MP4 without re-encoding;
 - MP4/HEVC/AAC can be transcoded to MP4/H.264/AAC while AAC is copied;
-- JPEG that already satisfies a JPEG target is a no-op;
-- PNG targeting JPEG is encoded in-process without resizing;
-- every other requested mutation is refused explicitly.
+- JPEG/PNG that already satisfies the confirmed image target is a no-op;
+- JPEG/PNG can be adapted in-process under D-026 format, byte, dimension, and
+  explicit crop constraints;
+- every mutation outside the frozen media matrix and D-026 image contract is
+  refused explicitly.
 
-File-size and video-dimension constraints can be inspected and checked, but v0.1
-does not execute size fitting, resizing, or frame-rate changes. A provider
+File-size and video-dimension constraints can be inspected and checked, but the
+media provider does not execute size fitting, resizing, or frame-rate changes.
+The image provider executes only the bounded D-026 fitting pipeline. A provider
 returning success is not proof of compatibility: every produced output must be
 re-inspected and validated against the same hard constraints.
 
@@ -69,11 +72,12 @@ The bounded planner uses breadth-first search to depth 2 and lexicographic
 ranking by semantic loss, lossy steps, streams changed, then step count. Do not
 introduce Pareto scoring until a later decision supersedes D-022.
 
-Images beyond JPEG/PNG→JPEG, a hosted web app, browser/desktop/mobile surfaces,
-profiles, natural-language parsing, managed APIs/cloud execution, bundled
-FFmpeg, ffmpeg.wasm, registry publishing, OS signing, package-manager formulae,
-and telemetry/network activity are deferred. Design documents for those areas
-are not evidence of implementation.
+Images beyond the D-026 JPEG/PNG contract, browser extensions, desktop/mobile
+shells, profiles, managed APIs/cloud execution, bundled FFmpeg, ffmpeg.wasm,
+registry publishing, OS signing, package-manager formulae, and
+telemetry/network activity are deferred. The public web app is static hosting
+only; it adds no server or upload path. Design documents for deferred areas are
+not evidence of implementation.
 
 Distribution for v0.1 is GitHub-only from
 `https://github.com/mattbaconz/fitifact`. All Cargo packages remain

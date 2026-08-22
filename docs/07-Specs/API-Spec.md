@@ -2,8 +2,8 @@
 title: "API Specification"
 type: spec
 status: active
-implementation: deferred
-updated: 2026-08-15
+implementation: local-api-implemented-hosted-deferred
+updated: 2026-08-21
 canonical: true
 tags:
   - api
@@ -12,7 +12,8 @@ tags:
 
 # API specification
 
-Status: design draft.
+Status: local Rust/WASM contract implemented; hosted REST remains a design
+draft and is not exposed by this repository.
 
 ## Principles
 
@@ -35,10 +36,39 @@ validate(output, constraints) -> ValidationReport
 adapt(...) -> AdaptationResult
 ```
 
-## Hosted REST sketch
+The WASM bridge exposes deterministic JSON/byte equivalents:
+
+```text
+compile_requirements(text) -> requirements report
+compile_constraints(json) -> fitifact.constraints/v1 or fitifact.error/v1
+image_limits() -> fitifact.image-limits/v1
+inspect_bytes(bytes) -> Artifact
+plan_bytes(bytes, constraints) -> fitifact.web-plan/v1
+adapt_bytes(bytes, constraints, ImageAdaptOptions) -> report + transferable bytes
+plan_rgba(rgba, width, height, constraints) -> report + safe PNG preview
+adapt_rgba(rgba, width, height, constraints, options) -> report + transferable bytes
+validate_bytes(bytes, constraints) -> CompatibilityReport
+```
+
+These functions perform no network activity. The worker owns request/source
+generation, and output bytes are transferred rather than published. Every
+adaptation follows inspect → check → plan → execute → re-inspect → validate.
+`ImageAdaptOptions` accepts only a normalized crop rectangle and explicit crop
+consent. Errors use `fitifact.error/v1`.
+
+Image reports contain a `fitifact.image-adapt-plan/v1` execution envelope. Its
+`plan` member is a canonical, directly deserializable `fitifact.plan/v1` with
+a typed `image.adapt` step; legacy media plan JSON is unchanged. The browser
+worker clones `File`, loads core-owned limits before reading it, and rechecks
+encoded length before each WASM planning/adaptation entry.
+
+## Hosted REST sketch — deferred
 
 ### `POST /v1/uploads`
 Returns a scoped presigned upload URL and `upload_id`.
+
+No such endpoint exists in D-026. **Your image stays on this device.** This
+section must not be cited as an implemented upload/cloud capability.
 
 ### `POST /v1/inspections`
 ```json

@@ -2,7 +2,7 @@
 title: "Competitors"
 type: research
 status: active
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - competitors
@@ -22,6 +22,13 @@ Conversion, transcoding and automatic compatibility already exist across many pr
 The narrower gap:
 
 > A general destination-first engine that takes arbitrary file state + declarative destination constraints, chooses a minimum-mutation plan, executes it, and validates the result.
+
+For D-026, compare the implemented product only against the narrower consumer
+job: **“Make your image pass the upload.”** It asks for the destination's
+requirements first, shows minimum changes/crop consent, processes locally, and
+reports the result as **“validated against the requirements you confirmed.”**
+It does not compete on format count, claim guaranteed server acceptance, or use
+the long-term “Any file. Any destination.” vision as MVP copy.
 
 ## Direct / near-direct
 
@@ -84,7 +91,9 @@ macOS optimizer for images, video, PDF and clipboard. It can automatically conve
 Strong local, low-friction compatibility/optimization workflow.
 
 **Difference**  
-Fitifact centers destination constraints and validated acceptance rather than broad optimization.
+Fitifact centers destination constraints and validates output against confirmed
+destination constraints rather than offering broad optimization or promising
+destination acceptance.
 
 Sources:
 - https://lowtechguys.com/clop/
@@ -229,3 +238,6 @@ Where must this work?
 ```
 
 and takes responsibility for diagnosis, planning and validation.
+
+The ten-task moderated gate, not format breadth or a polished screenshot,
+determines whether this difference is understandable and useful to consumers.

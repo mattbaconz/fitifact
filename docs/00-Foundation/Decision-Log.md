@@ -2,7 +2,7 @@
 title: "Decision Log"
 type: decision-log
 status: active
-updated: 2026-08-18
+updated: 2026-08-21
 canonical: true
 tags:
   - decision-log
@@ -98,7 +98,7 @@ The v0 engine is a Rust workspace (`fitifact` library, `fitifact-cli`, and
 subprocess for media. Images use an in-process provider so WASM can share it.
 
 ## D-019 — CLI-only first slice
-**Status:** accepted.
+**Status:** superseded in part by D-026.
 v0.1 ships a thin CLI only. Web, extension, mobile, desktop shell, and cloud are
 deferred. A one-click web app remains a later public-MVP surface, not a
 prerequisite for proving `adapt(file, constraints)`.
@@ -148,7 +148,7 @@ separate private checkout. Local Fitifact has no telemetry, network activity, or
 implicit cloud fallback.
 
 ## D-025 — First image executable matrix
-**Status:** accepted.
+**Status:** accepted as the first image slice; executable image scope extended by D-026.
 **Recorded:** 2026-08-16.
 
 After the media `0.1.0-rc.1` freeze, the first image slice is JPEG already
@@ -157,3 +157,49 @@ WebP, HEIC/HEIF, TIFF, animation, claiming alpha-preserving JPEG, and
 resize/byte-fitting. The image provider is in-process Rust so WASM can share it;
 it must not construct or spawn FFmpeg. Media remains system FFmpeg (D-021). Do
 not reopen the D-020 media matrix.
+
+## D-026 — Local consumer image upload MVP
+**Status:** accepted.
+**Recorded:** 2026-08-21.
+
+The next public candidate adds a static Vite/React product backed by
+`fitifact-wasm` and a dedicated module worker. Its consumer promise is **“Make
+your image pass the upload.”** The persistent privacy disclosure is **“Your
+image stays on this device.”** A successful result is **“validated against the
+requirements you confirmed”**; it is never described as guaranteed acceptance
+by a destination server.
+
+The browser accepts typed or parsed JPEG/PNG, byte, and integer image-dimension
+requirements. It can no-op, preserve source format, crop only with explicit
+consent, resize with quality/upscale warnings, fit JPEG bytes within bounded
+attempts, preserve PNG losslessly where possible, strip metadata with
+disclosure, refuse implicit transparency flattening, and re-inspect/validate
+every output. Inputs are limited to 32 MiB encoded and 24 megapixels decoded.
+Animation and multi-image inputs are refused.
+
+JPEG and PNG use the in-process Rust engine. HEIC is a replaceable lazy decoder
+path, disabled by default and compiled only when `FITIFACT_HEIC_APPROVED=true`.
+Approval must cover the pinned decoder build and its LGPL-3.0 notices; HEIC is
+decoded to owned pixels and then enters the same Rust plan/execute/validate
+path. There is no upload, telemetry, CDN decoder, cloud fallback, hosted
+service, destination profile, or server-acceptance guarantee.
+
+The media matrix and provider rules in D-020/D-021 remain frozen. Broader file
+families, hosted operation, automatic destination discovery, and the long-term
+“Any file. Any destination.” vision remain deferred.
+
+## D-027 — Public RC4 and static Pages distribution
+**Status:** accepted; owner directed full release.
+**Recorded:** 2026-08-22.
+
+Release D-026 as `v0.1.0-rc.4`, preserving the frozen CLI/media matrix and
+keeping every Cargo package unpublished. The public static build is deployed
+from a fully green `main` commit to GitHub Pages at
+`https://mattbaconz.github.io/fitifact/`. It retains the local-only trust
+boundary and compiles without the HEIC decoder unless the separate legal gate
+is explicitly enabled.
+
+RC4 is a public prerelease, not immutable `v0.1.0`. Stable remains blocked on
+the documented clean-machine acceptance across Windows x64, Linux GNU x64,
+macOS Intel, and macOS Apple Silicon. The GitHub Release publication variable
+is opened only for the RC4 tag workflow and reset immediately afterward.

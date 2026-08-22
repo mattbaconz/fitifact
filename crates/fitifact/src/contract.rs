@@ -44,6 +44,11 @@ contract_schema!(ArtifactSchema, ARTIFACT_SCHEMA, "fitifact.artifact/v1");
 contract_schema!(CheckSchema, CHECK_SCHEMA, "fitifact.check/v1");
 contract_schema!(PlanSchema, PLAN_SCHEMA, "fitifact.plan/v1");
 contract_schema!(
+    ImageAdaptPlanSchema,
+    IMAGE_ADAPT_PLAN_SCHEMA,
+    "fitifact.image-adapt-plan/v1"
+);
+contract_schema!(
     AdaptationSchema,
     ADAPTATION_SCHEMA,
     "fitifact.adaptation/v1"
@@ -51,3 +56,8 @@ contract_schema!(
 contract_schema!(ErrorSchema, ERROR_SCHEMA, "fitifact.error/v1");
 contract_schema!(DoctorSchema, DOCTOR_SCHEMA, "fitifact.doctor/v1");
 contract_schema!(BenchSchema, BENCH_SCHEMA, "fitifact.bench/v1");
+contract_schema!(
+    RequirementsSchema,
+    REQUIREMENTS_SCHEMA,
+    "fitifact.requirements/v1"
+);

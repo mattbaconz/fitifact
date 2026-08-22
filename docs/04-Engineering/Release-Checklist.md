@@ -3,7 +3,7 @@ title: "v0.1 Release Checklist"
 type: engineering
 status: active
 implementation: prepared
-updated: 2026-08-18
+updated: 2026-08-22
 canonical: true
 tags:
   - release
@@ -29,16 +29,17 @@ Before either tag:
 - [x] Configure the protected `public-release` GitHub Environment with required
       reviewers, deploy from `v*` tags, and repository variable
       `FITIFACT_PUBLICATION_APPROVED=false`.
-- [ ] Protect `v*` tags against deletion, update, and unauthorized creation.
+- [x] Protect `v*` tags against deletion, update, and unauthorized creation.
 - [ ] Confirm the default branch is clean and every required CI check passes.
 - [ ] Run `scripts/check-public-readiness.ps1 -RequireDependencyTools` from the
       exact candidate commit; review filenames only from the secret scan.
 - [ ] Confirm every Cargo package still says `publish = false` and no registry,
       package-manager, signing, notarization, or bundled-FFmpeg target appeared.
-- [ ] Confirm `Cargo.toml`, `Cargo.lock`, `fitifact --version`, and the RC tag all
-      identify `0.1.0-rc.1`; do not tag stable from this candidate commit.
-- [ ] Run `dist plan --tag=v0.1.0-rc.1` with cargo-dist 0.32.0 and review the four
-      native archives, two installers, SHA-256 files, source archive,
+- [ ] Confirm `Cargo.toml`, `Cargo.lock`, `fitifact --version`, and the selected
+      RC tag all identify the same candidate version; do not tag stable from an
+      RC-version commit.
+- [ ] Run `dist plan --tag=<candidate-tag>` with cargo-dist 0.32.0 and review the
+      four native archives, two installers, SHA-256 files, source archive,
       `fitifact-cli.cdx.xml`, and attestation scope.
 - [ ] Run `scripts/check-workflows.ps1` and confirm it finds exactly one
       `gh release create`, after `actions/attest`, with no `dist host
@@ -88,6 +89,29 @@ release creation/upload operation and must remain after successful attestation.
       any generated-file differences. Do not promote a mismatched build.
 - [ ] Reset `FITIFACT_PUBLICATION_APPROVED` to `false` immediately after the RC
       publication window; stable publication requires a fresh explicit gate.
+
+## `v0.1.0-rc.4`
+
+- [ ] Merge the reviewed RC4 version commit through the protected `main` path
+      and require quality, static web, four native platforms, MSRV, and
+      supply-chain jobs to pass.
+- [ ] Confirm `Cargo.toml`, `Cargo.lock`, `fitifact --version`, web package
+      metadata, changelog, and the annotated tag all identify `0.1.0-rc.4`.
+- [ ] Run `scripts/check-public-readiness.ps1 -RequireDependencyTools` and
+      `dist plan --tag=v0.1.0-rc.4` from the exact clean candidate.
+- [ ] Deploy the default-gate static artifact to
+      `https://mattbaconz.github.io/fitifact/`; confirm the HEIC decoder chunk
+      is absent and the local JPEG/PNG workflow completes in the live site.
+- [ ] Open `FITIFACT_PUBLICATION_APPROVED` only for the protected RC4 tag
+      workflow, approve the `public-release` Environment, and publish one
+      GitHub prerelease after attestations succeed.
+- [ ] Verify the release tag/commit, four native archives, installers,
+      checksums, source archive, CycloneDX SBOM, and GitHub attestations.
+- [ ] Reset `FITIFACT_PUBLICATION_APPROVED=false` immediately after the RC4
+      publication window. Keep crates, npm, package managers, signing, and
+      notarization unpublished.
+- [ ] Run the ten-person D-026 moderated gate and the four-platform clean-
+      machine CLI acceptance before considering immutable `v0.1.0`.
 
 ## Immutable `v0.1.0`
 

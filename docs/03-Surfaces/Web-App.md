@@ -2,8 +2,8 @@
 title: "Web App"
 type: surface
 status: active
-implementation: partial
-updated: 2026-08-16
+implementation: implemented-static-local
+updated: 2026-08-21
 canonical: true
 tags:
   - web
@@ -12,76 +12,82 @@ tags:
 
 # Web app
 
-## Role
+## Implemented surface
 
-Zero-install trial, YouTube destination, consumer discovery and gateway to FOSS/native/cloud.
-
-## Implemented local drop page
-
-`web/index.html` plus `web/app.js` is a static, local-only drop flow for the
-D-025 image matrix. It is not a Next.js app, not hosted, and not a cloud
-upload form.
+`web/` is a static Vite + React + TypeScript product backed by
+`fitifact-wasm`. The default-off-HEIC build is deployed from a fully green
+`main` commit to [GitHub Pages](https://mattbaconz.github.io/fitifact/). The
+deployment contains static files only and does not add a server, upload path,
+telemetry endpoint, or cloud fallback.
 
 ```text
-Drop -> inspect -> check -> plan -> adapt -> validate -> save
+parse requirements -> review target -> choose image -> inspect/check/plan
+                   -> approve crop if needed -> execute -> re-inspect/validate
+                   -> download
 ```
 
-The page loads `./pkg/fitifact_wasm.js` from a same-origin wasm-pack build of
-`crates/fitifact-wasm`. It never fetches a media provider and never ships
-ffmpeg.wasm. Video files return `INSPECTION_UNSUPPORTED` and tell the user to
-use the CLI. JPEG/PNG previews use object URLs; untrusted SVG/HTML is not
-rendered in origin.
+The consumer headline is **“Make your image pass the upload.”** The persistent
+privacy disclosure is **“Your image stays on this device.”** Successful results
+are described as **“validated against the requirements you confirmed”**, never
+as guaranteed acceptance by the destination server.
 
-The page states `Uploads to Fitifact: 0 bytes` because the file never leaves
-the tab: no network requests, no analytics, no CDN fonts.
+## Execution and trust boundary
 
-Optional local build:
+The main thread transfers file bytes to a dedicated module worker. The worker
+loads the Rust WASM bridge, performs typed parsing/planning/adaptation, and
+returns transferable output bytes. Cancellation terminates the worker. Raster
+previews use revocable object URLs only after inspection; SVG/HTML input is
+never rendered. There are no telemetry calls, payload uploads, CDN fonts,
+remote decoders, or implicit cloud fallback.
 
-```text
-wasm-pack build crates/fitifact-wasm --target web --out-dir ../../web/pkg
+JPEG and PNG use the in-process Rust provider. Changed outputs normalize EXIF
+orientation and strip other metadata with disclosure. PNG transparency is
+preserved only when PNG remains valid; converting transparent pixels to JPEG
+is refused. Aspect-changing crop controls require explicit consent. Lossy
+quality reduction and upscaling are warned before execution.
+
+The worker enforces the core 32 MiB encoded and 24-megapixel decoded limits.
+Animation/multiple-image inputs are refused. Every output is re-inspected and
+validated against the confirmed target before download.
+
+## HEIC gate
+
+HEIC magic detection does not load a decoder. Default builds produce an honest
+unsupported state and emit no decoder chunk. Only
+`FITIFACT_HEIC_APPROVED=true` includes the isolated, lazy `libheif-js` 1.19.8
+decoder. The approval decision must cover its LGPL-3.0 notice and embedded WASM
+build. One decoded image is accepted; zero/multiple images are refused. Decoded
+RGBA pixels then enter the same core plan/execute/validate path.
+
+## Build and verify
+
+Node 24.6.0, npm 11.5.1, and wasm-pack 0.15.0 are pinned in the web project and
+CI. From `web/`:
+
+```console
+npm ci
+npm run lint
+npm test
+npm run build
+npm run test:e2e
 ```
 
-On `wasm32-unknown-unknown`, `getrandom` may need
-`RUSTFLAGS=--cfg getrandom_backend="wasm_js"`. Native `cargo test -p fitifact-wasm`
-covers the byte API without a wasm target. Generated `web/pkg` output is gitignored.
+`npm run build` invokes the local pinned wasm-pack package and emits static
+assets under `web/dist`. Browser verification covers Chromium, Firefox, and
+WebKit at 1280 × 900 and 390 × 844.
 
-## Deferred processing
+CI performs a second default-gate build with `FITIFACT_BASE_PATH=/fitifact/`
+and deploys that artifact only after the Rust, web, native-platform, MSRV, and
+supply-chain jobs all pass on `main`.
 
-- media: ffmpeg.wasm is still not in this repository;
-- heavy jobs: native companion or explicit cloud, elsewhere.
+To audit the approved decoder without publishing it:
 
-## Trust
-
-Only say `Uploads to Fitifact: 0 bytes` when payload truly stays local.
-
-## Errors
-
-Handle:
-- unsupported inspection;
-- ambiguous requirements;
-- no plan;
-- local WASM module missing;
-- execution failure;
-- validation failure.
-
-## Landing demos
-
-- PNG that needs JPEG;
-- JPEG that already fits;
-- a video file that must use the CLI.
-
-## Safety
-
-Use object URLs for raster previews only. Never render hostile HTML/SVG with
-active privileges in app origin.
-
-## Lazy-loading strategy
-
-The initial page contains UI plus the image WASM module when built. It does
-not eagerly ship a media transcoder.
-
-```text
-image selected -> in-process JPEG/PNG path
-video selected -> inspect-not-available; use the CLI
-heavy job -> native companion or explicit cloud
+```powershell
+$env:FITIFACT_HEIC_APPROVED = "true"
+npm run test:heic
+npm run build
+Remove-Item Env:FITIFACT_HEIC_APPROVED
 ```
+
+Third-party source/build/license details are copied into the static artifact as
+`THIRD_PARTY_NOTICES.md`.

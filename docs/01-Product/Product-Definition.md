@@ -3,7 +3,7 @@ title: "Product Definition"
 type: product
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - product
@@ -12,9 +12,9 @@ tags:
 
 # Product definition
 
-This is the broader product definition. v0.1 implements developer and
-diagnostic CLI behavior for media only. Destination/profile lookup,
-rejection-text parsing, images, web UI, and cloud execution are deferred.
+This is the broader product definition. The current public candidate includes
+the CLI/media engine and the D-026 static consumer image workflow. Destination
+profile lookup, hosted/cloud execution, and broader file families are deferred.
 
 ## What Fitifact is
 
@@ -34,6 +34,12 @@ It returns:
 ## Core user story
 
 > I have a file that does not work where I need it. I do not want to learn file-format internals. Make the smallest changes required so it works.
+
+For the consumer image workflow:
+
+> **Make your image pass the upload.** Paste the form's requirements, review
+> the normalized target and any crop, adapt locally, then download an output
+> validated against the requirements you confirmed.
 
 ## Product modes
 
@@ -72,6 +78,22 @@ Prefer preserving:
 - transparency;
 - color fidelity;
 - animation.
+
+Metadata is stripped from changed image outputs in this MVP and disclosed; it
+is not silently claimed as preserved. Transparency is preserved only through
+PNG and never flattened implicitly. A crop is never executed without explicit
+consent. Lossy quality reduction and upscaling are always warned.
+
+## Current consumer boundary
+
+- JPEG/PNG are supported; HEIC decoding exists only in an explicitly approved
+  build and remains disabled by default.
+- Files are processed in a dedicated browser worker. **Your image stays on this
+  device.** There is no telemetry, upload, or cloud fallback.
+- The encoded input limit is 32 MiB and the decoded limit is 24 megapixels.
+- Animation and multi-image content are refused.
+- Validation proves only the confirmed typed requirements, not undocumented
+  destination rules or guaranteed server acceptance.
 
 ## Core promise
 

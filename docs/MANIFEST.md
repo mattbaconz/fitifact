@@ -3,7 +3,7 @@ title: "Vault Manifest"
 type: manifest
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - manifest
@@ -11,14 +11,15 @@ tags:
 
 # Vault manifest
 
-Updated: **2026-08-15**
+Updated: **2026-08-21**
 
-Markdown documents: **95**
+Markdown documents: **98**
 
 ## Latest architecture update
 
-The Rust CLI/media core is current in v0.1. Web, browser, OS, mobile, API,
-image, and cloud items in this section are deferred design constraints.
+The Rust CLI/media core and D-026 static local consumer image product are
+current. Hosted web, browser extension, OS/mobile shells, hosted API, profiles,
+and cloud items remain deferred design constraints.
 
 Fitifact now explicitly treats **extreme lightweightness** as a product and engineering requirement:
 
@@ -39,6 +40,8 @@ Fitifact now explicitly treats **extreme lightweightness** as a product and engi
 - `03-Surfaces/Integration-Strategy.md`
 - `04-Engineering/Packaging-Distribution.md`
 - `04-Engineering/Performance-Budgets.md`
+- `04-Engineering/Consumer-Image-Moderated-Test.md`
+- `04-Engineering/evidence/consumer-image-upload-mvp/UI-Polish-Audit.md`
 
 ## Files
 

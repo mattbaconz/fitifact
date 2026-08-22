@@ -169,6 +169,7 @@ fn step_line(step: &PlanStep) -> String {
         TransformId::Remux => "Remux to the required container (stream copy).".into(),
         TransformId::TranscodeVideo => "Transcode video; copy audio if present.".into(),
         TransformId::EncodeJpeg => "Encode to JPEG without changing the pixel dimensions.".into(),
+        TransformId::ImageAdapt => "Adapt the image to the required target.".into(),
     }
 }
 

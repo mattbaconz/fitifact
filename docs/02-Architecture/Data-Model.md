@@ -80,6 +80,11 @@ Steps carry typed provider-neutral operations and targets, reasons, expected
 post-step facts, preservation claims, and warnings. Provider commands and argv
 are execution details and never part of the plan contract.
 
+Image execution details use a separate `fitifact.image-adapt-plan/v1`
+envelope. Its `plan` member is this canonical `fitifact.plan/v1` model with a
+typed `image.adapt` step/target; the envelope does not redefine the canonical
+schema with incompatible required fields.
+
 ### ExecutionResult
 ```text
 job_id

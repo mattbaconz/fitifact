@@ -1,0 +1,42 @@
+import type { CropRectangle, ErrorReport, ProductState } from "../types";
+
+export type WorkerRequest =
+  | { id: number; type: "compile"; requirements: string }
+  | { id: number; type: "compile_constraints"; constraintsJson: string }
+  | { id: number; type: "analyze"; file: File; constraintsJson: string }
+  | { id: number; type: "replan"; previousConstraintsJson: string; constraintsJson: string }
+  | { id: number; type: "adapt"; constraintsJson: string; crop: CropRectangle | null };
+
+export type WorkerResponse =
+  | { id: number; type: "progress"; stage: string; percent: number }
+  | { id: number; type: "result"; report: unknown; output?: ArrayBuffer; preview?: ArrayBuffer; constraintsSnapshot?: string }
+  | { id: number; type: "failure"; state: ProductState; report: ErrorReport };
+
+export function productStateForError(report: Pick<ErrorReport, "code">): ProductState {
+  switch (report.code) {
+    case "UNSUPPORTED_HEIC":
+      return "unsupported_heic";
+    case "INSPECTION_LIMIT":
+    case "EXECUTION_LIMIT":
+      return "resource_limit";
+    case "VALIDATION_FAILED":
+      return "validation_failure";
+    case "NO_VALID_PLAN":
+    case "SECURITY_BLOCKED":
+    case "INSPECTION_UNSUPPORTED":
+      return "cannot_satisfy";
+    case "EXECUTION_CANCELLED":
+      return "cancelled";
+    default:
+      return "error";
+  }
+}
+
+export function isWorkerResponse(value: unknown): value is WorkerResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "number" &&
+    (candidate.type === "progress" || candidate.type === "result" || candidate.type === "failure")
+  );
+}

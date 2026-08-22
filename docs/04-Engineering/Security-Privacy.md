@@ -3,7 +3,7 @@ title: "Security and Privacy"
 type: engineering
 status: active
 implementation: mixed
-updated: 2026-08-15
+updated: 2026-08-21
 canonical: true
 tags:
   - security
@@ -38,6 +38,24 @@ Do not execute macros/scripts.
 
 ### Active browser content
 Do not render arbitrary SVG/HTML in privileged origin.
+
+D-026 inspects magic before preview, renders only inspected JPEG/PNG or the
+owned PNG preview produced from approved HEIC pixels, uses revocable object
+URLs, and keeps a restrictive CSP. Filename/MIME alone never authorizes render.
+
+### Browser resource and lifecycle controls
+
+The worker enforces 32 MiB encoded input and 24 megapixels decoded before large
+allocation. Adaptation bounds JPEG encodes and proportional reduction rounds.
+Cancellation terminates the dedicated worker; source/request generations are
+isolated so stale bytes cannot be adapted under a new filename or target.
+
+### Local-only integrity
+
+The static image product has no telemetry, payload upload, external decoder,
+or cloud fallback. HEIC code is absent from default builds and loaded lazily
+only after HEIC magic in a build approved by `FITIFACT_HEIC_APPROVED=true`.
+“Your image stays on this device” must be removed if this boundary changes.
 
 ### Cross-tenant cloud leakage
 Per-job workspace and scoped credentials.

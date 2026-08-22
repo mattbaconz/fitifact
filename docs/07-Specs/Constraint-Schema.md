@@ -2,8 +2,8 @@
 title: "Constraint Schema"
 type: spec
 status: active
-implementation: implemented-v0.1
-updated: 2026-08-16
+implementation: implemented-v0.1-and-d026
+updated: 2026-08-21
 canonical: true
 tags:
   - constraints
@@ -50,8 +50,8 @@ preferences:
 | `media.video.width` | `lte` | positive integer pixels |
 | `media.video.height` | `lte` | positive integer pixels |
 | `image.format` | `in` | non-empty known-image-format list |
-| `image.width` | `lte` | positive integer pixels |
-| `image.height` | `lte` | positive integer pixels |
+| `image.width` | `eq`, `gte`, `lte` | positive integer pixels |
+| `image.height` | `eq`, `gte`, `lte` | positive integer pixels |
 
 Both validating compiler functions reject input over 1 MiB, a missing or wrong schema, an empty hard
 target, blank or duplicate IDs, conflicting requirements, unknown keys or enum
@@ -59,11 +59,21 @@ values, empty lists, zero limits, and every unsupported field/operator/value
 combination. Unknown extension fields are not ignored in v0.1.
 
 Programmatic CLI inputs compile into this same validated model through
-`compile`. Size text may be
+`compile`. The D-026 deterministic requirements parser also emits this schema,
+plus source spans, ambiguity records, and unresolved text. It recognizes
+JPEG/JPG/PNG, exact `W × H`, minimum/maximum dimensions, and size text. Size may be
 whole unadorned bytes, decimal `MB`, or binary `MiB`; unit names are
 case-insensitive. Unitless fractions, fractional-byte results, ambiguous units,
 and overflow are rejected.
 
-An unknown inspection fact never satisfies a hard constraint. File-size and
-dimension constraints are check-only; the planner refuses fitting or
-resizing. The first image target that can be produced is JPEG (D-025).
+An unknown inspection fact never satisfies a hard constraint. Media byte and
+dimension constraints remain check-only. D-026 image adaptation executes byte
+fitting and image dimension `eq`/`gte`/`lte` targets through its typed image
+plan, then re-inspects and validates the result. Contradictory ranges and
+recognizable malformed numeric requirements are rejected before planning.
+
+The consumer review surface round-trips the complete supported normalized
+intersection: all allowed JPEG/PNG alternatives, exact/minimum/maximum bounds
+for each image axis, and the strictest byte ceiling. It refuses an unsupported
+normalized field/operator instead of silently narrowing alternatives or
+dropping a bound.

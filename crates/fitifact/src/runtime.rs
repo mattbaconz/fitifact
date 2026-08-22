@@ -252,7 +252,7 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
                 return Err(forged_plan());
             }
         }
-        TransformId::EncodeJpeg => return Err(forged_plan()),
+        TransformId::EncodeJpeg | TransformId::ImageAdapt => return Err(forged_plan()),
     }
     if plan.preserved != step.preservation {
         return Err(forged_plan());
@@ -316,6 +316,12 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
         TransformId::EncodeJpeg => {
             step.target.image_format == Some(crate::artifact::ImageFormat::Jpeg)
                 && step.preservation == vec![PreservationClaim::ImageDimensions]
+        }
+        TransformId::ImageAdapt => {
+            step.target.container.is_none()
+                && step.target.video_codec.is_none()
+                && step.target.image_format.is_none()
+                && step.target.image.is_some()
         }
     };
     if !valid_target || plan.preserved != step.preservation {
@@ -590,6 +596,7 @@ mod tests {
                     container: Some(Container::Mp4),
                     video_codec: None,
                     image_format: None,
+                    image: None,
                 },
                 reasons: Vec::new(),
                 expected: Vec::new(),
