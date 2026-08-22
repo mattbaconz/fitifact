@@ -119,3 +119,129 @@ fn materialize_tracked_image_fixtures() {
     assert_eq!(jpeg_art.image.unwrap().format, Some(ImageFormat::Jpeg));
     assert_eq!(png_art.image.unwrap().format, Some(ImageFormat::Png));
 }
+
+#[test]
+fn image_resource_limits_use_exact_boundaries() {
+    use fitifact::image::{
+        MAX_IMAGE_INPUT_BYTES, MAX_IMAGE_PIXELS, enforce_decoded_limit, enforce_encoded_limit,
+    };
+
+    enforce_encoded_limit(MAX_IMAGE_INPUT_BYTES).unwrap();
+    assert_eq!(
+        enforce_encoded_limit(MAX_IMAGE_INPUT_BYTES + 1)
+            .unwrap_err()
+            .code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+    enforce_decoded_limit(6_000, 4_000).unwrap();
+    assert_eq!(
+        u64::from(6_000_u32) * u64::from(4_000_u32),
+        MAX_IMAGE_PIXELS
+    );
+    assert_eq!(
+        enforce_decoded_limit(6_000, 4_001).unwrap_err().code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+}
+
+#[test]
+fn public_jpeg_encoder_enforces_input_and_decoded_limits_before_pixel_allocation() {
+    use fitifact::image::MAX_IMAGE_INPUT_BYTES;
+
+    let mut exact = sample_png_rgb(8, 8);
+    exact.resize(MAX_IMAGE_INPUT_BYTES, 0);
+    assert!(encode_jpeg_bytes(&exact).is_ok());
+    exact.push(0);
+    assert_eq!(
+        encode_jpeg_bytes(&exact).unwrap_err().code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+
+    let oversized_dimensions = png_with_dimensions(sample_png_rgb(8, 8), 6_001, 4_000);
+    assert_eq!(
+        encode_jpeg_bytes(&oversized_dimensions).unwrap_err().code,
+        fitifact::ErrorCode::InspectionLimit
+    );
+}
+
+#[test]
+fn public_png_to_jpeg_encoder_refuses_alpha_instead_of_flattening() {
+    use std::io::Cursor;
+
+    let image = image::RgbaImage::from_pixel(8, 8, image::Rgba([20, 40, 60, 100]));
+    let mut output = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut output, image::ImageFormat::Png)
+        .unwrap();
+    let error = encode_jpeg_bytes(&output.into_inner()).unwrap_err();
+    assert_eq!(error.code, fitifact::ErrorCode::NoValidPlan);
+    assert!(error.message.contains("transparency"));
+}
+
+#[test]
+fn legacy_image_provider_enforces_encoded_and_decoded_limits() {
+    use fitifact::image::{ImageProvider, MAX_IMAGE_INPUT_BYTES};
+    use fitifact::runtime::{ExecutionContext, TransformProvider};
+
+    let source = sample_png_rgb(8, 8);
+    let artifact = artifact_from_bytes(None, &source).unwrap();
+    let outcome = plan(&artifact, &image_jpeg(), &default_catalog());
+    let dir = std::env::temp_dir().join(format!("fitifact-image-limit-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("oversized.png");
+    let output = dir.join("output.jpg");
+    let mut oversized = source;
+    oversized.resize(MAX_IMAGE_INPUT_BYTES + 1, 0);
+    std::fs::write(&input, oversized).unwrap();
+
+    let error = ImageProvider
+        .execute(
+            &input,
+            &output,
+            outcome.plan().unwrap(),
+            &ExecutionContext::default(),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, fitifact::ErrorCode::InspectionLimit);
+    assert!(!output.exists());
+
+    std::fs::write(
+        &input,
+        png_with_dimensions(sample_png_rgb(8, 8), 6_001, 4_000),
+    )
+    .unwrap();
+    let error = ImageProvider
+        .execute(
+            &input,
+            &output,
+            outcome.plan().unwrap(),
+            &ExecutionContext::default(),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, fitifact::ErrorCode::InspectionLimit);
+    assert!(!output.exists());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn png_with_dimensions(mut png: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
+    png[16..20].copy_from_slice(&width.to_be_bytes());
+    png[20..24].copy_from_slice(&height.to_be_bytes());
+    let crc = png_crc32(&png[12..29]);
+    png[29..33].copy_from_slice(&crc.to_be_bytes());
+    png
+}
+
+fn png_crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffff_u32;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}

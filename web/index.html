@@ -1,112 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Fitifact local image drop</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #101114;
-        --panel: #1a1c21;
-        --line: #2c3038;
-        --text: #e8eaed;
-        --muted: #9aa1ac;
-        --ok: #7dcea0;
-        --warn: #e6c07b;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-      }
-      main {
-        max-width: 44rem;
-        margin: 0 auto;
-        padding: 2rem 1.25rem 4rem;
-      }
-      h1 {
-        font-size: 1.5rem;
-        font-weight: 650;
-        margin: 0 0 0.35rem;
-      }
-      p,
-      li {
-        color: var(--muted);
-      }
-      #drop {
-        margin: 1.5rem 0;
-        padding: 2rem 1rem;
-        border: 1px dashed var(--line);
-        border-radius: 12px;
-        background: var(--panel);
-        text-align: center;
-      }
-      #drop.busy {
-        opacity: 0.7;
-      }
-      button,
-      a.button {
-        appearance: none;
-        border: 0;
-        border-radius: 8px;
-        padding: 0.55rem 0.9rem;
-        background: #d8dde6;
-        color: #101114;
-        font: inherit;
-        font-weight: 650;
-        cursor: pointer;
-        text-decoration: none;
-        display: inline-block;
-      }
-      #trust {
-        font-size: 0.85rem;
-        letter-spacing: 0.02em;
-      }
-      #preview {
-        max-width: 100%;
-        max-height: 16rem;
-        display: none;
-        margin: 1rem 0;
-        border-radius: 8px;
-      }
-      #log {
-        white-space: pre-wrap;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 1rem;
-        min-height: 8rem;
-      }
-      .ok {
-        color: var(--ok);
-      }
-      .warn {
-        color: var(--warn);
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; connect-src 'self'"
+    />
+    <meta name="description" content="Make an image satisfy explicit upload requirements locally." />
+    <title>Fitifact — Make your image pass the upload</title>
   </head>
   <body>
-    <main>
-      <h1>Fitifact</h1>
-      <p>
-        Drop a JPEG or PNG. The file stays in this browser tab. JPEG that
-        already fits is a no-op; PNG is encoded to JPEG in-process. Video and
-        other formats are refused.
-      </p>
-      <p id="trust">Uploads to Fitifact: 0 bytes</p>
-      <div id="drop">
-        <p>Drop an image here, or</p>
-        <button type="button" id="pick">Choose a file</button>
-        <input id="file" type="file" hidden />
-      </div>
-      <img id="preview" alt="" />
-      <pre id="log">Loading the local image engine…</pre>
-    </main>
-    <script type="module" src="./app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

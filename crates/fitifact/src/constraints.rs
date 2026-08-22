@@ -302,7 +302,7 @@ fn enforce_input_limit(text: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_and_normalize(mut constraints: ConstraintSet) -> Result<ConstraintSet> {
+pub(crate) fn validate_and_normalize(mut constraints: ConstraintSet) -> Result<ConstraintSet> {
     if constraints.hard.is_empty() {
         return Err(invalid(
             "constraints.empty_target",
@@ -364,14 +364,15 @@ fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
             })?;
         }
         (
-            Field::FileBytes
-            | Field::MediaVideoWidth
-            | Field::MediaVideoHeight
-            | Field::ImageWidth
-            | Field::ImageHeight,
+            Field::FileBytes | Field::MediaVideoWidth | Field::MediaVideoHeight,
             Operator::Lte,
             ConstraintValue::Integer(value),
         ) if *value > 0 => {}
+        (
+            Field::ImageWidth | Field::ImageHeight,
+            Operator::Eq | Operator::Gte | Operator::Lte,
+            ConstraintValue::Integer(value),
+        ) if *value > 0 && *value <= u64::from(u32::MAX) => {}
         _ => {
             return Err(invalid(
                 "constraints.invalid_combination",
@@ -422,19 +423,23 @@ fn reject_conflicts(constraints: &[Constraint]) -> Result<()> {
         if group.len() < 2 {
             continue;
         }
-        let conflict = match group[0].op {
-            Operator::Eq => group.windows(2).any(|pair| pair[0].value != pair[1].value),
-            Operator::In => {
-                let mut allowed: HashSet<String> =
-                    group[0].value.as_text_list().into_iter().collect();
-                for constraint in &group[1..] {
-                    let next: HashSet<String> =
-                        constraint.value.as_text_list().into_iter().collect();
-                    allowed.retain(|value| next.contains(value));
+        let conflict = if matches!(field, Field::ImageWidth | Field::ImageHeight) {
+            numeric_range_conflicts(&group)
+        } else {
+            match group[0].op {
+                Operator::Eq => group.windows(2).any(|pair| pair[0].value != pair[1].value),
+                Operator::In => {
+                    let mut allowed: HashSet<String> =
+                        group[0].value.as_text_list().into_iter().collect();
+                    for constraint in &group[1..] {
+                        let next: HashSet<String> =
+                            constraint.value.as_text_list().into_iter().collect();
+                        allowed.retain(|value| next.contains(value));
+                    }
+                    allowed.is_empty()
                 }
-                allowed.is_empty()
+                Operator::Lte | Operator::Gte => false,
             }
-            Operator::Lte | Operator::Gte => false,
         };
         if conflict {
             return Err(Error::new(
@@ -447,6 +452,28 @@ fn reject_conflicts(constraints: &[Constraint]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn numeric_range_conflicts(constraints: &[&Constraint]) -> bool {
+    let mut exact = None;
+    let mut lower = 1_u64;
+    let mut upper = u64::MAX;
+    for constraint in constraints {
+        let ConstraintValue::Integer(value) = constraint.value else {
+            return true;
+        };
+        match constraint.op {
+            Operator::Eq => {
+                if exact.replace(value).is_some_and(|current| current != value) {
+                    return true;
+                }
+            }
+            Operator::Gte => lower = lower.max(value),
+            Operator::Lte => upper = upper.min(value),
+            Operator::In => return true,
+        }
+    }
+    lower > upper || exact.is_some_and(|value| value < lower || value > upper)
 }
 
 /// Parse exact byte counts plus decimal MB and binary MiB values.

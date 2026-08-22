@@ -12,6 +12,8 @@ pub enum TransformId {
     TranscodeVideo,
     #[serde(rename = "image.encode_jpeg")]
     EncodeJpeg,
+    #[serde(rename = "image.adapt")]
+    ImageAdapt,
 }
 
 impl TransformId {
@@ -20,6 +22,7 @@ impl TransformId {
             Self::Remux => "media.remux",
             Self::TranscodeVideo => "media.transcode_video",
             Self::EncodeJpeg => "image.encode_jpeg",
+            Self::ImageAdapt => "image.adapt",
         }
     }
 }
