@@ -6,6 +6,10 @@ const mobile = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // Each page initializes the local WASM engine. Capping concurrency keeps the
+  // cross-browser matrix deterministic on both small CI runners and high-core
+  // hosts where Playwright would otherwise start too many engines at once.
+  workers: 2,
   retries: 0,
   reporter: "line",
   use: {
