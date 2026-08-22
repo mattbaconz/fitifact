@@ -374,20 +374,29 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <a className="wordmark" href="#top" aria-label="Fitifact home">Fitifact</a>
-        <p className="privacy-line"><span aria-hidden="true">●</span> Your image stays on this device.</p>
+        <a className="wordmark" href="#top" aria-label="Fitifact home">
+          <span className="brand-mark" aria-hidden="true" />
+          <span>Fitifact</span>
+        </a>
+        <p className="privacy-line"><span aria-hidden="true" /> Local processing · No uploads</p>
       </header>
 
       <main id="top">
         <section className="hero" aria-labelledby="page-title">
-          <p className="eyebrow">Local image compatibility</p>
-          <h1 id="page-title">Make your image pass the upload</h1>
-          <p className="lede">Paste what the upload form asks for. Fitifact finds the smallest change, shows it to you, then validates the output against your confirmed requirements.</p>
-          <p className="local-badge">Your image stays on this device. Uploads to Fitifact: 0 bytes.</p>
+          <div className="hero-copy">
+            <p className="eyebrow">Image compatibility, solved locally</p>
+            <h1 id="page-title">Make your image<br />pass the upload</h1>
+            <p className="lede">Paste the requirements. Fitifact makes only the changes needed, then checks the result against every rule you confirmed.</p>
+          </div>
+          <div className="trust-strip" aria-label="Privacy and processing details">
+            <p><span>01</span> Your image stays on this device</p>
+            <p><span>02</span> Nothing is uploaded to Fitifact</p>
+            <p><span>03</span> The result is checked before download</p>
+          </div>
         </section>
 
         <div className="workflow-grid">
-          <section className="card" aria-labelledby="requirements-title">
+          <section className="card requirements-card" aria-labelledby="requirements-title">
             <div className="step-heading"><span>1</span><h2 id="requirements-title">Paste the requirements</h2></div>
             <label htmlFor="requirements">Upload instructions</label>
             <textarea
@@ -407,7 +416,7 @@ export function App() {
             ) : null}
           </section>
 
-          <section className="card" aria-labelledby="target-title">
+          <section className="card target-card" aria-labelledby="target-title">
             <div className="step-heading"><span>2</span><h2 id="target-title">Review the target</h2></div>
             {target ? (
               <div className="target-form">
@@ -462,7 +471,7 @@ export function App() {
         </div>
       </main>
 
-      <footer><p>Your image stays on this device. Fitifact has no upload or cloud fallback.</p><p>{__FITIFACT_HEIC_APPROVED__ ? <>Optional HEIC decoder approved for this build; see the <a href="/THIRD_PARTY_NOTICES.md">third-party notices</a>.</> : "HEIC decoder disabled in this build."}</p></footer>
+      <footer><p>Your image stays on this device. Fitifact has no upload or cloud fallback.</p><p>{__FITIFACT_HEIC_APPROVED__ ? <>Optional HEIC decoder approved for this build; see the <a href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`}>third-party notices</a>.</> : "HEIC decoder disabled in this build."}</p></footer>
     </div>
   );
 }
