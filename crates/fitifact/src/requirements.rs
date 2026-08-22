@@ -136,8 +136,8 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
             } else {
                 index.checked_sub(1)
             };
-            if let Some(value_index) = value_index
-                && qualifier_before(tokens, value_index).is_some()
+            if let Some(value_index) =
+                value_index.filter(|value_index| qualifier_before(tokens, *value_index).is_some())
             {
                 validate_dimension_number(text, tokens.get(value_index))?;
             }
@@ -407,16 +407,18 @@ fn dimension_around_axis(tokens: &[Token], axis: usize) -> Option<(Operator, u64
     }
     if axis > 0 {
         let value_index = axis - 1;
-        if let Some(value) = integer(&tokens[value_index])
-            && let Some((op, start)) = qualifier_before(tokens, value_index)
-        {
+        if let (Some(value), Some((op, start))) = (
+            integer(&tokens[value_index]),
+            qualifier_before(tokens, value_index),
+        ) {
             return Some((op, value, start, axis));
         }
         if axis > 1 && pixel_word(&tokens[axis - 1].value) {
             let value_index = axis - 2;
-            if let Some(value) = integer(&tokens[value_index])
-                && let Some((op, start)) = qualifier_before(tokens, value_index)
-            {
+            if let (Some(value), Some((op, start))) = (
+                integer(&tokens[value_index]),
+                qualifier_before(tokens, value_index),
+            ) {
                 return Some((op, value, start, axis));
             }
         }
@@ -452,7 +454,7 @@ fn parse_sizes(
                     .any(requirement_clause_separator))
             .then_some(unit_index + 1)
         });
-        let Some(start_index) = prefix.or(Some(number_index).filter(|_| suffix.is_some())) else {
+        let Some(start_index) = prefix.or(suffix.is_some().then_some(number_index)) else {
             continue;
         };
         let end_index = suffix.unwrap_or(unit_index);
