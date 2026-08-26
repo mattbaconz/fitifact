@@ -278,10 +278,8 @@ fn profile_search_roots() -> Vec<PathBuf> {
     if let Ok(explicit) = std::env::var("FITIFACT_PROFILES") {
         roots.push(PathBuf::from(explicit));
     }
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        roots.push(dir.join("profiles"));
+    if let Ok(exe) = std::env::current_exe() {
+        roots.extend(exe.parent().map(|dir| dir.join("profiles")));
     }
     if let Ok(cwd) = std::env::current_dir() {
         let mut dir = cwd;

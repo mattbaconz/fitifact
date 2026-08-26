@@ -414,11 +414,9 @@ fn required_video_codec(step: &PlanStep) -> Result<VideoCodec> {
 }
 
 fn video_dimensions_from_step(step: &PlanStep) -> (u32, u32) {
-    if let (Some(width), Some(height)) = (step.target.width, step.target.height)
-        && width > 0
-        && height > 0
-    {
-        return (width, height);
+    match (step.target.width, step.target.height) {
+        (Some(width), Some(height)) if width > 0 && height > 0 => return (width, height),
+        _ => {}
     }
     let mut width = 16u32;
     let mut height = 16u32;

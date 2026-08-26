@@ -236,15 +236,15 @@ pub fn plan(
     if let Some(reason) = mutation_blocker(artifact, &initial) {
         return cannot(vec![reason]);
     }
-    if let Some(limit) = file_bytes_limit(constraints)
-        && artifact.byte_length > limit
-        && !can_fit_media(artifact, limit)
-    {
-        return cannot(vec![blocking(
-            BlockingCode::SizeFittingUnsupported,
-            ids_for(&initial, Field::FileBytes),
-            "the size limit is below the quality floor this encoder will use",
-        )]);
+    match file_bytes_limit(constraints) {
+        Some(limit) if artifact.byte_length > limit && !can_fit_media(artifact, limit) => {
+            return cannot(vec![blocking(
+                BlockingCode::SizeFittingUnsupported,
+                ids_for(&initial, Field::FileBytes),
+                "the size limit is below the quality floor this encoder will use",
+            )]);
+        }
+        _ => {}
     }
 
     let mut best: Option<Candidate> = None;
@@ -487,14 +487,15 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
             ));
         }
     }
-    if let Some(check) = report.failing_or_unknown(Field::FileBytes)
-        && check.result == CheckResult::Unknown
-    {
-        return Some(blocking(
-            BlockingCode::UnknownRequiredFact,
-            vec![check.constraint_id.clone()],
-            "the encoded size is unknown",
-        ));
+    match report.failing_or_unknown(Field::FileBytes) {
+        Some(check) if check.result == CheckResult::Unknown => {
+            return Some(blocking(
+                BlockingCode::UnknownRequiredFact,
+                vec![check.constraint_id.clone()],
+                "the encoded size is unknown",
+            ));
+        }
+        _ => {}
     }
     None
 }
@@ -730,11 +731,11 @@ fn instantiate(
                 return None;
             }
             let max_bytes = file_bytes_from_report(report);
-            if let Some(limit) = max_bytes
-                && artifact.byte_length > limit
-                && !can_fit_media(artifact, limit)
-            {
-                return None;
+            match max_bytes {
+                Some(limit) if artifact.byte_length > limit && !can_fit_media(artifact, limit) => {
+                    return None;
+                }
+                _ => {}
             }
             let mut reasons = Vec::new();
             if let Some(video) = codec_fail {
