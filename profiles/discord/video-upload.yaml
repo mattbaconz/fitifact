@@ -1,0 +1,52 @@
+schema: fitifact.profile/v1
+id: discord/video-upload
+name: Discord free video upload
+revision: 1
+last_verified: 2026-08-25
+
+scope:
+  kind: web-upload
+  platform: discord
+  feature: video-upload
+  account_tier: free
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-attachments
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-attachments
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-attachments
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 20000000
+    source: src-attachments
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-attachments
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
+    observed_at: 2026-08-25
+    note: Free-tier upload ceiling is 20 MB. Nitro Basic is 50 MB and Nitro is 500 MB; this profile is the free tier only.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

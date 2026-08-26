@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeActions, describeProblems, formatLabel, inspectLine } from "./explain";
+import { checkLabel, describeActions, describeProblems, formatCheckValue, formatLabel, inspectLine, leftoverNote } from "./explain";
 import type { PlanReport } from "../types";
 
 function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["checks"] }): PlanReport {
@@ -30,6 +30,7 @@ function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["
         preservation: [],
         metadata: "strip",
         crop: { required: true, explicit_consent_required: true, target_aspect_width: 600, target_aspect_height: 600 },
+        first_frame: { required: false, explicit_consent_required: false },
         quality_warnings: ["lossy"],
         upscale_warnings: [],
         proportional_reduction_allowed: true,
@@ -46,9 +47,15 @@ describe("human plan copy", () => {
     expect(inspectLine("heic", 4032, 3024, 4_800_000)).toContain("HEIC");
     expect(describeProblems(plan({}))).toEqual([
       "HEIC isn't accepted",
-      "The file is too large (4.80 MB vs <= 2000000)",
+      "The file is too large (4.80 MB vs ≤2.00 MB)",
       "The dimensions don't match",
     ]);
+    expect(checkLabel("image.format")).toBe("Format");
+    expect(checkLabel("file.bytes")).toBe("File size");
+    expect(formatCheckValue("file.bytes", "2000000")).toBe("2.00 MB");
+    expect(leftoverNote(["File must be"])).toBe(
+      "These words were ignored (not a format, size, or dimension rule): File must be",
+    );
   });
 
   it("lists only the mutations Fitifact will actually perform", () => {

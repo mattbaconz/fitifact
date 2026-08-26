@@ -2,7 +2,7 @@
 
 import type { Artifact, ErrorReport, ImageKind, InspectReport } from "../types";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
-import { classifyInput } from "./magic";
+import { classifyInput, refuseMessage } from "./magic";
 import { productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
 import {
   EncodedResourceLimit,
@@ -116,6 +116,38 @@ function requireConstraintsMatch<T>(stored: string | null, expected: string, ope
   }
 }
 
+async function pngPreviewFromRgba(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+): Promise<ArrayBuffer | undefined> {
+  try {
+    if (typeof OffscreenCanvas === "undefined") return undefined;
+    const maxEdge = 512;
+    const scale = Math.min(1, maxEdge / Math.max(width, height));
+    const outWidth = Math.max(1, Math.round(width * scale));
+    const outHeight = Math.max(1, Math.round(height * scale));
+    const source = new OffscreenCanvas(width, height);
+    const context = source.getContext("2d");
+    if (!context) return undefined;
+    const imageData = context.createImageData(width, height);
+    imageData.data.set(rgba);
+    context.putImageData(imageData, 0, 0);
+    let canvas: OffscreenCanvas = source;
+    if (outWidth !== width || outHeight !== height) {
+      const scaled = new OffscreenCanvas(outWidth, outHeight);
+      const scaledContext = scaled.getContext("2d");
+      if (!scaledContext) return undefined;
+      scaledContext.drawImage(source, 0, 0, outWidth, outHeight);
+      canvas = scaled;
+    }
+    const blob = await canvas.convertToBlob({ type: "image/png" });
+    return await blob.arrayBuffer();
+  } catch {
+    return undefined;
+  }
+}
+
 function heicArtifact(bytes: Uint8Array, width: number, height: number): Artifact {
   return {
     schema: "fitifact.artifact/v1",
@@ -155,11 +187,8 @@ async function inspect(request: Extract<WorkerRequest, { type: "inspect" }>) {
     const bytes = new Uint8Array(buffer);
     const kind = classifyInput(bytes);
     progress(request.id, "Checking the file type", 18);
-    if (kind === "unsupported") {
-      throw localFailure(
-        "INSPECTION_UNSUPPORTED",
-        "This file is not a supported JPEG, PNG, WebP, or HEIC. SVG and HTML are never rendered.",
-      );
+    if (kind === "video" || kind === "pdf" || kind === "zip" || kind === "unsupported") {
+      throw localFailure("INSPECTION_UNSUPPORTED", refuseMessage(kind));
     }
     if (kind === "heic") {
       if (!__FITIFACT_HEIC_APPROVED__) {
@@ -196,7 +225,8 @@ async function inspect(request: Extract<WorkerRequest, { type: "inspect" }>) {
         kind,
         artifact: heicArtifact(bytes, decoded.width, decoded.height),
       };
-      return { report };
+      const preview = await pngPreviewFromRgba(decoded.rgba, decoded.width, decoded.height);
+      return preview ? { report, preview } : { report };
     }
     const artifact = parseReport<Artifact>(enterWasmWithEncodedLimit(
       bytes.byteLength,
@@ -269,7 +299,11 @@ async function adapt(request: Extract<WorkerRequest, { type: "adapt" }>) {
     canonicalConstraints(wasm, request.constraintsJson),
   );
   requireConstraintsMatch(selected.constraintsSnapshot, constraintsSnapshot, () => undefined);
-  const options = JSON.stringify({ crop: request.crop, crop_consent: request.crop !== null });
+  const options = JSON.stringify({
+    crop: request.crop,
+    crop_consent: request.crop !== null,
+    first_frame_consent: request.firstFrameConsent,
+  });
   progress(request.id, "Applying the approved plan locally", 40);
   const result =
     selected.kind === "bytes"
@@ -310,7 +344,8 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         post({ id: request.id, type: "result", report });
       } else if (request.type === "inspect") {
         const result = await inspect(request);
-        post({ id: request.id, type: "result", ...result });
+        const transfers = result.preview ? [result.preview] : [];
+        post({ id: request.id, type: "result", ...result }, transfers);
       } else if (request.type === "plan") {
         const result = await plan(request.id, request.constraintsJson);
         const transfers = result.preview ? [result.preview] : [];

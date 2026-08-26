@@ -8,9 +8,11 @@
 
 Fitifact is a destination-first file compatibility engine with a CLI and a
 local-only image web app. Drop the rejected file, paste what the form told you,
-and it makes only the changes needed. JPEG, PNG, still WebP, and single-image
-HEIC can be inputs; outputs stay JPEG or PNG. Image bytes stay in the browser
-worker and are never uploaded to Fitifact.
+and it makes only the changes needed. JPEG, PNG, still WebP, TIFF, BMP, GIF,
+and single-image HEIC can be inputs; outputs are JPEG or PNG, plus WebP when
+the confirmed target names it. Animated GIF and animated WebP keep only the
+first frame after explicit consent. Image bytes stay in the browser worker and
+are never uploaded to Fitifact.
 
 ```text
 inspect -> constraints -> check -> plan -> execute -> validate
@@ -25,25 +27,26 @@ usable session). Do not invent a `v0.2.0` tag.
 | Input and requested result | Behavior |
 | --- | --- |
 | MP4 with H.264 video and AAC audio already satisfying the target | No-op; no encoder starts |
-| MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding |
-| MP4 with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
+| MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding when the byte ceiling already passes |
+| MP4 or MOV with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
+| Media file over a `--max-size` or profile byte ceiling | H.264 bitrate-ladder encode; refuse at the quality floor. Dimensions unchanged |
 | JPEG/PNG already satisfying the confirmed target | No-op |
-| JPEG/PNG/still WebP/HEIC requiring format, bounded resize, crop consent, or byte fitting | In-process adaptation to JPEG or PNG with re-inspection and validation |
-| Animated WebP, GIF animation, TIFF, AVIF, RAW, ZIP, PDF | Refuse explicitly |
+| JPEG/PNG/still WebP/TIFF/BMP/GIF/HEIC requiring format, bounded resize, crop or first-frame consent, or byte fitting | In-process adaptation to JPEG, PNG, or WebP (when named) with re-inspection and validation |
+| Animated PNG, AVIF, RAW, ZIP, PDF | Refuse explicitly |
 | Any other mutation | Refuse explicitly |
 
-The native CLI/media provider checks file-size and dimension constraints but
-does not execute media size fitting or resizing. The browser image provider
-does execute bounded image fitting. Neither surface overwrites the input or an
-existing output, silently drops streams, or treats provider success as proof of
-compatibility.
+The native CLI/media provider executes media byte ceilings with an H.264 bitrate
+ladder and leaves video resize check-only. Named destinations load from local
+YAML via `--for` (for example `fitifact adapt clip.mov --for discord/video-upload`).
+The browser image provider executes bounded image fitting. Neither surface
+overwrites the input or an existing output, silently drops streams, or treats
+provider success as proof of compatibility.
 
 Public and default web builds include a lazy single-image HEIC decoder
 (`libheif-js` 1.19.8) after local magic detection; notices ship with the app.
-`FITIFACT_HEIC_APPROVED=false` remains a decoder-free proof build. TIFF,
-animation as an output, destination profiles, hosted APIs, bundled FFmpeg,
-ffmpeg.wasm, package registries, OS signing, and package-manager formulae stay
-deferred.
+`FITIFACT_HEIC_APPROVED=false` remains a decoder-free proof build. Animation
+as an output, hosted APIs, bundled FFmpeg, ffmpeg.wasm,
+package registries, OS signing, and package-manager formulae stay deferred.
 
 ## Requirements
 

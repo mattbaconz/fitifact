@@ -82,6 +82,7 @@ fn crop_grid_fixture_requires_consent_and_executes_the_approved_crop() {
                 height: 1.0,
             }),
             crop_consent: true,
+            ..Default::default()
         },
         &NeverCancelled,
     )

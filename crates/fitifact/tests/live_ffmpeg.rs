@@ -77,18 +77,19 @@ fn encoder_ok(name: &str) -> bool {
 }
 
 fn generate(dir: &Path, name: &str, extra: &[&str]) -> PathBuf {
+    generate_at(
+        dir,
+        name,
+        "testsrc=duration=0.4:size=160x120:rate=10",
+        "sine=frequency=440:duration=0.4",
+        extra,
+    )
+}
+
+fn generate_at(dir: &Path, name: &str, video: &str, audio: &str, extra: &[&str]) -> PathBuf {
     let dest = dir.join(name);
     let mut args = vec![
-        "-nostdin",
-        "-y",
-        "-f",
-        "lavfi",
-        "-i",
-        "testsrc=duration=0.4:size=160x120:rate=10",
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=440:duration=0.4",
+        "-nostdin", "-y", "-f", "lavfi", "-i", video, "-f", "lavfi", "-i", audio,
     ];
     args.extend_from_slice(extra);
     args.push(dest.to_str().unwrap());
@@ -96,6 +97,19 @@ fn generate(dir: &Path, name: &str, extra: &[&str]) -> PathBuf {
     assert!(status.success(), "fixture generation failed for {name}");
     dest
 }
+
+const SDR_BT709: &[&str] = &[
+    "-pix_fmt",
+    "yuv420p",
+    "-color_range",
+    "tv",
+    "-colorspace",
+    "bt709",
+    "-color_trc",
+    "bt709",
+    "-color_primaries",
+    "bt709",
+];
 
 #[test]
 #[ignore]
@@ -412,6 +426,282 @@ fn live_webm_is_fail_closed_and_cannot_remux() {
             artifact.container.as_ref().map(Container::display_label),
             Some(format!("unknown ({label})"))
         );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_h264_mp4_fits_a_byte_ceiling() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-bytes-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut extra = vec![
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-qp",
+        "0",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "64k",
+        "-x264-params",
+        "colorprim=bt709:transfer=bt709:colormatrix=bt709",
+    ];
+    extra.extend_from_slice(SDR_BT709);
+    let input = generate_at(
+        &dir,
+        "fat-h264-aac.mp4",
+        "testsrc2=duration=2:size=1280x720:rate=24",
+        "sine=frequency=440:duration=2",
+        &extra,
+    );
+    let source_len = std::fs::metadata(&input).unwrap().len();
+    let ceiling = 400_000u64;
+    assert!(
+        source_len > ceiling,
+        "generated source must exceed the test ceiling, got {source_len}"
+    );
+    let output = dir.join("fat-h264-aac.adapted.mp4");
+    let constraints = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(ceiling),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let inspector = FfprobeInspector::default();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    assert_eq!(
+        result.plan.as_ref().unwrap().steps[0].operation,
+        TransformId::TranscodeVideo
+    );
+    let validation = result.validation.expect("validation");
+    assert_eq!(validation.status, fitifact::ValidationStatus::Pass);
+    let out = &validation.artifact;
+    assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
+    assert_eq!(out.first_audio().unwrap().codec, Some(AudioCodec::Aac));
+    assert_eq!(out.first_video().unwrap().width, Some(1280));
+    assert_eq!(out.first_video().unwrap().height, Some(720));
+    let out_len = std::fs::metadata(&output).unwrap().len();
+    assert!(out_len <= ceiling, "output {out_len} exceeded {ceiling}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_byte_ceiling_below_the_quality_floor_is_refused() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-floor-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut extra = vec![
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "64k",
+        "-x264-params",
+        "colorprim=bt709:transfer=bt709:colormatrix=bt709",
+    ];
+    extra.extend_from_slice(SDR_BT709);
+    let input = generate(&dir, "tiny-target.mp4", &extra);
+    let constraints = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(500),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector.inspect(&input).unwrap();
+    let outcome = create_plan(&artifact, &constraints, &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::SizeFittingUnsupported]
+    );
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: None,
+        catalog: None,
+        inspector: &inspector,
+        provider: None,
+        execution: ExecutionContext::default(),
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::CannotSatisfy);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_mov_hevc_transcodes_to_mp4_h264() {
+    require_tools();
+    assert!(
+        encoder_ok("libx265") && encoder_ok("libx264"),
+        "need libx265 and libx264"
+    );
+    let dir = std::env::temp_dir().join(format!("fitifact-live-mov-hevc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate(
+        &dir,
+        "hevc-aac.mov",
+        &[
+            "-c:v",
+            "libx265",
+            "-pix_fmt",
+            "yuv420p",
+            "-tag:v",
+            "hvc1",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
+            "-color_range",
+            "tv",
+            "-colorspace",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-color_primaries",
+            "bt709",
+            "-x265-params",
+            "colorprim=bt709:transfer=bt709:colormatrix=bt709:range=limited",
+        ],
+    );
+    let output = dir.join("hevc-aac.adapted.mp4");
+    let inspector = FfprobeInspector::default();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints: media_h264_mp4_aac(),
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    assert_eq!(
+        result.plan.as_ref().unwrap().steps[0].operation,
+        TransformId::TranscodeVideo
+    );
+    let out = result.validation.expect("validation").artifact;
+    assert_eq!(out.container, Some(Container::Mp4));
+    assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
+    assert_eq!(out.first_audio().unwrap().codec, Some(AudioCodec::Aac));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_oversized_mov_hevc_fits_or_refuses_at_the_floor() {
+    require_tools();
+    assert!(
+        encoder_ok("libx265") && encoder_ok("libx264"),
+        "need libx265 and libx264"
+    );
+    let dir = std::env::temp_dir().join(format!(
+        "fitifact-live-mov-hevc-bytes-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut extra = vec![
+        "-c:v",
+        "libx265",
+        "-preset",
+        "ultrafast",
+        "-x265-params",
+        "qp=0:colorprim=bt709:transfer=bt709:colormatrix=bt709:range=limited",
+        "-tag:v",
+        "hvc1",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "64k",
+    ];
+    extra.extend_from_slice(SDR_BT709);
+    let input = generate_at(
+        &dir,
+        "fat-hevc-aac.mov",
+        "testsrc2=duration=2:size=1280x720:rate=24",
+        "sine=frequency=440:duration=2",
+        &extra,
+    );
+    let source_len = std::fs::metadata(&input).unwrap().len();
+    let ceiling = 400_000u64;
+    assert!(
+        source_len > ceiling,
+        "generated MOV HEVC must exceed the test ceiling, got {source_len}"
+    );
+    let output = dir.join("fat-hevc-aac.adapted.mp4");
+    let constraints = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(ceiling),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let inspector = FfprobeInspector::default();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    match result.status {
+        AdaptationStatus::Adapted => {
+            let out_len = std::fs::metadata(&output).unwrap().len();
+            assert!(out_len <= ceiling, "output {out_len} exceeded {ceiling}");
+            let out = result.validation.expect("validation").artifact;
+            assert_eq!(out.container, Some(Container::Mp4));
+            assert_eq!(out.first_video().unwrap().codec, Some(VideoCodec::H264));
+        }
+        AdaptationStatus::CannotSatisfy => {
+            assert!(
+                result
+                    .explanation
+                    .details
+                    .iter()
+                    .any(|line| line.contains("quality floor"))
+                    || result.explanation.summary.contains("can't meet")
+            );
+        }
+        other => panic!("unexpected status {other:?}"),
     }
     let _ = std::fs::remove_dir_all(dir);
 }

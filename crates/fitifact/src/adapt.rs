@@ -1573,10 +1573,8 @@ mod tests {
                 id: "step-1".into(),
                 operation: TransformId::EncodeJpeg,
                 target: crate::plan::StepTarget {
-                    container: None,
-                    video_codec: None,
                     image_format: Some(crate::artifact::ImageFormat::Jpeg),
-                    image: None,
+                    ..crate::plan::StepTarget::default()
                 },
                 reasons: Vec::new(),
                 expected: Vec::new(),

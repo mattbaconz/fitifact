@@ -58,6 +58,12 @@ pub struct ImageCropRequirement {
     pub target_aspect_height: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ImageFirstFrameRequirement {
+    pub required: bool,
+    pub explicit_consent_required: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageAdaptTarget {
     pub format: ImageFormat,
@@ -69,6 +75,8 @@ pub struct ImageAdaptTarget {
     pub quality_warnings: Vec<String>,
     pub upscale_warnings: Vec<String>,
     pub crop: ImageCropRequirement,
+    #[serde(default)]
+    pub first_frame: ImageFirstFrameRequirement,
     pub proportional_reduction_allowed: bool,
 }
 
@@ -125,7 +133,10 @@ impl NormalizedCropRectangle {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ImageAdaptOptions {
     pub crop: Option<NormalizedCropRectangle>,
+    #[serde(default)]
     pub crop_consent: bool,
+    #[serde(default)]
+    pub first_frame_consent: bool,
 }
 
 pub trait CancellationSignal: Send + Sync {
@@ -245,23 +256,22 @@ pub fn plan_image_adaptation(
         .image
         .as_ref()
         .ok_or_else(|| no_plan("image.facts_missing: image facts are unavailable"))?;
-    if facts.animated == Some(true) {
+    if facts.animated == Some(true) && matches!(facts.format, Some(ImageFormat::Png)) {
         return Err(no_plan(
-            "image.animation_unsupported: animated image inputs are unsupported",
+            "image.animation_unsupported: animated PNG inputs are unsupported",
         ));
     }
     let source_format = facts
         .format
         .clone()
         .ok_or_else(|| no_plan("image.format_unknown: source format is unknown"))?;
-    if !matches!(
-        source_format,
-        ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp
-    ) {
+    if !is_adaptable_source(&source_format) {
         return Err(no_plan(
-            "image.format_unsupported: only JPEG, PNG, and still WebP inputs can be adapted",
+            "image.format_unsupported: only JPEG, PNG, still WebP, TIFF, BMP, and GIF inputs can be adapted",
         ));
     }
+    let first_frame_required =
+        facts.animated == Some(true) || facts.page_count.is_some_and(|count| count > 1);
     let source_width = facts
         .width
         .ok_or_else(|| no_plan("image.width_unknown: source width is unknown"))?;
@@ -283,7 +293,7 @@ pub fn plan_image_adaptation(
         .filter(|constraint| constraint.field == Field::FileBytes)
         .filter_map(|constraint| integer_value(&constraint.value))
         .min();
-    let noop = check(artifact, constraints).compatible;
+    let noop = check(artifact, constraints).compatible && !first_frame_required;
     let proportional_reduction_allowed = max_bytes.is_some()
         && width_range.exact.is_none()
         && height_range.exact.is_none()
@@ -302,7 +312,7 @@ pub fn plan_image_adaptation(
     if !crop_required {
         preservation.push(ImagePreservationClaim::AspectRatio);
     }
-    if source_alpha && target_format == ImageFormat::Png {
+    if source_alpha && matches!(target_format, ImageFormat::Png | ImageFormat::Webp) {
         preservation.push(ImagePreservationClaim::Alpha);
     }
 
@@ -333,6 +343,12 @@ pub fn plan_image_adaptation(
     if crop_required {
         warnings.push("Cropping requires an explicit crop rectangle and consent.".into());
     }
+    if first_frame_required {
+        warnings.push(
+            "Only the first frame or page will be kept. Extra frames are discarded with consent."
+                .into(),
+        );
+    }
 
     let target = ImageAdaptTarget {
         format: target_format.clone(),
@@ -348,6 +364,10 @@ pub fn plan_image_adaptation(
             explicit_consent_required: crop_required,
             target_aspect_width: target_width,
             target_aspect_height: target_height,
+        },
+        first_frame: ImageFirstFrameRequirement {
+            required: first_frame_required,
+            explicit_consent_required: first_frame_required,
         },
         proportional_reduction_allowed,
     };
@@ -475,6 +495,7 @@ pub fn execute_image_adaptation_with_provider(
         });
     }
     validate_crop(plan, options)?;
+    validate_first_frame(plan, options)?;
     let rendered = provider.render(input, plan, options, cancellation)?;
     cancelled(cancellation)?;
     let output_artifact = artifact_from_bytes(None, &rendered.bytes)?;
@@ -502,12 +523,24 @@ pub fn execute_image_adaptation_with_provider(
         || output_facts.format.as_ref() != Some(&plan.target.format)
         || !dimensions_match_target
         || !preservation_holds
-        || output_facts.alpha == Some(true) && plan.target.format != ImageFormat::Png
+        || output_facts.alpha == Some(true)
+            && !matches!(plan.target.format, ImageFormat::Png | ImageFormat::Webp)
+        || output_facts.animated == Some(true)
         || contains_image_metadata(&rendered.bytes, &plan.target.format)
         || rendered.stats.jpeg_encodes > MAX_JPEG_ENCODINGS
         || rendered.stats.dimension_reductions > MAX_DIMENSION_REDUCTIONS
     {
         return Err(validation_failed());
+    }
+    let mut disclosures = vec![
+        "EXIF orientation was normalized before rendering.".into(),
+        "Remaining source metadata was stripped from the output.".into(),
+    ];
+    if plan.target.first_frame.required {
+        disclosures.push(
+            "Only the first frame or page was kept. Extra frames were discarded with consent."
+                .into(),
+        );
     }
     Ok(ImageAdaptExecution {
         status: AdaptationStatus::Adapted,
@@ -516,10 +549,7 @@ pub fn execute_image_adaptation_with_provider(
         report,
         plan: plan.clone(),
         stats: rendered.stats,
-        disclosures: vec![
-            "EXIF orientation was normalized before rendering.".into(),
-            "Remaining source metadata was stripped from the output.".into(),
-        ],
+        disclosures,
         output: Some(rendered.bytes),
     })
 }
@@ -556,8 +586,9 @@ impl ImageAdaptProvider for BuiltinImageProvider {
         match plan.target.format {
             ImageFormat::Jpeg => encode_fitted_jpeg(image, plan, cancellation),
             ImageFormat::Png => encode_fitted_png(image, plan, cancellation),
+            ImageFormat::Webp => encode_fitted_webp(image, plan, cancellation),
             _ => Err(no_plan(
-                "image.output_format_unsupported: only JPEG and PNG can be produced",
+                "image.output_format_unsupported: only JPEG, PNG, and WebP can be produced",
             )),
         }
     }
@@ -643,6 +674,37 @@ fn encode_fitted_png(
     Ok(ImageProviderOutput { bytes, stats })
 }
 
+fn encode_fitted_webp(
+    mut image: DynamicImage,
+    plan: &ImageAdaptPlan,
+    cancellation: &dyn CancellationSignal,
+) -> Result<ImageProviderOutput> {
+    let mut stats = ImageExecutionStats::default();
+    let mut bytes = encode_webp(&image)?;
+    let Some(limit) = plan.target.max_bytes else {
+        return Ok(ImageProviderOutput { bytes, stats });
+    };
+    while bytes.len() as u64 > limit
+        && stats.dimension_reductions < MAX_DIMENSION_REDUCTIONS
+        && plan.target.proportional_reduction_allowed
+    {
+        cancelled(cancellation)?;
+        let (width, height) = reduced_dimensions(image.dimensions(), bytes.len() as u64, limit);
+        if (width, height) == image.dimensions() {
+            break;
+        }
+        image = image.resize(width, height, FilterType::Lanczos3);
+        stats.dimension_reductions += 1;
+        bytes = encode_webp(&image)?;
+    }
+    if bytes.len() as u64 > limit {
+        return Err(no_plan(
+            "image.byte_target_impossible: WebP cannot meet the byte ceiling",
+        ));
+    }
+    Ok(ImageProviderOutput { bytes, stats })
+}
+
 fn encode_jpeg(image: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
     let rgb = image.to_rgb8();
     let mut output = Vec::new();
@@ -662,6 +724,14 @@ fn encode_png(image: &DynamicImage) -> Result<Vec<u8>> {
     image
         .write_to(&mut output, EncoderFormat::Png)
         .map_err(|_| Error::new(ErrorCode::ExecutionFailed, "image.png_encode_failed"))?;
+    Ok(output.into_inner())
+}
+
+fn encode_webp(image: &DynamicImage) -> Result<Vec<u8>> {
+    let mut output = Cursor::new(Vec::new());
+    image
+        .write_to(&mut output, EncoderFormat::WebP)
+        .map_err(|_| Error::new(ErrorCode::ExecutionFailed, "image.webp_encode_failed"))?;
     Ok(output.into_inner())
 }
 
@@ -704,6 +774,35 @@ fn validate_crop(plan: &ImageAdaptPlan, options: &ImageAdaptOptions) -> Result<(
     Ok(())
 }
 
+fn validate_first_frame(plan: &ImageAdaptPlan, options: &ImageAdaptOptions) -> Result<()> {
+    if plan.target.first_frame.required && !options.first_frame_consent {
+        return Err(Error::new(
+            ErrorCode::SecurityBlocked,
+            "image.first_frame_consent_required: extra frames or pages were not explicitly approved for discard",
+        ));
+    }
+    Ok(())
+}
+
+fn is_adaptable_source(format: &ImageFormat) -> bool {
+    matches!(
+        format,
+        ImageFormat::Jpeg
+            | ImageFormat::Png
+            | ImageFormat::Webp
+            | ImageFormat::Tiff
+            | ImageFormat::Bmp
+            | ImageFormat::Gif
+    )
+}
+
+fn is_producible(format: &ImageFormat) -> bool {
+    matches!(
+        format,
+        ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Webp
+    )
+}
+
 fn allowed_formats(constraints: &ConstraintSet) -> Result<Option<Vec<ImageFormat>>> {
     let mut result: Option<Vec<ImageFormat>> = None;
     for constraint in &constraints.hard {
@@ -736,29 +835,42 @@ fn choose_format(
     source_alpha: bool,
     allowed: &Option<Vec<ImageFormat>>,
 ) -> Result<ImageFormat> {
-    let allowed = allowed.clone().unwrap_or_else(|| match source {
+    let fallback = match source {
         ImageFormat::Jpeg | ImageFormat::Png => vec![source.clone()],
         _ => vec![ImageFormat::Jpeg, ImageFormat::Png],
-    });
-    if allowed.contains(source) && matches!(source, ImageFormat::Jpeg | ImageFormat::Png) {
+    };
+    let allowed = allowed.clone().unwrap_or(fallback);
+    let producible: Vec<ImageFormat> = allowed.into_iter().filter(is_producible).collect();
+    if producible.is_empty() {
+        return Err(no_plan(
+            "image.output_format_unsupported: only JPEG, PNG, and WebP can be produced",
+        ));
+    }
+    if producible.contains(source) {
         return Ok(source.clone());
     }
     if source_alpha {
-        if allowed.contains(&ImageFormat::Png) {
+        if producible.contains(&ImageFormat::Png) {
             return Ok(ImageFormat::Png);
         }
+        if producible.contains(&ImageFormat::Webp) {
+            return Ok(ImageFormat::Webp);
+        }
         return Err(no_plan(
-            "image.transparency_flattening_refused: alpha can only be preserved through PNG",
+            "image.transparency_flattening_refused: alpha can only be preserved through PNG or WebP",
         ));
     }
-    if allowed.contains(&ImageFormat::Jpeg) {
+    if producible.contains(&ImageFormat::Jpeg) {
         return Ok(ImageFormat::Jpeg);
     }
-    if allowed.contains(&ImageFormat::Png) {
+    if producible.contains(&ImageFormat::Png) {
         return Ok(ImageFormat::Png);
     }
+    if producible.contains(&ImageFormat::Webp) {
+        return Ok(ImageFormat::Webp);
+    }
     Err(no_plan(
-        "image.output_format_unsupported: only JPEG and PNG can be produced",
+        "image.output_format_unsupported: only JPEG, PNG, and WebP can be produced",
     ))
 }
 

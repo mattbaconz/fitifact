@@ -74,9 +74,10 @@ export class ImageWorkerClient {
   adapt<T>(
     constraintsJson: string,
     crop: CropRectangle | null,
+    firstFrameConsent: boolean,
     onProgress?: (progress: ProgressUpdate) => void,
   ) {
-    return this.call<T>({ type: "adapt", constraintsJson, crop }, [], onProgress);
+    return this.call<T>({ type: "adapt", constraintsJson, crop, firstFrameConsent }, [], onProgress);
   }
 
   cancel() {

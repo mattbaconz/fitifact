@@ -68,13 +68,17 @@ pub fn default_catalog() -> CapabilityCatalog {
             },
             Capability {
                 id: TransformId::TranscodeVideo,
-                can_set: vec![Field::MediaVideoCodec, Field::MediaContainer],
+                can_set: vec![
+                    Field::MediaVideoCodec,
+                    Field::MediaContainer,
+                    Field::FileBytes,
+                ],
                 loss: LossClass::Low,
                 streams_changed: 1,
                 requires_media: true,
                 requires_video: true,
                 requires_image: false,
-                requires_video_codec_change: true,
+                requires_video_codec_change: false,
             },
             Capability {
                 id: TransformId::EncodeJpeg,

@@ -2,7 +2,7 @@
 title: "Fitifact agent instructions"
 type: agent-instructions
 status: active
-updated: 2026-08-22
+updated: 2026-08-25
 canonical: true
 tags:
   - agents
@@ -54,26 +54,31 @@ not construct `FfmpegProvider`.
 The executable adaptation catalog is deliberately small:
 
 - MP4/H.264/AAC that already satisfies the constraints is a no-op;
-- MOV/H.264/AAC can be remuxed to MP4 without re-encoding;
-- MP4/HEVC/AAC can be transcoded to MP4/H.264/AAC while AAC is copied;
+- MOV/H.264/AAC can be remuxed to MP4 without re-encoding when bytes already pass;
+- MP4 or MOV HEVC/AAC can be transcoded to MP4/H.264/AAC while AAC is copied;
+- media `file.bytes` can be executed with an H.264 bitrate ladder and quality floor;
 - JPEG/PNG/still WebP that already satisfies the confirmed image target is a no-op;
-- JPEG/PNG/still WebP/single-image HEIC can be adapted in-process under D-026
-  format, byte, dimension, and explicit crop constraints to JPEG or PNG;
-- every mutation outside the frozen media matrix and D-026/D-028 image contract is
-  refused explicitly.
+- JPEG/PNG/still WebP/TIFF/BMP/GIF/single-image HEIC can be adapted in-process
+  under D-026/D-029 format, byte, dimension, crop, and first-frame constraints
+  to JPEG or PNG, plus WebP when the confirmed target names it;
+- every mutation outside the frozen media matrix and D-026/D-028/D-029 image
+  contract is refused explicitly.
 
-File-size and video-dimension constraints can be inspected and checked, but the
-media provider does not execute size fitting, resizing, or frame-rate changes.
-The image provider executes only the bounded D-026 fitting pipeline. A provider
-returning success is not proof of compatibility: every produced output must be
-re-inspected and validated against the same hard constraints.
+File-size constraints on media are executable via the H.264 bitrate ladder
+(D-030). Video-dimension constraints can be inspected and checked, but the
+media provider does not resize. The image provider executes only the bounded
+D-026 fitting pipeline. A provider returning success is not proof of
+compatibility: every produced output must be re-inspected and validated against
+the same hard constraints.
 
 The bounded planner uses breadth-first search to depth 2 and lexicographic
 ranking by semantic loss, lossy steps, streams changed, then step count. Do not
-introduce Pareto scoring until a later decision supersedes D-022.
+introduce Pareto scoring until a later decision supersedes D-022. Destination
+policy is a YAML profile compiled to `ConstraintSet`; `plan.rs` must not match
+on destination names.
 
-Images beyond JPEG/PNG output plus still-WebP/HEIC input, browser extensions, desktop/mobile
-shells, profiles, managed APIs/cloud execution, bundled FFmpeg, ffmpeg.wasm,
+Images beyond this still-image matrix, browser extensions, desktop/mobile
+shells, managed APIs/cloud execution, bundled FFmpeg, ffmpeg.wasm,
 registry publishing, OS signing, package-manager formulae, and
 telemetry/network activity are deferred. The public web app is static hosting
 only; it adds no server or upload path. Design documents for deferred areas are
@@ -121,8 +126,9 @@ The planner should depend on abstract transform capabilities, not directly on FF
 External tools are **providers**. Fitifact is the orchestration and compatibility intelligence layer above them.
 
 Current implementation: Rust domain core and native runtime with system
-FFmpeg/ffprobe as the media provider. TypeScript bindings, WASM, web surfaces,
-and other providers are deferred design directions.
+FFmpeg/ffprobe as the media provider, plus `fitifact-wasm` and a static
+drop-first web surface for the still-image matrix. Desktop shells and
+destination profiles remain deferred.
 
 This is a recommendation, not an excuse to prematurely create 25 crates.
 

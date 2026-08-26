@@ -1,0 +1,39 @@
+schema: fitifact.profile/v1
+id: jpeg/photo-upload
+name: JPEG photo upload
+revision: 1
+last_verified: 2026-08-25
+
+scope:
+  kind: web-upload
+  feature: photo
+  note: Starter JPEG photo ceiling, not a named destination.
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg]
+    source: src-user
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 8000000
+    source: src-user
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-user
+    type: user-config
+    observed_at: 2026-08-25
+    note: Common form language is a JPEG under 8 MB. This is a local starter, not a claim about a specific site.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

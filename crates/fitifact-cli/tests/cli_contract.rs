@@ -120,6 +120,17 @@ fn constraints_file_conflicts_with_every_individual_hard_target() {
         assert_eq!(error["schema"], "fitifact.error/v1");
         assert_eq!(error["code"], "INPUT_INVALID");
     }
+    let for_conflict = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--constraints",
+        path,
+        "--for",
+        "discord/video-upload",
+        "--json",
+    ]);
+    assert_eq!(for_conflict.status.code(), Some(64));
+    assert_eq!(json_stderr(&for_conflict)["code"], "INPUT_INVALID");
     std::fs::remove_file(path).unwrap();
 }
 
@@ -161,6 +172,66 @@ fn constraint_file_read_accepts_exact_limit_and_rejects_one_byte_over() {
 
     std::fs::remove_file(exact).unwrap();
     std::fs::remove_file(over).unwrap();
+}
+
+#[test]
+fn for_profile_conflicts_with_individual_hard_targets() {
+    for flag in [
+        ["--container", "mp4"],
+        ["--video-codec", "h264"],
+        ["--max-size", "1"],
+        ["--image-format", "jpeg"],
+    ] {
+        let output = run(&[
+            "check",
+            "definitely-missing.mp4",
+            "--for",
+            "discord/video-upload",
+            flag[0],
+            flag[1],
+            "--json",
+        ]);
+        assert_eq!(output.status.code(), Some(64), "flag {flag:?}");
+        assert_eq!(json_stderr(&output)["code"], "INPUT_INVALID");
+    }
+}
+
+#[test]
+fn for_profile_loads_a_shipped_id_before_inspection() {
+    let output = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--for",
+        "discord/video-upload",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(4));
+    assert!(
+        json_stderr(&output)["message"]
+            .as_str()
+            .unwrap()
+            .contains("file not found"),
+        "a valid profile must reach input inspection, got {}",
+        json_stderr(&output)
+    );
+}
+
+#[test]
+fn unknown_for_profile_is_a_usage_class_input_error() {
+    let output = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--for",
+        "no-such/profile",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(4));
+    let error = json_stderr(&output);
+    let message = error["message"].as_str().unwrap();
+    assert!(
+        message.contains("was not found"),
+        "unknown profile must say so, got {message}"
+    );
 }
 
 #[test]

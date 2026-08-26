@@ -1,6 +1,7 @@
 use fitifact_wasm::{
     adapt_bytes, adapt_rgba, compile_constraints, compile_requirements, image_limits,
-    inspect_bytes, plan_bytes, plan_rgba, sample_jpeg_rgb, sample_png_rgb, validate_bytes,
+    inspect_bytes, plan_bytes, plan_rgba, sample_animated_gif, sample_bmp_rgb, sample_gif_rgb,
+    sample_jpeg_rgb, sample_png_rgb, sample_tiff_rgb, validate_bytes,
 };
 
 fn parse(json: &str) -> serde_json::Value {
@@ -208,4 +209,63 @@ fn crate_surface_never_constructs_a_media_runtime() {
     let lib = include_str!("../src/lib.rs");
     assert!(!lib.contains("FfmpegProvider"));
     assert!(!lib.to_ascii_lowercase().contains("ffmpeg.wasm"));
+}
+
+#[test]
+fn tiff_bmp_gif_and_webp_cross_the_wasm_boundary() {
+    let jpeg = serde_json::json!({
+        "schema": "fitifact.constraints/v1",
+        "hard": [{"id":"format","field":"image.format","op":"in","value":["jpeg"]}],
+        "preferences": {"preserve_audio":true, "preserve_resolution":true}
+    })
+    .to_string();
+    for source in [
+        sample_tiff_rgb(8, 8),
+        sample_bmp_rgb(8, 8),
+        sample_gif_rgb(8, 8),
+    ] {
+        let adapted = adapt_bytes(&source, &jpeg, r#"{"crop":null,"crop_consent":false}"#);
+        assert_eq!(parse(&adapted.report_json)["status"], "adapted");
+        assert_eq!(
+            parse(&inspect_bytes(&adapted.output.expect("jpeg output")))["image"]["format"],
+            "jpeg"
+        );
+    }
+
+    let webp_target = serde_json::json!({
+        "schema": "fitifact.constraints/v1",
+        "hard": [{"id":"format","field":"image.format","op":"in","value":["webp"]}],
+        "preferences": {"preserve_audio":true, "preserve_resolution":true}
+    })
+    .to_string();
+    let webp_out = adapt_bytes(
+        &sample_png_rgb(8, 8),
+        &webp_target,
+        r#"{"crop":null,"crop_consent":false}"#,
+    );
+    assert_eq!(parse(&webp_out.report_json)["status"], "adapted");
+    assert_eq!(
+        parse(&inspect_bytes(&webp_out.output.expect("webp output")))["image"]["format"],
+        "webp"
+    );
+
+    let animated = sample_animated_gif(8, 8);
+    let blocked = adapt_bytes(&animated, &jpeg, r#"{"crop":null,"crop_consent":false}"#);
+    assert_eq!(parse(&blocked.report_json)["code"], "SECURITY_BLOCKED");
+    let consented = adapt_bytes(
+        &animated,
+        &jpeg,
+        r#"{"crop":null,"crop_consent":false,"first_frame_consent":true}"#,
+    );
+    assert_eq!(parse(&consented.report_json)["status"], "adapted");
+}
+
+#[test]
+fn webp_tokens_compile_through_wasm_requirements() {
+    let report = parse(&compile_requirements("JPG, PNG, or WebP, max 2 MB"));
+    let hard = report["constraints"]["hard"].as_array().unwrap();
+    assert!(hard.iter().any(|constraint| {
+        constraint["field"] == "image.format"
+            && constraint["value"] == serde_json::json!(["jpeg", "png", "webp"])
+    }));
 }

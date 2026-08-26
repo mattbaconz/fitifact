@@ -4,7 +4,10 @@ use fitifact::adapt::AdaptationStatus;
 use fitifact::artifact::ImageFormat;
 use fitifact::constraints::{ConstraintSet, compile_from_json};
 use fitifact::error::ErrorCode;
-use fitifact::image::{artifact_from_bytes, sample_jpeg_rgb, sample_png_rgb, sample_webp_rgb};
+use fitifact::image::{
+    artifact_from_bytes, sample_animated_gif, sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb,
+    sample_png_rgb, sample_tiff_rgb, sample_webp_rgb,
+};
 use fitifact::image_adapt::{
     AtomicCancellation, ImageAdaptOptions, ImageAdaptProvider, ImageProviderOutput, NeverCancelled,
     NormalizedCropRectangle, execute_image_adaptation, execute_image_adaptation_with_provider,
@@ -187,6 +190,7 @@ fn near_equal_aspect_change_requires_and_honors_crop_consent() {
                 height: 1.0,
             }),
             crop_consent: true,
+            ..Default::default()
         },
         &NeverCancelled,
     )
@@ -307,6 +311,7 @@ fn exact_aspect_change_requires_approved_normalized_crop() {
                 height: 1.0,
             }),
             crop_consent: true,
+            ..Default::default()
         },
         &NeverCancelled,
     )
@@ -346,6 +351,7 @@ fn tiny_two_to_one_source_cannot_be_distorted_to_square_without_crop_consent() {
                 height: 1.0,
             }),
             crop_consent: true,
+            ..Default::default()
         },
         &NeverCancelled,
     )
@@ -678,4 +684,106 @@ fn jpeg_with_orientation_6(width: u32, height: u32) -> Vec<u8> {
     output.extend_from_slice(&exif);
     output.extend_from_slice(&jpeg[2..]);
     output
+}
+
+#[test]
+fn tiff_bmp_and_still_gif_adapt_to_jpeg() {
+    for input in [
+        sample_tiff_rgb(16, 12),
+        sample_bmp_rgb(16, 12),
+        sample_gif_rgb(16, 12),
+    ] {
+        let target = format_target("jpeg");
+        let plan = plan_for(&input, &target);
+        assert!(!plan.noop);
+        assert!(!plan.target.first_frame.required);
+        let result = execute_image_adaptation(
+            &input,
+            &target,
+            &plan,
+            &ImageAdaptOptions::default(),
+            &NeverCancelled,
+        )
+        .unwrap();
+        assert_eq!(result.status, AdaptationStatus::Adapted);
+        assert_eq!(
+            result.output_artifact.image.unwrap().format,
+            Some(ImageFormat::Jpeg)
+        );
+    }
+}
+
+#[test]
+fn animated_gif_requires_first_frame_consent_then_adapts() {
+    let input = sample_animated_gif(12, 8);
+    let target = format_target("jpeg");
+    let artifact = artifact_from_bytes(None, &input).unwrap();
+    assert_eq!(artifact.image.as_ref().unwrap().animated, Some(true));
+    let plan = plan_image_adaptation(&artifact, &target).unwrap();
+    assert!(plan.target.first_frame.required);
+    assert!(!plan.noop);
+
+    let blocked = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap_err();
+    assert_eq!(blocked.code, ErrorCode::SecurityBlocked);
+    assert!(blocked.message.contains("first_frame_consent"));
+
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions {
+            first_frame_consent: true,
+            ..Default::default()
+        },
+        &NeverCancelled,
+    )
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    let facts = result.output_artifact.image.unwrap();
+    assert_eq!(facts.format, Some(ImageFormat::Jpeg));
+    assert_eq!(facts.animated, Some(false));
+    assert!(
+        result
+            .disclosures
+            .iter()
+            .any(|text| text.contains("first frame"))
+    );
+}
+
+#[test]
+fn confirmed_webp_target_can_emit_webp() {
+    let input = sample_png_rgb(16, 12);
+    let target = format_target("webp");
+    let plan = plan_for(&input, &target);
+    assert_eq!(plan.target.format, ImageFormat::Webp);
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap();
+    assert_eq!(
+        result.output_artifact.image.unwrap().format,
+        Some(ImageFormat::Webp)
+    );
+}
+
+#[test]
+fn jpeg_png_or_webp_keeps_jpeg_when_the_source_already_is_jpeg() {
+    let input = sample_jpeg_rgb(16, 12);
+    let target = constraints(serde_json::json!([
+        {"id":"format","field":"image.format","op":"in","value":["jpeg","png","webp"]}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert!(plan.noop);
+    assert_eq!(plan.target.format, ImageFormat::Jpeg);
 }

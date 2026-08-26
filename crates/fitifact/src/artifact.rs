@@ -43,6 +43,7 @@ pub enum ImageFormat {
     Tiff,
     Heif,
     Gif,
+    Bmp,
     Unknown(String),
 }
 
@@ -55,6 +56,7 @@ impl ImageFormat {
             "tiff" | "tif" => Some(Self::Tiff),
             "heif" | "heic" => Some(Self::Heif),
             "gif" => Some(Self::Gif),
+            "bmp" => Some(Self::Bmp),
             _ => None,
         }
     }
@@ -71,6 +73,7 @@ impl ImageFormat {
             Self::Tiff => "tiff",
             Self::Heif => "heif",
             Self::Gif => "gif",
+            Self::Bmp => "bmp",
             Self::Unknown(other) => other,
         }
     }
@@ -90,6 +93,8 @@ pub struct ImageFacts {
     pub height: Option<u32>,
     pub alpha: Option<bool>,
     pub animated: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -527,6 +532,7 @@ impl Artifact {
                 height: Some(height),
                 alpha: Some(alpha),
                 animated: Some(animated),
+                page_count: None,
             }),
             inspection: InspectionMeta {
                 provider: "fixture".into(),

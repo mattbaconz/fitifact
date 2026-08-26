@@ -2,8 +2,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use image::codecs::jpeg::JpegEncoder;
-use image::metadata::Orientation;
-use image::{ColorType, DynamicImage, ImageDecoder, ImageReader};
+use image::{ColorType, DynamicImage, GenericImageView, ImageDecoder, ImageReader};
 
 use crate::artifact::{
     Artifact, ArtifactSchema, Completeness, Family, ImageFacts, ImageFormat, InspectionMeta,
@@ -36,6 +35,9 @@ pub fn sniff_format(bytes: &[u8]) -> Option<ImageFormat> {
     if bytes.len() >= 4 && (bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*")) {
         return Some(ImageFormat::Tiff);
     }
+    if bytes.len() >= 2 && bytes.starts_with(b"BM") {
+        return Some(ImageFormat::Bmp);
+    }
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
         let brand = &bytes[8..12];
         if matches!(
@@ -51,10 +53,7 @@ pub fn sniff_format(bytes: &[u8]) -> Option<ImageFormat> {
 pub fn artifact_from_bytes(path: Option<&Path>, bytes: &[u8]) -> Result<Artifact> {
     enforce_encoded_limit(bytes.len())?;
     let Some(format) = sniff_format(bytes) else {
-        return Err(Error::new(
-            ErrorCode::InspectionUnsupported,
-            "the input is not a recognized image",
-        ));
+        return Err(unrecognized_input(bytes));
     };
     if format == ImageFormat::Jpeg && jpeg_is_multi_image(bytes) {
         return Err(Error::new(
@@ -64,13 +63,20 @@ pub fn artifact_from_bytes(path: Option<&Path>, bytes: &[u8]) -> Result<Artifact
     }
     let animated = match format {
         ImageFormat::Png => Some(png_is_animated(bytes)),
-        ImageFormat::Gif => Some(true),
+        ImageFormat::Gif => Some(gif_frame_count(bytes) > 1),
         ImageFormat::Webp => Some(webp_is_animated(bytes)),
         _ => Some(false),
     };
+    let page_count = (format == ImageFormat::Tiff).then(|| tiff_page_count(bytes));
     let decoded = match format {
-        ImageFormat::Jpeg | ImageFormat::Png => decode_still(bytes)?,
-        ImageFormat::Webp if animated != Some(true) => decode_still(bytes)?,
+        ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::Bmp | ImageFormat::Tiff => {
+            decode_still(bytes)?
+        }
+        ImageFormat::Gif | ImageFormat::Webp => match decode_still(bytes) {
+            Ok(frame) => frame,
+            Err(_) if animated == Some(true) => None,
+            Err(error) => return Err(error),
+        },
         _ => None,
     };
     Ok(Artifact {
@@ -87,6 +93,7 @@ pub fn artifact_from_bytes(path: Option<&Path>, bytes: &[u8]) -> Result<Artifact
             height: decoded.as_ref().map(|frame| frame.height),
             alpha: decoded.as_ref().map(|frame| frame.alpha),
             animated,
+            page_count,
         }),
         inspection: InspectionMeta {
             provider: "fitifact-image".into(),
@@ -108,43 +115,24 @@ struct DecodedStill {
 }
 
 fn decode_still(bytes: &[u8]) -> Result<Option<DecodedStill>> {
-    let reader = ImageReader::new(Cursor::new(bytes))
-        .with_guessed_format()
-        .map_err(|_| {
-            Error::new(
-                ErrorCode::InputInvalid,
-                "the image header could not be parsed",
-            )
-        })?;
-    let mut decoder = reader
-        .into_decoder()
-        .map_err(|_| Error::new(ErrorCode::InputInvalid, "the image could not be decoded"))?;
-    let (mut width, mut height) = decoder.dimensions();
-    enforce_decoded_limit(width, height)?;
-    let orientation = decoder.orientation().map_err(|_| {
-        Error::new(
-            ErrorCode::InputInvalid,
-            "the image orientation metadata could not be read",
-        )
-    })?;
-    if matches!(
-        orientation,
-        Orientation::Rotate90
-            | Orientation::Rotate270
-            | Orientation::Rotate90FlipH
-            | Orientation::Rotate270FlipH
-    ) {
-        std::mem::swap(&mut width, &mut height);
-    }
-    let alpha = matches!(
-        decoder.color_type(),
-        ColorType::Rgba8 | ColorType::Rgba16 | ColorType::La8 | ColorType::La16
-    );
+    let image = decode_oriented(bytes)?;
+    let (width, height) = image.dimensions();
     Ok(Some(DecodedStill {
         width,
         height,
-        alpha,
+        alpha: image_has_transparency(&image),
     }))
+}
+
+fn image_has_transparency(image: &DynamicImage) -> bool {
+    match image {
+        DynamicImage::ImageRgba8(buffer) => buffer.pixels().any(|pixel| pixel.0[3] < 255),
+        DynamicImage::ImageRgba16(buffer) => buffer.pixels().any(|pixel| pixel.0[3] < u16::MAX),
+        DynamicImage::ImageRgba32F(buffer) => buffer.pixels().any(|pixel| pixel.0[3] < 1.0),
+        DynamicImage::ImageLumaA8(buffer) => buffer.pixels().any(|pixel| pixel.0[1] < 255),
+        DynamicImage::ImageLumaA16(buffer) => buffer.pixels().any(|pixel| pixel.0[1] < u16::MAX),
+        _ => false,
+    }
 }
 
 pub fn enforce_encoded_limit(length: usize) -> Result<()> {
@@ -205,6 +193,142 @@ fn png_is_animated(bytes: &[u8]) -> bool {
 
 fn webp_is_animated(bytes: &[u8]) -> bool {
     bytes.windows(4).any(|window| window == b"ANIM")
+}
+
+fn gif_frame_count(bytes: &[u8]) -> u32 {
+    if bytes.len() < 13 || !(bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
+        return 0;
+    }
+    let packed = bytes[10];
+    let mut cursor = 13_usize;
+    if packed & 0x80 != 0 {
+        cursor += 3 * (1 << ((packed & 7) + 1));
+    }
+    let mut frames = 0_u32;
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            0x3b => break,
+            0x2c => {
+                frames += 1;
+                if cursor + 10 > bytes.len() {
+                    break;
+                }
+                let local = bytes[cursor + 9];
+                cursor += 10;
+                if local & 0x80 != 0 {
+                    cursor += 3 * (1 << ((local & 7) + 1));
+                }
+                cursor += 1;
+                while cursor < bytes.len() {
+                    let size = bytes[cursor] as usize;
+                    cursor += 1;
+                    if size == 0 {
+                        break;
+                    }
+                    cursor = cursor.saturating_add(size);
+                }
+            }
+            0x21 => {
+                cursor += 2;
+                while cursor < bytes.len() {
+                    let size = bytes[cursor] as usize;
+                    cursor += 1;
+                    if size == 0 {
+                        break;
+                    }
+                    cursor = cursor.saturating_add(size);
+                }
+            }
+            _ => cursor += 1,
+        }
+    }
+    frames
+}
+
+fn tiff_page_count(bytes: &[u8]) -> u32 {
+    let little = bytes.starts_with(b"II*\0");
+    let big = bytes.starts_with(b"MM\0*");
+    if bytes.len() < 8 || !(little || big) {
+        return 1;
+    }
+    let u16_at = |offset: usize| -> Option<u16> {
+        let slice = bytes.get(offset..offset + 2)?;
+        Some(if little {
+            u16::from_le_bytes([slice[0], slice[1]])
+        } else {
+            u16::from_be_bytes([slice[0], slice[1]])
+        })
+    };
+    let u32_at = |offset: usize| -> Option<u32> {
+        let slice = bytes.get(offset..offset + 4)?;
+        Some(if little {
+            u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]])
+        } else {
+            u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]])
+        })
+    };
+    let mut offset = u32_at(4).unwrap_or(0);
+    let mut pages = 0_u32;
+    while offset != 0 && pages < 64 {
+        let start = offset as usize;
+        let count = u16_at(start).unwrap_or(0) as usize;
+        let next_at = start
+            .saturating_add(2)
+            .saturating_add(count.saturating_mul(12));
+        pages += 1;
+        offset = u32_at(next_at).unwrap_or(0);
+        if next_at + 4 > bytes.len() {
+            break;
+        }
+    }
+    pages.max(1)
+}
+
+fn looks_like_pdf(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"%PDF")
+}
+
+fn looks_like_zip(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06")
+}
+
+fn looks_like_video(bytes: &[u8]) -> bool {
+    if bytes.len() >= 4 && bytes.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
+        return true;
+    }
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        let brand = &bytes[8..12];
+        return !matches!(
+            brand,
+            b"heic" | b"heix" | b"hevc" | b"hevx" | b"mif1" | b"msf1" | b"heif" | b"avif" | b"avis"
+        );
+    }
+    false
+}
+
+pub fn unrecognized_input(bytes: &[u8]) -> Error {
+    if looks_like_video(bytes) {
+        return Error::new(
+            ErrorCode::InspectionUnsupported,
+            "This is a video. The web app adapts images. The CLI remuxes and transcodes.",
+        );
+    }
+    if looks_like_pdf(bytes) {
+        return Error::new(
+            ErrorCode::InspectionUnsupported,
+            "This is a PDF. The web app adapts images and does not convert documents.",
+        );
+    }
+    if looks_like_zip(bytes) {
+        return Error::new(
+            ErrorCode::InspectionUnsupported,
+            "This is an archive. Fitifact does not unpack or convert ZIP files.",
+        );
+    }
+    Error::new(
+        ErrorCode::InspectionUnsupported,
+        "the input is not a recognized image",
+    )
 }
 
 pub fn jpeg_is_multi_image(bytes: &[u8]) -> bool {
@@ -441,12 +565,48 @@ pub fn sample_jpeg_rgb(width: u32, height: u32) -> Vec<u8> {
 }
 
 pub fn sample_webp_rgb(width: u32, height: u32) -> Vec<u8> {
-    use image::{ImageFormat, Rgb, RgbImage};
+    encode_dynamic(width, height, image::ImageFormat::WebP)
+}
+
+pub fn sample_bmp_rgb(width: u32, height: u32) -> Vec<u8> {
+    encode_dynamic(width, height, image::ImageFormat::Bmp)
+}
+
+pub fn sample_tiff_rgb(width: u32, height: u32) -> Vec<u8> {
+    encode_dynamic(width, height, image::ImageFormat::Tiff)
+}
+
+pub fn sample_gif_rgb(width: u32, height: u32) -> Vec<u8> {
+    encode_dynamic(width, height, image::ImageFormat::Gif)
+}
+
+pub fn sample_animated_gif(width: u32, height: u32) -> Vec<u8> {
+    let mut pixels_a = Vec::with_capacity((width * height * 3) as usize);
+    let mut pixels_b = Vec::with_capacity((width * height * 3) as usize);
+    for _ in 0..width * height {
+        pixels_a.extend_from_slice(&[200, 40, 40]);
+        pixels_b.extend_from_slice(&[40, 80, 200]);
+    }
+    let mut out = Vec::new();
+    {
+        let mut encoder =
+            gif::Encoder::new(&mut out, width as u16, height as u16, &[]).expect("gif encoder");
+        encoder.set_repeat(gif::Repeat::Infinite).expect("gif loop");
+        let frame_a = gif::Frame::from_rgb(width as u16, height as u16, &pixels_a);
+        let frame_b = gif::Frame::from_rgb(width as u16, height as u16, &pixels_b);
+        encoder.write_frame(&frame_a).expect("gif frame a");
+        encoder.write_frame(&frame_b).expect("gif frame b");
+    }
+    out
+}
+
+fn encode_dynamic(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+    use image::{Rgb, RgbImage};
     let img = RgbImage::from_pixel(width, height, Rgb([200, 40, 40]));
     let mut out = Cursor::new(Vec::new());
     DynamicImage::ImageRgb8(img)
-        .write_to(&mut out, ImageFormat::WebP)
-        .expect("webp encode");
+        .write_to(&mut out, format)
+        .expect("image encode");
     out.into_inner()
 }
 
@@ -471,7 +631,22 @@ mod tests {
             sniff_format(&[0xFF, 0xD8, 0xFF, 0xE0]),
             Some(ImageFormat::Jpeg)
         );
+        assert_eq!(sniff_format(b"BM\0\0"), Some(ImageFormat::Bmp));
         assert_eq!(sniff_format(b"not-an-image"), None);
+    }
+
+    #[test]
+    fn unrecognized_magic_explains_video_pdf_and_zip() {
+        let mut video = vec![0_u8; 12];
+        video[4..8].copy_from_slice(b"ftyp");
+        video[8..12].copy_from_slice(b"isom");
+        assert!(unrecognized_input(&video).message.contains("video"));
+        assert!(unrecognized_input(b"%PDF-1.7").message.contains("PDF"));
+        assert!(
+            unrecognized_input(b"PK\x03\x04rest")
+                .message
+                .contains("archive")
+        );
     }
 
     #[test]

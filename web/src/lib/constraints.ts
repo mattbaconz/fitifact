@@ -1,9 +1,11 @@
-import type { Constraint, ConstraintSet, EditableTarget } from "../types";
+import type { Constraint, ConstraintSet, EditableTarget, OutputFormat } from "../types";
 
-const IMAGE_FORMATS = ["jpeg", "png"] as const;
+export const PRODUCIBLE_FORMATS: OutputFormat[] = ["jpeg", "png", "webp"];
+const DEFAULT_FORMATS: OutputFormat[] = ["jpeg", "png"];
+const KNOWN_FORMATS = new Set(["jpeg", "png", "webp", "gif", "tiff", "bmp", "heif", "heic"]);
 
 export const EMPTY_TARGET: EditableTarget = {
-  formats: [...IMAGE_FORMATS], maxBytes: "",
+  formats: [...DEFAULT_FORMATS], maxBytes: "",
   widthExact: "", widthMin: "", widthMax: "",
   heightExact: "", heightMin: "", heightMax: "",
 };
@@ -20,7 +22,7 @@ function numberValue(constraint: Constraint, label: string): number {
 }
 
 export function editableTargetFromConstraints(constraints: ConstraintSet): EditableTarget {
-  let allowed = new Set<"jpeg" | "png">(IMAGE_FORMATS);
+  let allowed = new Set<OutputFormat>(PRODUCIBLE_FORMATS);
   let sawFormat = false;
   let maxBytes: number | null = null;
   const dimensions = {
@@ -34,12 +36,14 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
         throw new Error("The normalized image-format intersection cannot be edited safely.");
       }
       sawFormat = true;
-      if (constraint.value.some((value) =>
-        typeof value !== "string" || !IMAGE_FORMATS.includes(value as "jpeg" | "png")
-      )) {
+      if (constraint.value.some((value) => typeof value !== "string" || !KNOWN_FORMATS.has(value))) {
         throw new Error("The normalized image-format intersection contains an unsupported alternative.");
       }
-      const next = new Set(constraint.value as ("jpeg" | "png")[]);
+      const next = new Set(
+        (constraint.value as string[]).filter((value): value is OutputFormat =>
+          PRODUCIBLE_FORMATS.includes(value as OutputFormat),
+        ),
+      );
       allowed = new Set([...allowed].filter((format) => next.has(format)));
     } else if (constraint.field === "file.bytes") {
       if (constraint.op !== "lte") throw new Error("Only a strict byte ceiling can be edited safely.");
@@ -79,7 +83,9 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
       throw new Error(`The normalized exact image ${label} is outside its bounds.`);
     }
   }
-  const formats = sawFormat ? IMAGE_FORMATS.filter((format) => allowed.has(format)) : [...IMAGE_FORMATS];
+  const formats = sawFormat
+    ? PRODUCIBLE_FORMATS.filter((format) => allowed.has(format))
+    : [...DEFAULT_FORMATS];
   return {
     formats: [...formats], maxBytes: maxBytes === null ? "" : String(maxBytes),
     widthExact: dimensions.width.exact === null ? "" : String(dimensions.width.exact),
@@ -116,10 +122,10 @@ function addDimension(
 }
 
 export function constraintSetFromEditable(target: EditableTarget): ConstraintSet {
-  if (target.formats.some((format) => !IMAGE_FORMATS.includes(format))) {
+  if (target.formats.some((format) => !PRODUCIBLE_FORMATS.includes(format))) {
     throw new Error("The target contains an unsupported image format.");
   }
-  const formats = IMAGE_FORMATS.filter((format) => target.formats.includes(format));
+  const formats = PRODUCIBLE_FORMATS.filter((format) => target.formats.includes(format));
   if (formats.length === 0) throw new Error("Select at least one allowed image format.");
   const hard: Constraint[] = [{ id: "image-format", field: "image.format", op: "in", value: formats }];
   const maxBytes = positiveInteger(target.maxBytes, "Maximum bytes");

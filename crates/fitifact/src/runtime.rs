@@ -227,8 +227,10 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
             }
         }
         TransformId::TranscodeVideo => {
-            if artifact.container != Some(Container::Mp4)
-                || video.codec != Some(VideoCodec::Hevc)
+            if !matches!(
+                artifact.container,
+                Some(Container::Mp4) | Some(Container::Mov)
+            ) || !matches!(video.codec, Some(VideoCodec::Hevc) | Some(VideoCodec::H264))
                 || video.pixel_format.as_deref() != Some("yuv420p")
                 || video.bit_depth != Some(8)
                 || video.color_range.as_deref() != Some("tv")
@@ -236,8 +238,11 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
                 || video.color_transfer.as_deref() != Some("bt709")
                 || video.color_primaries.as_deref() != Some("bt709")
                 || video.hdr != HdrStatus::Sdr
-                || step.expected != transcode_expected(video.width.unwrap(), video.height.unwrap())
+                || !transcode_expected_shape(&step.expected)
             {
+                return Err(forged_plan());
+            }
+            if step.target.max_bytes.is_some() && step.target.duration_ms != artifact.duration_ms {
                 return Err(forged_plan());
             }
             let mut preservation = vec![
@@ -292,6 +297,7 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
         TransformId::Remux => {
             step.target.container == Some(Container::Mp4)
                 && step.target.video_codec.is_none()
+                && step.target.max_bytes.is_none()
                 && step.expected
                     == vec![ExpectedFact {
                         field: Field::MediaContainer,
@@ -302,6 +308,7 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
         TransformId::TranscodeVideo => {
             step.target.container == Some(Container::Mp4)
                 && step.target.video_codec == Some(VideoCodec::H264)
+                && (step.target.max_bytes.is_none() || step.target.duration_ms.is_some())
                 && transcode_expected_shape(&step.expected)
                 && step
                     .preservation
@@ -360,7 +367,7 @@ fn transcode_expected_shape(expected: &[ExpectedFact]) -> bool {
                 field: Field::MediaContainer,
                 value: ExpectedValue::Container(Container::Mp4),
             })
-        && expected[4..] == transcode_expected(1, 1)[4..]
+        && expected[4..11] == transcode_expected(1, 1)[4..]
 }
 
 fn transcode_expected(width: u32, height: u32) -> Vec<ExpectedFact> {
@@ -594,9 +601,7 @@ mod tests {
                 operation: TransformId::Remux,
                 target: StepTarget {
                     container: Some(Container::Mp4),
-                    video_codec: None,
-                    image_format: None,
-                    image: None,
+                    ..StepTarget::default()
                 },
                 reasons: Vec::new(),
                 expected: Vec::new(),
@@ -634,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_rejects_mov_for_the_mp4_only_transcode_capability() {
+    fn runtime_rejects_webm_for_the_transcode_capability() {
         let mp4_hevc = crate::artifact::Artifact::media(
             Container::Mp4,
             crate::artifact::VideoCodec::Hevc,
@@ -649,9 +654,9 @@ mod tests {
         .plan()
         .unwrap()
         .clone();
-        let mut mov_hevc = mp4_hevc;
-        mov_hevc.container = Some(Container::Mov);
-        let error = validate_plan_for_execution(&plan, &mov_hevc).unwrap_err();
+        let mut webm_hevc = mp4_hevc;
+        webm_hevc.container = Some(Container::Webm);
+        let error = validate_plan_for_execution(&plan, &webm_hevc).unwrap_err();
         assert_eq!(error.code, ErrorCode::SecurityBlocked);
     }
 

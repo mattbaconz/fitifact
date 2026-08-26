@@ -12,7 +12,10 @@ use fitifact::{
 };
 use image::{DynamicImage, ImageFormat as EncoderFormat, RgbImage, RgbaImage};
 
-pub use fitifact::{sample_jpeg_rgb, sample_png_rgb};
+pub use fitifact::{
+    sample_animated_gif, sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb,
+    sample_tiff_rgb, sample_webp_rgb,
+};
 
 pub struct AdaptJs {
     pub report_json: String,

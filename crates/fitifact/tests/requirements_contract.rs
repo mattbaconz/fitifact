@@ -235,3 +235,32 @@ fn rejection_messages_compile_without_a_review_click() {
             && constraint.value == ConstraintValue::Integer(2_000_000)
     }));
 }
+
+#[test]
+fn webp_gif_tiff_and_bmp_tokens_compile_as_format_alternatives() {
+    let parsed = parse_image_requirements("JPG, PNG, or WebP, max 2 MB").unwrap();
+    let constraints = parsed.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageFormat
+            && constraint.value
+                == ConstraintValue::List(vec!["jpeg".into(), "png".into(), "webp".into()])
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::FileBytes
+            && constraint.value == ConstraintValue::Integer(2_000_000)
+    }));
+
+    let extra = parse_image_requirements("GIF, TIFF, or BMP").unwrap();
+    let formats = extra
+        .constraints
+        .unwrap()
+        .hard
+        .into_iter()
+        .find(|constraint| constraint.field == Field::ImageFormat)
+        .unwrap()
+        .value;
+    assert_eq!(
+        formats,
+        ConstraintValue::List(vec!["bmp".into(), "gif".into(), "tiff".into()])
+    );
+}

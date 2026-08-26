@@ -152,6 +152,9 @@ fn mismatch_line(
 
 fn plan_summary(plan: &Plan) -> String {
     if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::TranscodeVideo {
+        if plan.steps[0].target.max_bytes.is_some() {
+            return "I can re-encode the video to fit the size limit.".into();
+        }
         return "I can change only the video stream.".into();
     }
     if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::Remux {
@@ -167,7 +170,13 @@ fn plan_summary(plan: &Plan) -> String {
 fn step_line(step: &PlanStep) -> String {
     match step.operation {
         TransformId::Remux => "Remux to the required container (stream copy).".into(),
-        TransformId::TranscodeVideo => "Transcode video; copy audio if present.".into(),
+        TransformId::TranscodeVideo => {
+            if step.target.max_bytes.is_some() {
+                "Re-encode video to fit the size limit; copy audio if present.".into()
+            } else {
+                "Transcode video; copy audio if present.".into()
+            }
+        }
         TransformId::EncodeJpeg => "Encode to JPEG without changing the pixel dimensions.".into(),
         TransformId::ImageAdapt => "Adapt the image to the required target.".into(),
     }
@@ -275,5 +284,33 @@ mod tests {
         let outcome = plan(&artifact, &constraints, &default_catalog());
         let planned = explain_plan(&artifact, &report, &outcome);
         assert!(!planned.summary.contains("MATROSKA,WEBM"));
+    }
+
+    #[test]
+    fn size_fit_explanation_names_the_byte_limit() {
+        let artifact = Artifact::media(
+            Container::Mp4,
+            VideoCodec::H264,
+            Some(AudioCodec::Aac),
+            5_000_000,
+        );
+        let constraints = crate::constraints::compile(crate::constraints::ConstraintInput {
+            container: Some(vec!["mp4".into()]),
+            video_codec: Some(vec!["h264".into()]),
+            audio_codec: Some(vec!["aac".into()]),
+            max_bytes: Some(2_000_000),
+            ..crate::constraints::ConstraintInput::default()
+        })
+        .unwrap();
+        let report = check(&artifact, &constraints);
+        let outcome = plan(&artifact, &constraints, &default_catalog());
+        let explanation = explain_plan(&artifact, &report, &outcome);
+        assert!(explanation.summary.contains("size limit"));
+        assert!(
+            explanation
+                .details
+                .iter()
+                .any(|line| line.contains("fit the size limit"))
+        );
     }
 }

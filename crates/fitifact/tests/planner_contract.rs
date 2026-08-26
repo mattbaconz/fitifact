@@ -318,9 +318,12 @@ fn refuses_every_source_outside_the_exact_v01_operation_matrix() {
         Some(AudioCodec::Aac),
         1000,
     );
+    let planned = plan(&mov_hevc, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(planned.steps()[0].operation, TransformId::TranscodeVideo);
+    assert_eq!(planned.steps()[0].target.container, Some(Container::Mp4));
     assert_eq!(
-        blocking(&mov_hevc, &media_h264_mp4_aac()),
-        vec![BlockingCode::UnsupportedContainer]
+        planned.steps()[0].target.video_codec,
+        Some(VideoCodec::H264)
     );
 }
 
@@ -523,7 +526,7 @@ fn approved_transcode_claims_only_provable_pixel_and_color_preservation() {
 }
 
 #[test]
-fn refuses_when_a_transform_makes_a_passing_size_fact_uncertain() {
+fn remux_is_allowed_when_the_source_already_fits_the_byte_ceiling() {
     let artifact = Artifact::media(
         Container::Mov,
         VideoCodec::H264,
@@ -538,8 +541,85 @@ fn refuses_when_a_transform_makes_a_passing_size_fact_uncertain() {
         ..ConstraintInput::default()
     })
     .unwrap();
-    assert_eq!(
-        blocking(&artifact, &target),
-        vec![BlockingCode::UncertainPostTransformSize]
+    let outcome = plan(&artifact, &target, &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::Remux);
+    assert!(outcome.steps()[0].target.max_bytes.is_none());
+}
+
+#[test]
+fn oversized_h264_mp4_plans_a_size_fitting_encode() {
+    let artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        5_000_000,
     );
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(2_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert_eq!(step.target.max_bytes, Some(2_000_000));
+    assert_eq!(step.target.duration_ms, Some(1_000));
+    assert_eq!(step.target.video_codec, Some(VideoCodec::H264));
+}
+
+#[test]
+fn oversized_mov_h264_encodes_instead_of_remuxing() {
+    let artifact = Artifact::media(
+        Container::Mov,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        5_000_000,
+    );
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(2_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert_eq!(step.target.container, Some(Container::Mp4));
+    assert_eq!(step.target.max_bytes, Some(2_000_000));
+}
+
+#[test]
+fn mov_hevc_with_a_byte_ceiling_stays_one_encode() {
+    let artifact = Artifact::media(
+        Container::Mov,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        5_000_000,
+    );
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(2_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    let steps = outcome.steps();
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0].operation, TransformId::TranscodeVideo);
+    assert_eq!(steps[0].target.max_bytes, Some(2_000_000));
+}
+
+#[test]
+fn core_planner_does_not_special_case_destinations() {
+    let src = include_str!("../src/plan.rs").to_ascii_lowercase();
+    for needle in ["discord", "gmail", "nitro", "youtube"] {
+        assert!(!src.contains(needle), "{needle} must not appear in plan.rs");
+    }
 }

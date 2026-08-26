@@ -30,6 +30,15 @@ describe("parser-facing editable target", () => {
     ]);
   });
 
+  it("keeps WebP when the confirmed target names it", () => {
+    const editable = editableTargetFromConstraints({
+      schema: "fitifact.constraints/v1",
+      hard: [{ id: "format", field: "image.format", op: "in", value: ["jpeg", "png", "webp"] }],
+      preferences: { preserve_audio: true, preserve_resolution: true },
+    });
+    expect(editable.formats).toEqual(["jpeg", "png", "webp"]);
+  });
+
   it("intersects repeated constraints and retains exact plus range bounds", () => {
     const editable = editableTargetFromConstraints({
       schema: "fitifact.constraints/v1",

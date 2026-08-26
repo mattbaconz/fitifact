@@ -33,7 +33,7 @@ pub fn inspect_local_bytes(bytes: &[u8]) -> Result<Artifact> {
     }
     Err(Error::new(
         ErrorCode::InspectionUnsupported,
-        "this surface inspects JPEG and PNG only; use the Fitifact CLI for media",
+        "this surface inspects local images only; use the Fitifact CLI for media",
     ))
 }
 

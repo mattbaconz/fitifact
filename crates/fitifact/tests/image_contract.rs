@@ -2,7 +2,8 @@ use fitifact::artifact::{Artifact, ImageFormat};
 use fitifact::capability::default_catalog;
 use fitifact::constraints::image_jpeg;
 use fitifact::image::{
-    animated_webp_header, artifact_from_bytes, encode_jpeg_bytes, sample_jpeg_rgb, sample_png_rgb,
+    animated_webp_header, artifact_from_bytes, encode_jpeg_bytes, sample_animated_gif,
+    sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb, sample_tiff_rgb,
     sample_webp_rgb,
 };
 use fitifact::plan::{BlockingCode, plan};
@@ -57,6 +58,29 @@ fn animated_webp_is_refused() {
     );
     assert_eq!(artifact.image.as_ref().unwrap().animated, Some(true));
     assert!(fitifact::plan_image_adaptation(&artifact, &image_jpeg()).is_err());
+}
+
+#[test]
+fn tiff_bmp_and_still_gif_inspect_and_plan_to_jpeg() {
+    for (bytes, format) in [
+        (sample_tiff_rgb(8, 8), ImageFormat::Tiff),
+        (sample_bmp_rgb(8, 8), ImageFormat::Bmp),
+        (sample_gif_rgb(8, 8), ImageFormat::Gif),
+    ] {
+        let artifact = artifact_from_bytes(None, &bytes).unwrap();
+        assert_eq!(artifact.image.as_ref().unwrap().format, Some(format));
+        let adapted = fitifact::plan_image_adaptation(&artifact, &image_jpeg()).unwrap();
+        assert_eq!(adapted.target.format, ImageFormat::Jpeg);
+        assert!(!adapted.target.first_frame.required);
+    }
+}
+
+#[test]
+fn animated_gif_plans_first_frame_instead_of_silent_drop() {
+    let artifact = artifact_from_bytes(None, &sample_animated_gif(8, 8)).unwrap();
+    assert_eq!(artifact.image.as_ref().unwrap().animated, Some(true));
+    let adapted = fitifact::plan_image_adaptation(&artifact, &image_jpeg()).unwrap();
+    assert!(adapted.target.first_frame.required);
 }
 
 #[test]

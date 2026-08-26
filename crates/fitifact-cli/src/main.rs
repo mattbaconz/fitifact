@@ -13,7 +13,7 @@ use fitifact::runtime::{ExecutionContext, SystemSpawner, TransformProvider};
 use fitifact::{
     AdaptRequest, AdaptationStatus, BenchOptions, ConstraintInput, ConstraintSet, PlanOutcome,
     adapt, check, compile, compile_from_yaml, explain_check, explain_plan, find_lockfile, inspect,
-    plan, resolve_fixtures, run_bench,
+    load_profile, plan, resolve_fixtures, run_bench,
 };
 
 #[derive(Parser)]
@@ -110,10 +110,27 @@ struct TargetArgs {
             "image_format",
             "max_size",
             "max_width",
-            "max_height"
+            "max_height",
+            "for"
         ]
     )]
     constraints: Option<PathBuf>,
+    #[arg(
+        long = "for",
+        id = "for",
+        value_name = "PROFILE",
+        conflicts_with_all = [
+            "container",
+            "video_codec",
+            "audio_codec",
+            "image_format",
+            "max_size",
+            "max_width",
+            "max_height",
+            "constraints"
+        ]
+    )]
+    r#for: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -487,6 +504,9 @@ fn parse_size_arg(raw: &str) -> Result<u64, String> {
 }
 
 fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
+    if let Some(id) = &target.r#for {
+        return load_profile(id).map_err(CliError::engine);
+    }
     if let Some(path) = &target.constraints {
         let mut file = std::fs::File::open(path)
             .map_err(|err| CliError::usage(format!("cannot read {}: {err}", path.display())))?;
@@ -502,7 +522,7 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
         && target.max_height.is_none()
     {
         return Err(CliError::usage(
-            "provide destination constraints via flags (e.g. --container mp4 --video-codec h264 or --image-format jpeg) or --constraints FILE.yaml",
+            "provide destination constraints via flags (e.g. --container mp4 --video-codec h264 or --image-format jpeg), --constraints FILE.yaml, or --for PROFILE",
         ));
     }
     compile(ConstraintInput {

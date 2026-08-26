@@ -57,11 +57,15 @@ Write-Host "Fixture hashes, size bounds, inventory, and provenance: PASS"
 $image = Join-Path $root "fixtures\image"
 $imageManifest = Join-Path $image "SHA256SUMS"
 $imageNames = @(
+    "animated-gif.gif",
     "compatible-jpeg.jpg",
     "crop-grid.png",
     "malformed-image.jpg",
     "mismatch-png.png",
     "oversized-pixels.png",
+    "still-bmp.bmp",
+    "still-gif.gif",
+    "still-tiff.tiff",
     "still-webp.webp",
     "synthetic-single.heic",
     "transparent-png.png"
@@ -77,10 +81,10 @@ foreach ($line in Get-Content -LiteralPath $imageManifest) {
     $imageListed[$Matches[2]] = $Matches[1]
 }
 $imageActual = @(Get-ChildItem -LiteralPath $image -File | Where-Object {
-    $_.Extension -in @(".jpg", ".jpeg", ".png", ".heic", ".webp")
+    $_.Extension -in @(".jpg", ".jpeg", ".png", ".heic", ".webp", ".tif", ".tiff", ".bmp", ".gif")
 } | ForEach-Object Name | Sort-Object)
 if (Compare-Object ($imageNames | Sort-Object) $imageActual) {
-    throw "Image fixture directory does not contain exactly the eight canonical image binaries"
+    throw "Image fixture directory does not contain exactly the twelve canonical image binaries"
 }
 foreach ($name in $imageNames) {
     $path = Join-Path $image $name
@@ -99,7 +103,7 @@ foreach ($name in $imageNames) {
     Write-Host "$hash  $name ($length bytes)"
 }
 $imageReadme = Get-Content -Raw -LiteralPath (Join-Path $image "README.md")
-foreach ($required in @("2026-08-21", "owned synthetic pixels", "Windows HEIF encoder", "JPEG", "PNG", "WebP", "HEIC", "malformed", "24-megapixel")) {
+foreach ($required in @("2026-08-25", "owned synthetic pixels", "Windows HEIF encoder", "JPEG", "PNG", "WebP", "HEIC", "TIFF", "BMP", "GIF", "malformed", "24-megapixel")) {
     if (-not $imageReadme.Contains($required)) {
         throw "Image fixture provenance is missing: $required"
     }

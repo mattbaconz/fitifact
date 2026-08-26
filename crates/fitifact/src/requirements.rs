@@ -251,7 +251,12 @@ fn parse_formats(
 ) {
     let matches: Vec<_> = tokens
         .iter()
-        .filter(|token| matches!(token.value.as_str(), "jpeg" | "jpg" | "jpe" | "png"))
+        .filter(|token| {
+            matches!(
+                token.value.as_str(),
+                "jpeg" | "jpg" | "jpe" | "png" | "webp" | "gif" | "tiff" | "tif" | "bmp"
+            )
+        })
         .collect();
     if matches.is_empty() {
         return;
@@ -263,6 +268,14 @@ fn parse_formats(
         .collect();
     formats.sort();
     formats.dedup();
+
+    let has_explicit_alternative = matches.windows(2).any(|pair| {
+        tokens.iter().any(|token| {
+            token.start >= pair[0].end
+                && token.end <= pair[1].start
+                && matches!(token.value.as_str(), "or" | "/")
+        })
+    });
 
     let mut ambiguous_pairs = Vec::new();
     for pair in matches.windows(2) {
@@ -278,7 +291,7 @@ fn parse_formats(
         {
             mark(covered, conjunction.start, conjunction.end);
         }
-        if connectors.is_empty() && formats.len() > 1 {
+        if connectors.is_empty() && formats.len() > 1 && !has_explicit_alternative {
             ambiguous_pairs.push((pair[0], pair[1]));
         }
         for connector in connectors {

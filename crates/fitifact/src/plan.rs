@@ -10,6 +10,7 @@ use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 use crate::image_adapt::ImageAdaptStepTarget;
+use crate::media_fit::{can_fit_media, file_bytes_limit};
 
 pub const PLANNER_VERSION: &str = "0.1.0";
 const MAX_DEPTH: usize = 2;
@@ -24,6 +25,14 @@ pub struct StepTarget {
     pub image_format: Option<ImageFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<ImageAdaptStepTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,15 +236,14 @@ pub fn plan(
     if let Some(reason) = mutation_blocker(artifact, &initial) {
         return cannot(vec![reason]);
     }
-    if constraints
-        .hard
-        .iter()
-        .any(|constraint| constraint.field == Field::FileBytes)
+    if let Some(limit) = file_bytes_limit(constraints)
+        && artifact.byte_length > limit
+        && !can_fit_media(artifact, limit)
     {
         return cannot(vec![blocking(
-            BlockingCode::UncertainPostTransformSize,
+            BlockingCode::SizeFittingUnsupported,
             ids_for(&initial, Field::FileBytes),
-            "v0.1 cannot prove a size limit still passes after a transform",
+            "the size limit is below the quality floor this encoder will use",
         )]);
     }
 
@@ -479,15 +487,13 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
             ));
         }
     }
-    if let Some(check) = report.failing_or_unknown(Field::FileBytes) {
+    if let Some(check) = report.failing_or_unknown(Field::FileBytes)
+        && check.result == CheckResult::Unknown
+    {
         return Some(blocking(
-            if check.result == CheckResult::Unknown {
-                BlockingCode::UnknownRequiredFact
-            } else {
-                BlockingCode::SizeFittingUnsupported
-            },
+            BlockingCode::UnknownRequiredFact,
             vec![check.constraint_id.clone()],
-            "v0.1 can check file size but cannot fit a size limit",
+            "the encoded size is unknown",
         ));
     }
     None
@@ -526,57 +532,10 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
             "v0.1 cannot execute a transform without known video dimensions and duration",
         ));
     }
-    if let Some(check) = report.failing_or_unknown(Field::MediaVideoCodec) {
-        let video = artifact.first_video().expect("topology checked");
-        if video.codec.is_none() {
-            return Some(blocking(
-                BlockingCode::UnknownRequiredFact,
-                vec![check.constraint_id.clone()],
-                "the video codec is unknown",
-            ));
-        }
-        if video.codec != Some(VideoCodec::Hevc) {
-            return Some(blocking(
-                BlockingCode::UnsupportedVideoCodec,
-                vec![check.constraint_id.clone()],
-                "v0.1 can transcode only HEVC video to H.264",
-            ));
-        }
-        if artifact.container != Some(Container::Mp4) {
-            return Some(blocking(
-                BlockingCode::UnsupportedContainer,
-                ids_for(report, Field::MediaContainer),
-                "the v0.1 video-transcode capability accepts only MP4 source containers",
-            ));
-        }
-        if video.hdr != HdrStatus::Sdr {
-            return Some(blocking(
-                BlockingCode::HdrConversionUnsupported,
-                vec![check.constraint_id.clone()],
-                "v0.1 does not perform or assume HDR semantic conversion",
-            ));
-        }
-        if video.bit_depth != Some(8) {
-            return Some(blocking(
-                BlockingCode::BitDepthConversionUnsupported,
-                vec![check.constraint_id.clone()],
-                "v0.1 transcodes only known 8-bit video and does not assume bit-depth conversion",
-            ));
-        }
-        if video.pixel_format.as_deref() != Some("yuv420p") {
-            return Some(blocking(
-                BlockingCode::PixelFormatConversionUnsupported,
-                vec![check.constraint_id.clone()],
-                "v0.1 transcodes only known yuv420p video and will not force pixel-format conversion",
-            ));
-        }
-        if !approved_sdr_color(video) {
-            return Some(blocking(
-                BlockingCode::ColorConversionUnsupported,
-                vec![check.constraint_id.clone()],
-                "v0.1 transcodes only known limited-range BT.709 color and will not assume color conversion",
-            ));
-        }
+    let bytes_fail = report.failing_or_unknown(Field::FileBytes).is_some();
+    let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec).is_some();
+    if bytes_fail || codec_fail {
+        return encode_mutation_blocker(artifact, report);
     }
     if let Some(check) = report
         .failing_or_unknown(Field::MediaContainer)
@@ -591,6 +550,75 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
     None
 }
 
+fn encode_mutation_blocker(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+) -> Option<BlockingReason> {
+    let video = artifact.first_video().expect("topology checked");
+    if video.codec.is_none() {
+        return Some(blocking(
+            BlockingCode::UnknownRequiredFact,
+            ids_for(report, Field::MediaVideoCodec),
+            "the video codec is unknown",
+        ));
+    }
+    let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec).is_some();
+    if codec_fail && video.codec != Some(VideoCodec::Hevc) {
+        return Some(blocking(
+            BlockingCode::UnsupportedVideoCodec,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 can transcode only HEVC video to H.264",
+        ));
+    }
+    if !codec_fail && video.codec != Some(VideoCodec::H264) && video.codec != Some(VideoCodec::Hevc)
+    {
+        return Some(blocking(
+            BlockingCode::UnsupportedVideoCodec,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 can re-encode only H.264 or HEVC video to H.264",
+        ));
+    }
+    if !matches!(
+        artifact.container,
+        Some(Container::Mp4) | Some(Container::Mov)
+    ) {
+        return Some(blocking(
+            BlockingCode::UnsupportedContainer,
+            ids_for(report, Field::MediaContainer),
+            "the v0.1 video-encode capability accepts only MP4 and MOV source containers",
+        ));
+    }
+    if video.hdr != HdrStatus::Sdr {
+        return Some(blocking(
+            BlockingCode::HdrConversionUnsupported,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 does not perform or assume HDR semantic conversion",
+        ));
+    }
+    if video.bit_depth != Some(8) {
+        return Some(blocking(
+            BlockingCode::BitDepthConversionUnsupported,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 transcodes only known 8-bit video and does not assume bit-depth conversion",
+        ));
+    }
+    if video.pixel_format.as_deref() != Some("yuv420p") {
+        return Some(blocking(
+            BlockingCode::PixelFormatConversionUnsupported,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 transcodes only known yuv420p video and will not force pixel-format conversion",
+        ));
+    }
+    if !approved_sdr_color(video) {
+        return Some(blocking(
+            BlockingCode::ColorConversionUnsupported,
+            ids_for(report, Field::MediaVideoCodec),
+            "v0.1 transcodes only known limited-range BT.709 color and will not assume color conversion",
+        ));
+    }
+    None
+}
+
 fn image_mutation_blocker(
     artifact: &Artifact,
     report: &CompatibilityReport,
@@ -598,12 +626,17 @@ fn image_mutation_blocker(
     let image = artifact.image.as_ref();
     let format = image.and_then(|facts| facts.format.clone());
     match format {
-        Some(ImageFormat::Jpeg) | Some(ImageFormat::Png) | Some(ImageFormat::Webp) => {}
+        Some(ImageFormat::Jpeg)
+        | Some(ImageFormat::Png)
+        | Some(ImageFormat::Webp)
+        | Some(ImageFormat::Tiff)
+        | Some(ImageFormat::Bmp)
+        | Some(ImageFormat::Gif) => {}
         Some(_) => {
             return Some(blocking(
                 BlockingCode::UnsupportedImageFormat,
                 ids_for(report, Field::ImageFormat),
-                "the image slice adapts JPEG, PNG, and still WebP to JPEG or PNG",
+                "the image slice adapts JPEG, PNG, WebP, TIFF, BMP, and GIF",
             ));
         }
         None => {
@@ -648,6 +681,7 @@ fn instantiate(
                 || video.width.is_none()
                 || video.height.is_none()
                 || artifact.duration_ms.is_none()
+                || report.failing_or_unknown(Field::FileBytes).is_some()
             {
                 return None;
             }
@@ -656,9 +690,7 @@ fn instantiate(
                 operation,
                 target: StepTarget {
                     container: Some(Container::Mp4),
-                    video_codec: None,
-                    image_format: None,
-                    image: None,
+                    ..StepTarget::default()
                 },
                 reasons: vec![PlanReason {
                     constraint_id: container.constraint_id.clone(),
@@ -673,74 +705,59 @@ fn instantiate(
             })
         }
         TransformId::TranscodeVideo => {
-            let video = report.failing_or_unknown(Field::MediaVideoCodec)?;
             let input_video = artifact.first_video()?;
             let width = input_video.width?;
             let height = input_video.height?;
-            if artifact.container != Some(Container::Mp4)
-                || input_video.codec != Some(VideoCodec::Hevc)
-                || artifact.duration_ms.is_none()
+            let duration_ms = artifact.duration_ms?;
+            let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec);
+            let bytes_fail = report.failing_or_unknown(Field::FileBytes);
+            if codec_fail.is_none() && bytes_fail.is_none() {
+                return None;
+            }
+            if !matches!(
+                artifact.container,
+                Some(Container::Mp4) | Some(Container::Mov)
+            ) {
+                return None;
+            }
+            if codec_fail.is_some() && input_video.codec != Some(VideoCodec::Hevc) {
+                return None;
+            }
+            if codec_fail.is_none()
+                && input_video.codec != Some(VideoCodec::H264)
+                && input_video.codec != Some(VideoCodec::Hevc)
             {
                 return None;
             }
-            let mut reasons = vec![PlanReason {
-                constraint_id: video.constraint_id.clone(),
-                message: "The target requires H.264 video.".into(),
-            }];
+            let max_bytes = file_bytes_from_report(report);
+            if let Some(limit) = max_bytes
+                && artifact.byte_length > limit
+                && !can_fit_media(artifact, limit)
+            {
+                return None;
+            }
+            let mut reasons = Vec::new();
+            if let Some(video) = codec_fail {
+                reasons.push(PlanReason {
+                    constraint_id: video.constraint_id.clone(),
+                    message: "The target requires H.264 video.".into(),
+                });
+            }
             if let Some(container) = report.failing_or_unknown(Field::MediaContainer) {
                 reasons.push(PlanReason {
                     constraint_id: container.constraint_id.clone(),
                     message: "The target requires an MP4 container.".into(),
                 });
             }
-            let mut expected = vec![
-                ExpectedFact {
-                    field: Field::MediaVideoCodec,
-                    value: ExpectedValue::VideoCodec(VideoCodec::H264),
-                },
-                ExpectedFact {
-                    field: Field::MediaContainer,
-                    value: ExpectedValue::Container(Container::Mp4),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoWidth,
-                    value: ExpectedValue::Integer(u64::from(width)),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoHeight,
-                    value: ExpectedValue::Integer(u64::from(height)),
-                },
-            ];
-            expected.extend([
-                ExpectedFact {
-                    field: Field::MediaVideoPixelFormat,
-                    value: ExpectedValue::Text("yuv420p".into()),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoBitDepth,
-                    value: ExpectedValue::Integer(8),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoColorRange,
-                    value: ExpectedValue::Text("tv".into()),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoColorSpace,
-                    value: ExpectedValue::Text("bt709".into()),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoColorTransfer,
-                    value: ExpectedValue::Text("bt709".into()),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoColorPrimaries,
-                    value: ExpectedValue::Text("bt709".into()),
-                },
-                ExpectedFact {
-                    field: Field::MediaVideoHdr,
-                    value: ExpectedValue::Text("sdr".into()),
-                },
-            ]);
+            if let Some(bytes) = bytes_fail {
+                reasons.push(PlanReason {
+                    constraint_id: bytes.constraint_id.clone(),
+                    message: "The target requires a smaller file.".into(),
+                });
+            }
+            if reasons.is_empty() {
+                return None;
+            }
             let mut preservation = vec![
                 PreservationClaim::VideoDimensions,
                 PreservationClaim::VideoPixelFormat,
@@ -755,11 +772,14 @@ fn instantiate(
                 target: StepTarget {
                     container: Some(Container::Mp4),
                     video_codec: Some(VideoCodec::H264),
-                    image_format: None,
-                    image: None,
+                    max_bytes,
+                    duration_ms: max_bytes.map(|_| duration_ms),
+                    width: Some(width),
+                    height: Some(height),
+                    ..StepTarget::default()
                 },
                 reasons,
-                expected,
+                expected: transcode_expected_facts(width, height),
                 preservation,
                 warnings: Vec::new(),
             })
@@ -776,10 +796,8 @@ fn instantiate(
                 id: format!("step-{}", index + 1),
                 operation,
                 target: StepTarget {
-                    container: None,
-                    video_codec: None,
                     image_format: Some(ImageFormat::Jpeg),
-                    image: None,
+                    ..StepTarget::default()
                 },
                 reasons: vec![PlanReason {
                     constraint_id: format.constraint_id.clone(),
@@ -807,7 +825,67 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
         image.alpha = Some(false);
         image.animated = Some(false);
     }
+    if let Some(max_bytes) = step.target.max_bytes {
+        next.byte_length = max_bytes;
+    }
     next
+}
+
+fn file_bytes_from_report(report: &CompatibilityReport) -> Option<u64> {
+    report
+        .checks
+        .iter()
+        .find(|check| check.field == Field::FileBytes)
+        .and_then(|check| check.required.parse().ok())
+}
+
+fn transcode_expected_facts(width: u32, height: u32) -> Vec<ExpectedFact> {
+    vec![
+        ExpectedFact {
+            field: Field::MediaVideoCodec,
+            value: ExpectedValue::VideoCodec(VideoCodec::H264),
+        },
+        ExpectedFact {
+            field: Field::MediaContainer,
+            value: ExpectedValue::Container(Container::Mp4),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoWidth,
+            value: ExpectedValue::Integer(u64::from(width)),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoHeight,
+            value: ExpectedValue::Integer(u64::from(height)),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoPixelFormat,
+            value: ExpectedValue::Text("yuv420p".into()),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoBitDepth,
+            value: ExpectedValue::Integer(8),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoColorRange,
+            value: ExpectedValue::Text("tv".into()),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoColorSpace,
+            value: ExpectedValue::Text("bt709".into()),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoColorTransfer,
+            value: ExpectedValue::Text("bt709".into()),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoColorPrimaries,
+            value: ExpectedValue::Text("bt709".into()),
+        },
+        ExpectedFact {
+            field: Field::MediaVideoHdr,
+            value: ExpectedValue::Text("sdr".into()),
+        },
+    ]
 }
 
 fn ids_for(report: &CompatibilityReport, field: Field) -> Vec<String> {

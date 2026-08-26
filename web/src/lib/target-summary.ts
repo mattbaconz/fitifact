@@ -1,8 +1,10 @@
 import { formatBytes } from "./constraints";
-import type { EditableTarget } from "../types";
+import type { EditableTarget, OutputFormat } from "../types";
 
-function formatName(format: "jpeg" | "png"): string {
-  return format === "jpeg" ? "JPG" : "PNG";
+function formatName(format: OutputFormat): string {
+  if (format === "jpeg") return "JPG";
+  if (format === "webp") return "WebP";
+  return "PNG";
 }
 
 function dimensionSummary(target: EditableTarget): string | null {

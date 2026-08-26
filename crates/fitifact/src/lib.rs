@@ -16,7 +16,9 @@ pub mod image;
 pub mod image_adapt;
 pub mod inspect;
 pub mod local;
+pub mod media_fit;
 pub mod plan;
+pub mod profile;
 pub mod report;
 pub mod requirements;
 pub mod runtime;
@@ -41,22 +43,25 @@ pub use error::{Error, ErrorCode};
 pub use ffmpeg::{FfmpegProvider, ffmpeg_args};
 pub use image::{
     ImageProvider, MAX_IMAGE_INPUT_BYTES, MAX_IMAGE_PIXELS,
-    artifact_from_bytes as image_artifact_from_bytes, encode_jpeg_bytes, sample_jpeg_rgb,
-    sample_png_rgb, sample_webp_rgb,
+    artifact_from_bytes as image_artifact_from_bytes, encode_jpeg_bytes, sample_animated_gif,
+    sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb, sample_tiff_rgb,
+    sample_webp_rgb, unrecognized_input,
 };
 pub use image_adapt::{
     AtomicCancellation, BuiltinImageProvider, CancellationSignal, ImageAdaptExecution,
     ImageAdaptOperation, ImageAdaptOptions, ImageAdaptPlan, ImageAdaptProvider,
     ImageAdaptStepTarget, ImageAdaptTarget, ImageCropRequirement, ImageExecutionStats,
-    ImageMetadataBehavior, ImagePreservationClaim, ImageProviderOutput, NeverCancelled,
-    NormalizedCropRectangle, execute_image_adaptation, execute_image_adaptation_with_provider,
-    plan_image_adaptation,
+    ImageFirstFrameRequirement, ImageMetadataBehavior, ImagePreservationClaim, ImageProviderOutput,
+    NeverCancelled, NormalizedCropRectangle, execute_image_adaptation,
+    execute_image_adaptation_with_provider, plan_image_adaptation,
 };
 pub use inspect::{
     DefaultInspector, FfprobeInspector, Inspector, artifact_from_ffprobe_json, inspect,
 };
 pub use local::{LocalImageResult, adapt_local_image_bytes, inspect_local_bytes};
+pub use media_fit::{can_fit_media, file_bytes_limit};
 pub use plan::{Plan, PlanOutcome, plan};
+pub use profile::{compile_profile_yaml, load_profile};
 pub use report::{Explanation, explain_check, explain_plan};
 pub use requirements::{
     RequirementAmbiguity, RequirementParse, RequirementSourceSpan, UnresolvedRequirement,

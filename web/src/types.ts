@@ -14,8 +14,9 @@ export type ProductState =
   | "unsupported_heic"
   | "error";
 
-export type ImageKind = "jpeg" | "png" | "webp" | "heic";
-export type RasterFormat = "jpeg" | "png" | "webp" | "heif";
+export type ImageKind = "jpeg" | "png" | "webp" | "heic" | "gif" | "tiff" | "bmp";
+export type RasterFormat = "jpeg" | "png" | "webp" | "heif" | "gif" | "tiff" | "bmp";
+export type OutputFormat = "jpeg" | "png" | "webp";
 
 export interface ErrorReport {
   schema: "fitifact.error/v1";
@@ -69,6 +70,7 @@ export interface Artifact {
     height: number | null;
     alpha: boolean | null;
     animated: boolean | null;
+    page_count?: number | null;
   };
 }
 
@@ -93,11 +95,11 @@ export interface ImagePlan {
     steps: Array<{ operation: "image.adapt" }>;
   };
   noop: boolean;
-  source_format: "jpeg" | "png" | "webp";
+  source_format: RasterFormat;
   source_width: number;
   source_height: number;
   target: {
-    format: "jpeg" | "png";
+    format: OutputFormat;
     width: number;
     height: number;
     max_bytes: number | null;
@@ -108,6 +110,10 @@ export interface ImagePlan {
       explicit_consent_required: boolean;
       target_aspect_width: number;
       target_aspect_height: number;
+    };
+    first_frame: {
+      required: boolean;
+      explicit_consent_required: boolean;
     };
     quality_warnings: string[];
     upscale_warnings: string[];
@@ -138,7 +144,7 @@ export interface AdaptReport {
 }
 
 export interface EditableTarget {
-  formats: Array<"jpeg" | "png">;
+  formats: OutputFormat[];
   maxBytes: string;
   widthExact: string;
   widthMin: string;

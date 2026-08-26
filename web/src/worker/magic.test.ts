@@ -37,6 +37,19 @@ describe("local magic detection", () => {
     expect(classifyInput(truncated)).toBe("unsupported");
   });
 
+  it("recognizes GIF, TIFF, BMP, video, PDF, and ZIP magic", () => {
+    expect(classifyInput(new TextEncoder().encode("GIF89a"))).toBe("gif");
+    const tiff = new Uint8Array([0x49, 0x49, 0x2a, 0x00]);
+    expect(classifyInput(tiff)).toBe("tiff");
+    expect(classifyInput(new TextEncoder().encode("BM"))).toBe("bmp");
+    const video = new Uint8Array(16);
+    video.set([0, 0, 0, 16], 0);
+    video.set(new TextEncoder().encode("ftypisom"), 4);
+    expect(classifyInput(video)).toBe("video");
+    expect(classifyInput(new TextEncoder().encode("%PDF-1.7"))).toBe("pdf");
+    expect(classifyInput(Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0, 0]))).toBe("zip");
+  });
+
   it("never promotes SVG or HTML text into a renderable type", () => {
     expect(classifyInput(new TextEncoder().encode("<svg><script>alert(1)</script></svg>"))).toBe("unsupported");
     expect(classifyInput(new TextEncoder().encode("<!doctype html><img src=x>"))).toBe("unsupported");

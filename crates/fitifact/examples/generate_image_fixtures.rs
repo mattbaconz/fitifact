@@ -2,7 +2,10 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
-use fitifact::image::{sample_jpeg_rgb, sample_png_rgb};
+use fitifact::image::{
+    sample_animated_gif, sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb,
+    sample_tiff_rgb,
+};
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage, Rgba, RgbaImage};
 
 fn main() {
@@ -53,6 +56,11 @@ fn main() {
         .write_to(&mut webp, ImageFormat::WebP)
         .expect("encode WebP fixture");
     write(&output, "still-webp.webp", webp.into_inner());
+
+    write(&output, "still-bmp.bmp", sample_bmp_rgb(8, 8));
+    write(&output, "still-tiff.tiff", sample_tiff_rgb(8, 8));
+    write(&output, "still-gif.gif", sample_gif_rgb(8, 8));
+    write(&output, "animated-gif.gif", sample_animated_gif(8, 8));
 }
 
 fn write_png(output: &std::path::Path, name: &str, image: DynamicImage) {

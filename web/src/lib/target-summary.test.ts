@@ -17,5 +17,10 @@ describe("target summary", () => {
       widthExact: "600",
       heightExact: "600",
     })).toBe("JPG or PNG · 600×600");
+    expect(summarizeTarget({
+      ...EMPTY_TARGET,
+      formats: ["jpeg", "png", "webp"],
+      maxBytes: "2000000",
+    })).toBe("JPG or PNG or WebP · ≤2.00 MB");
   });
 });

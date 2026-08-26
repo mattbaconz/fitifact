@@ -1,0 +1,50 @@
+schema: fitifact.profile/v1
+id: generic/video-upload
+name: Generic H.264 MP4 video upload
+revision: 1
+last_verified: 2026-08-25
+
+scope:
+  kind: web-upload
+  feature: video-upload
+  note: Documented starter for MP4 H.264/AAC with a 25 MB ceiling.
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-user
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-user
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-user
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 25000000
+    source: src-user
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-user
+    type: user-config
+    observed_at: 2026-08-25
+    note: Local starter for a typical 25 MB MP4 H.264/AAC upload. Not a claim about a named platform.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

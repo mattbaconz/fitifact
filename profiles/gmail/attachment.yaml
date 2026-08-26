@@ -1,0 +1,36 @@
+schema: fitifact.profile/v1
+id: gmail/attachment
+name: Gmail attachment
+revision: 1
+last_verified: 2026-08-25
+
+scope:
+  kind: email-attachment
+  platform: gmail
+  feature: attachment
+
+trust:
+  level: documented
+
+constraints:
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 25000000
+    source: src-size
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-size
+    type: official-doc
+    url: https://support.google.com/mail/answer/6584
+    observed_at: 2026-08-25
+    note: Gmail rejects attachments larger than 25 MB.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

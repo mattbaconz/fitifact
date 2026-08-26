@@ -1,16 +1,19 @@
 # Image fixtures
 
-Generated/expanded: **2026-08-21** from owned synthetic pixels. No fixture was
+Generated/expanded: **2026-08-25** from owned synthetic pixels. No fixture was
 copied from the web or a third-party photo.
 
 `cargo run --locked -p fitifact --example generate_image_fixtures` creates the
-JPEG/PNG set with the pinned Rust `image` crate. `compatible-jpeg.jpg` and
-`mismatch-png.png` remain the original 8 × 8 D-025 canonical pair.
-`still-webp.webp` is an owned 8 × 8 still WebP encoded by the pinned Rust `image`
-crate. `transparent-png.png` exercises alpha refusal, `crop-grid.png` makes crop
-consent visually reviewable, `malformed-image.jpg` is a deliberately truncated
-JPEG-signature input, and `oversized-pixels.png` is a valid 6,001 × 4,000 solid
-PNG that exceeds the 24-megapixel decoded limit while remaining repository-safe.
+JPEG/PNG/WebP/TIFF/BMP/GIF set with the pinned Rust `image` crate.
+`compatible-jpeg.jpg` and `mismatch-png.png` remain the original 8 × 8 D-025
+canonical pair. `still-webp.webp` is an owned 8 × 8 still WebP.
+`still-tiff.tiff`, `still-bmp.bmp`, and `still-gif.gif` are owned 8 × 8 still
+images. `animated-gif.gif` is an owned two-frame GIF used to prove first-frame
+consent. `transparent-png.png` exercises alpha refusal, `crop-grid.png` makes
+crop consent visually reviewable, `malformed-image.jpg` is a deliberately
+truncated JPEG-signature input, and `oversized-pixels.png` is a valid
+6,001 × 4,000 solid PNG that exceeds the 24-megapixel decoded limit while
+remaining repository-safe.
 
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
 scripts/generate-heic-fixture.ps1 -Force` encodes `synthetic-single.heic` from

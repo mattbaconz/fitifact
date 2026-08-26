@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use crate::artifact::{Artifact, Container, StreamType, VideoCodec};
 use crate::capability::TransformId;
+use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
-use crate::plan::{Plan, PlanStep};
+use crate::media_fit::{bitrate_ladder, floor_video_bitrate_bps, video_bitrate_from_budget};
+use crate::plan::{ExpectedFact, ExpectedValue, Plan, PlanStep};
 use crate::runtime::{
     ExecutionContext, ProcessSpawner, SpawnOutput, StreamHashes, SystemSpawner, TransformProvider,
 };
@@ -117,14 +119,90 @@ impl<S: ProcessSpawner> FfmpegProvider<S> {
                     )
                 })?;
             }
-            let args = ffmpeg_args(step, &current, &dest)?;
-            let spawned = self.spawner.spawn(&self.ffmpeg_program, &args, timeout)?;
-            check_ffmpeg_status(spawned, step)?;
+            if step.operation == TransformId::TranscodeVideo {
+                self.run_transcode(step, &current, &dest, timeout)?;
+            } else {
+                let args = ffmpeg_args(step, &current, &dest)?;
+                let spawned = self.spawner.spawn(&self.ffmpeg_program, &args, timeout)?;
+                check_ffmpeg_status(spawned, step)?;
+            }
             if !last {
                 current = dest;
             }
         }
         Ok(())
+    }
+
+    fn run_transcode(
+        &self,
+        step: &PlanStep,
+        input: &Path,
+        output: &Path,
+        timeout: Duration,
+    ) -> Result<()> {
+        let limit = step.target.max_bytes;
+        let input_already_over = limit.is_some_and(|ceiling| {
+            std::fs::metadata(input)
+                .map(|meta| meta.len() > ceiling)
+                .unwrap_or(true)
+        });
+        if !input_already_over {
+            let first = ffmpeg_args_with_bitrate(step, input, output, None)?;
+            let spawned = self.spawner.spawn(&self.ffmpeg_program, &first, timeout)?;
+            check_ffmpeg_status(spawned, step)?;
+            let Some(ceiling) = limit else {
+                return Ok(());
+            };
+            let size = std::fs::metadata(output)
+                .map(|meta| meta.len())
+                .unwrap_or(u64::MAX);
+            if size <= ceiling {
+                return Ok(());
+            }
+            let _ = std::fs::remove_file(output);
+        }
+        let Some(ceiling) = limit else {
+            return Ok(());
+        };
+        let duration_ms = step.target.duration_ms.ok_or_else(|| {
+            Error::new(
+                ErrorCode::ExecutionFailed,
+                "size-fitting encode is missing duration",
+            )
+        })?;
+        let has_audio = step
+            .preservation
+            .contains(&crate::plan::PreservationClaim::AudioStreamCopied);
+        let Some(initial) = video_bitrate_from_budget(ceiling, duration_ms, has_audio) else {
+            return Err(Error::new(
+                ErrorCode::ExecutionLimit,
+                "the size limit is below the quality floor this encoder will use",
+            ));
+        };
+        let (width, height) = video_dimensions_from_step(step);
+        let floor = floor_video_bitrate_bps(width, height);
+        if initial < floor {
+            return Err(Error::new(
+                ErrorCode::ExecutionLimit,
+                "the size limit is below the quality floor this encoder will use",
+            ));
+        }
+        for bitrate in bitrate_ladder(initial, floor) {
+            let args = ffmpeg_args_with_bitrate(step, input, output, Some(bitrate))?;
+            let spawned = self.spawner.spawn(&self.ffmpeg_program, &args, timeout)?;
+            check_ffmpeg_status(spawned, step)?;
+            let size = std::fs::metadata(output)
+                .map(|meta| meta.len())
+                .unwrap_or(u64::MAX);
+            if size <= ceiling {
+                return Ok(());
+            }
+            let _ = std::fs::remove_file(output);
+        }
+        Err(Error::new(
+            ErrorCode::ExecutionLimit,
+            "the encoder reached its quality floor before the file fit the size limit",
+        ))
     }
 }
 
@@ -144,6 +222,15 @@ fn check_ffmpeg_status(output: SpawnOutput, step: &PlanStep) -> Result<()> {
 
 /// Build an argv array from a typed step. Never interpolates untrusted strings.
 pub fn ffmpeg_args(step: &PlanStep, input: &Path, output: &Path) -> Result<Vec<String>> {
+    ffmpeg_args_with_bitrate(step, input, output, None)
+}
+
+fn ffmpeg_args_with_bitrate(
+    step: &PlanStep,
+    input: &Path,
+    output: &Path,
+    video_bitrate_bps: Option<u64>,
+) -> Result<Vec<String>> {
     let mut args = vec![
         "-nostdin".into(),
         "-hide_banner".into(),
@@ -189,11 +276,20 @@ pub fn ffmpeg_args(step: &PlanStep, input: &Path, output: &Path) -> Result<Vec<S
                 "bt709".into(),
                 "-preset".into(),
                 "medium".into(),
-                "-crf".into(),
-                "23".into(),
-                "-c:a".into(),
-                "copy".into(),
             ]);
+            if let Some(bitrate) = video_bitrate_bps {
+                args.extend([
+                    "-b:v".into(),
+                    format!("{bitrate}"),
+                    "-maxrate".into(),
+                    format!("{bitrate}"),
+                    "-bufsize".into(),
+                    format!("{}", bitrate.saturating_mul(2)),
+                ]);
+            } else {
+                args.extend(["-crf".into(), "23".into()]);
+            }
+            args.extend(["-c:a".into(), "copy".into()]);
             let container = container_from_step(step).unwrap_or(Container::Mp4);
             append_movflags(&mut args, &container);
         }
@@ -317,6 +413,35 @@ fn required_video_codec(step: &PlanStep) -> Result<VideoCodec> {
     })
 }
 
+fn video_dimensions_from_step(step: &PlanStep) -> (u32, u32) {
+    if let (Some(width), Some(height)) = (step.target.width, step.target.height)
+        && width > 0
+        && height > 0
+    {
+        return (width, height);
+    }
+    let mut width = 16u32;
+    let mut height = 16u32;
+    for fact in &step.expected {
+        match fact {
+            ExpectedFact {
+                field: Field::MediaVideoWidth,
+                value: ExpectedValue::Integer(value),
+            } => {
+                width = u32::try_from(*value).unwrap_or(16).max(1);
+            }
+            ExpectedFact {
+                field: Field::MediaVideoHeight,
+                value: ExpectedValue::Integer(value),
+            } => {
+                height = u32::try_from(*value).unwrap_or(16).max(1);
+            }
+            _ => {}
+        }
+    }
+    (width, height)
+}
+
 fn path_arg(path: &Path) -> Result<String> {
     path.to_str()
         .map(str::to_string)
@@ -397,8 +522,7 @@ mod tests {
             target: StepTarget {
                 video_codec: Some(VideoCodec::H264),
                 container: Some(Container::Mp4),
-                image_format: None,
-                image: None,
+                ..StepTarget::default()
             },
             reasons: Vec::new(),
             expected: Vec::new(),
@@ -413,10 +537,8 @@ mod tests {
             id: "step-1".into(),
             operation: TransformId::Remux,
             target: StepTarget {
-                video_codec: None,
                 container: Some(Container::Mp4),
-                image_format: None,
-                image: None,
+                ..StepTarget::default()
             },
             reasons: Vec::new(),
             expected: Vec::new(),
@@ -460,6 +582,22 @@ mod tests {
         assert!(args.iter().any(|a| a == "-n"));
         assert!(!args.iter().any(|a| a == "-y"));
         assert!(!args.join(" ").contains("sh -c"));
+    }
+
+    #[test]
+    fn transcode_bitrate_args_use_an_allowlisted_ladder() {
+        let args = ffmpeg_args_with_bitrate(
+            &transcode_step(),
+            Path::new("in.mp4"),
+            Path::new("out.mp4"),
+            Some(400_000),
+        )
+        .unwrap();
+        assert!(args.windows(2).any(|w| w == ["-b:v", "400000"]));
+        assert!(args.windows(2).any(|w| w == ["-maxrate", "400000"]));
+        assert!(args.windows(2).any(|w| w == ["-bufsize", "800000"]));
+        assert!(!args.windows(2).any(|w| w == ["-crf", "23"]));
+        assert!(args.windows(2).any(|w| w == ["-c:a", "copy"]));
     }
 
     #[test]
