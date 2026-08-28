@@ -178,6 +178,7 @@ pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -
     }
 }
 
+#[allow(clippy::chunks_exact_to_as_chunks)]
 fn rgba_as_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, fitifact::Error> {
     fitifact::image::enforce_decoded_limit(width, height)?;
     let expected = usize::try_from(width)
