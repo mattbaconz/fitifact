@@ -1,0 +1,46 @@
+schema: fitifact.profile/v1
+id: discord/image-upload-nitro-basic
+name: Discord Nitro Basic image upload
+revision: 1
+last_verified: 2026-08-27
+
+scope:
+  kind: web-upload
+  platform: discord
+  feature: image-upload
+  account_tier: nitro-basic
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, webp]
+    source: src-attachments
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 50000000
+    source: src-nitro
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-attachments
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
+    observed_at: 2026-08-27
+    note: Chat attachment formats for still images. This profile is not emoji, sticker, or avatar rules.
+  - id: src-nitro
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic
+    observed_at: 2026-08-27
+    note: Nitro Basic "up to 50 MB". Integer is 50000000 as published. Discord may enforce 50*1024*1024.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

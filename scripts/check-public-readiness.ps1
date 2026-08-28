@@ -64,9 +64,20 @@ try {
         "docs/brand/ft-mark-light.png",
         "docs/brand/ft-icon-dark.png",
         "docs/brand/ft-mark-simple.png",
+        "docs/brand/ft-mark.png",
         "web/public/ft-logo.png",
+        "web/public/ft-mark.png",
+        "web/public/favicon-32.png",
         "web/public/og.png",
-        "web/public/samples/too-small-640x480.png"
+        "web/public/samples/too-small-640x480.png",
+        "apps/desktop/src-tauri/icons/32x32.png",
+        "apps/desktop/src-tauri/icons/64x64.png",
+        "apps/desktop/src-tauri/icons/128x128.png",
+        "apps/desktop/src-tauri/icons/128x128@2x.png",
+        "apps/desktop/src-tauri/icons/icon.png",
+        "apps/desktop/src-tauri/icons/icon-1024.png",
+        "apps/desktop/src-tauri/icons/icon.ico",
+        "apps/desktop/src-tauri/icons/icon.icns"
     )
     $unexpectedBinaries = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @(git ls-files)) {

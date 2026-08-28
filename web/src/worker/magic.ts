@@ -7,9 +7,12 @@ export type InputKind =
   | "tiff"
   | "bmp"
   | "video"
+  | "matroska"
   | "pdf"
   | "zip"
   | "unsupported";
+
+const STILL_IMAGE = new Set<InputKind>(["jpeg", "png", "webp", "heic", "gif", "tiff", "bmp"]);
 
 const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
 const HEIC_COMPAT = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heif", "avif", "avis"]);
@@ -60,7 +63,7 @@ export function classifyInput(bytes: Uint8Array): InputKind {
     return "zip";
   }
   if (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
-    return "video";
+    return "matroska";
   }
   if (bytes.length >= 16 && ascii(bytes, 4, 8) === "ftyp") {
     const boxSize = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0);
@@ -79,7 +82,9 @@ export function classifyInput(bytes: Uint8Array): InputKind {
 export function refuseMessage(kind: InputKind): string {
   switch (kind) {
     case "video":
-      return "This is a video. The web app adapts images. The CLI remuxes and transcodes.";
+      return "This is a video. The web app adapts images. Use the desktop app or CLI after ffmpeg is on PATH.";
+    case "matroska":
+      return "This is WebM or Matroska. Fitifact adapts MP4 and MOV, not WebM or MKV.";
     case "pdf":
       return "This is a PDF. The web app adapts images and does not convert documents.";
     case "zip":
@@ -87,6 +92,10 @@ export function refuseMessage(kind: InputKind): string {
     default:
       return "This file is not a supported still image. SVG and HTML are never rendered.";
   }
+}
+
+export function isStillImage(kind: InputKind): boolean {
+  return STILL_IMAGE.has(kind);
 }
 
 function ascii(bytes: Uint8Array, start: number, end: number): string {

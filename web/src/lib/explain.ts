@@ -1,5 +1,5 @@
 import { formatBytes } from "./constraints";
-import type { ImageKind, PlanReport, RasterFormat } from "../types";
+import type { ImageKind, PlanReport, RasterFormat, RequirementParse } from "../types";
 
 export function formatLabel(value: string | null | undefined): string {
   switch (value) {
@@ -35,6 +35,12 @@ export function checkLabel(field: string): string {
       return "Height";
     case "file.bytes":
       return "File size";
+    case "media.container":
+      return "Container";
+    case "media.video.codec":
+      return "Video codec";
+    case "media.audio.codec":
+      return "Audio codec";
     default:
       return field;
   }
@@ -70,7 +76,27 @@ export function formatCheckValue(field: string, value: string | null | undefined
 export function leftoverNote(texts: string[]): string | null {
   const ignored = texts.map((text) => text.trim()).filter(Boolean);
   if (!ignored.length) return null;
-  return `These words were ignored (not a format, size, or dimension rule): ${ignored.join(" · ")}`;
+  return `Not used: ${ignored.join(" · ")}.`;
+}
+
+export function understoodNote(parse: RequirementParse | null): string | null {
+  const hard = parse?.constraints?.hard;
+  if (!hard?.length) return null;
+  const parts: string[] = [];
+  for (const constraint of hard) {
+    if (constraint.field === "image.format") {
+      const raw = Array.isArray(constraint.value) ? constraint.value.join(",") : String(constraint.value);
+      parts.push(formatCheckValue("image.format", raw));
+    } else if (constraint.field === "file.bytes") {
+      parts.push(`max ${formatCheckValue("file.bytes", String(constraint.value))}`);
+    } else if (constraint.field === "image.width" || constraint.field === "image.height") {
+      const axis = constraint.field === "image.width" ? "width" : "height";
+      if (constraint.op === "eq") parts.push(`${axis} ${constraint.value}`);
+      else if (constraint.op === "lte") parts.push(`max ${axis} ${constraint.value}`);
+      else if (constraint.op === "gte") parts.push(`min ${axis} ${constraint.value}`);
+    }
+  }
+  return parts.length ? `I took: ${parts.join(", ")}.` : null;
 }
 
 export function inspectLine(kind: ImageKind | RasterFormat | null | undefined, width: number | null | undefined, height: number | null | undefined, bytes: number): string {
@@ -111,7 +137,7 @@ export function describeActions(plan: PlanReport): string[] {
   if (plan.report.compatible && plan.plan.noop) return ["Nothing. This file already fits."];
   const actions: string[] = [];
   if (plan.plan.source_format !== plan.plan.target.format) {
-    actions.push(`Convert to ${formatLabel(plan.plan.target.format)}`);
+    actions.push(`The destination needs ${formatLabel(plan.plan.target.format)}`);
   }
   if (plan.plan.target.crop.required) {
     actions.push("Crop to the required shape — choose framing");

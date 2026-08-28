@@ -2,7 +2,7 @@
 title: "Fitifact agent instructions"
 type: agent-instructions
 status: active
-updated: 2026-08-25
+updated: 2026-08-26
 canonical: true
 tags:
   - agents
@@ -77,12 +77,15 @@ introduce Pareto scoring until a later decision supersedes D-022. Destination
 policy is a YAML profile compiled to `ConstraintSet`; `plan.rs` must not match
 on destination names.
 
-Images beyond this still-image matrix, browser extensions, desktop/mobile
+Images beyond this still-image matrix, browser extensions, mobile
 shells, managed APIs/cloud execution, bundled FFmpeg, ffmpeg.wasm,
 registry publishing, OS signing, package-manager formulae, and
 telemetry/network activity are deferred. The public web app is static hosting
-only; it adds no server or upload path. Design documents for deferred areas are
-not evidence of implementation.
+only; it adds no server or upload path. A thin Tauri 2 host in `apps/desktop/`
+(D-031) reuses that UI plus the engine: still images in-process/WASM, MP4/MOV
+via system FFmpeg. The desktop crate is **not** a workspace member. Discord
+Nitro is declared in Setup, never detected (D-032). Design
+documents for deferred areas are not evidence of implementation.
 
 Distribution for v0.1 is GitHub-only from
 `https://github.com/mattbaconz/fitifact`. All Cargo packages remain
@@ -126,9 +129,10 @@ The planner should depend on abstract transform capabilities, not directly on FF
 External tools are **providers**. Fitifact is the orchestration and compatibility intelligence layer above them.
 
 Current implementation: Rust domain core and native runtime with system
-FFmpeg/ffprobe as the media provider, plus `fitifact-wasm` and a static
-drop-first web surface for the still-image matrix. Desktop shells and
-destination profiles remain deferred.
+FFmpeg/ffprobe as the media provider, `fitifact-wasm` plus a static drop-first
+web surface for the still-image matrix, and a thin Tauri 2 host in
+`apps/desktop/` that reuses that UI. The desktop package stays out of the
+workspace lockfile.
 
 This is a recommendation, not an excuse to prematurely create 25 crates.
 

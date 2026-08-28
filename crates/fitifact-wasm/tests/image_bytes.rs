@@ -1,7 +1,7 @@
 use fitifact_wasm::{
-    adapt_bytes, adapt_rgba, compile_constraints, compile_requirements, image_limits,
-    inspect_bytes, plan_bytes, plan_rgba, sample_animated_gif, sample_bmp_rgb, sample_gif_rgb,
-    sample_jpeg_rgb, sample_png_rgb, sample_tiff_rgb, validate_bytes,
+    adapt_bytes, adapt_rgba, compile_constraints, compile_profile, compile_requirements,
+    image_limits, inspect_bytes, plan_bytes, plan_rgba, sample_animated_gif, sample_bmp_rgb,
+    sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb, sample_tiff_rgb, validate_bytes,
 };
 
 fn parse(json: &str) -> serde_json::Value {
@@ -19,6 +19,29 @@ fn constraints(format: &str, width: u32, height: u32) -> String {
         "preferences": {"preserve_audio":true, "preserve_resolution":true}
     })
     .to_string()
+}
+
+#[test]
+fn compile_profile_uses_bundled_yaml() {
+    let report = parse(&compile_profile("discord/image-upload"));
+    assert_eq!(report["schema"], "fitifact.constraints/v1");
+    assert!(
+        report["hard"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["field"] == "image.format")
+    );
+    let nitro = parse(&compile_profile("discord/video-upload-nitro-basic"));
+    assert!(
+        nitro["hard"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["field"] == "file.bytes" && item["value"] == 50_000_000)
+    );
+    let missing = parse(&compile_profile("no-such/profile"));
+    assert_eq!(missing["schema"], "fitifact.error/v1");
 }
 
 #[test]

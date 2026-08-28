@@ -61,7 +61,9 @@ pub use inspect::{
 pub use local::{LocalImageResult, adapt_local_image_bytes, inspect_local_bytes};
 pub use media_fit::{can_fit_media, file_bytes_limit};
 pub use plan::{Plan, PlanOutcome, plan};
-pub use profile::{compile_profile_yaml, load_profile};
+pub use profile::{
+    compile_profile_yaml, compile_shipped_profile, load_profile, shipped_profile_ids,
+};
 pub use report::{Explanation, explain_check, explain_plan};
 pub use requirements::{
     RequirementAmbiguity, RequirementParse, RequirementSourceSpan, UnresolvedRequirement,

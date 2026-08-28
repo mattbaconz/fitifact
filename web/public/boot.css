@@ -1,0 +1,19 @@
+html, body { margin: 0; background: #080a0a; color: #f1f3f2; font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+.boot { min-height: 100dvh; display: flex; flex-direction: column; }
+.boot-header { display: flex; align-items: center; min-height: 64px; padding: 0 1.5rem; border-bottom: 1px solid #252a29; font-weight: 700; letter-spacing: -0.025em; }
+.boot-drop {
+  margin: clamp(1rem, 4vw, 2.5rem);
+  min-height: min(70dvh, 36rem);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  border: 1px dashed #3e4644;
+  border-radius: 12px;
+  background: #0b0e0e;
+  text-align: center;
+}
+.boot-drop p { margin: 0 0 0.5rem; color: #b7bebc; font-size: 0.79rem; }
+.boot-drop p:first-of-type { color: #f1f3f2; font-size: 1.35rem; font-weight: 650; }
+.boot-job { margin: 0 0 0.35rem; color: #b7bebc; font-size: 0.78rem; font-weight: 650; text-align: center; }
+.boot-limits { margin: 0 0 1rem; color: #b7bebc; font-size: 0.78rem; text-align: center; }
+noscript { display: block; padding: 1rem; color: #b7bebc; text-align: center; }

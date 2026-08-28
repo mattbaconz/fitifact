@@ -243,11 +243,63 @@ pub fn load_profile(id: &str) -> Result<ConstraintSet> {
 
 #[cfg(target_arch = "wasm32")]
 pub fn load_profile(id: &str) -> Result<ConstraintSet> {
-    let _ = id;
-    Err(Error::new(
-        ErrorCode::InputInvalid,
-        "profile lookup is not available in the WASM build",
-    ))
+    compile_shipped_profile(id)
+}
+
+pub fn shipped_profile_ids() -> &'static [&'static str] {
+    &[
+        "discord/video-upload",
+        "discord/video-upload-nitro-basic",
+        "discord/video-upload-nitro",
+        "discord/image-upload",
+        "discord/image-upload-nitro-basic",
+        "discord/image-upload-nitro",
+        "gmail/attachment",
+        "github/comment-image",
+        "whatsapp/photo",
+        "x/image",
+        "slack/file-image",
+        "jpeg/photo-upload",
+        "generic/video-upload",
+    ]
+}
+
+pub fn compile_shipped_profile(id: &str) -> Result<ConstraintSet> {
+    validate_profile_id(id)?;
+    let text = shipped_profile_yaml(id).ok_or_else(|| {
+        Error::new(
+            ErrorCode::InputInvalid,
+            format!("profile '{id}' was not found in the local profiles directory"),
+        )
+    })?;
+    compile_profile_yaml(text)
+}
+
+fn shipped_profile_yaml(id: &str) -> Option<&'static str> {
+    match id {
+        "discord/video-upload" => Some(include_str!("../../../profiles/discord/video-upload.yaml")),
+        "discord/video-upload-nitro-basic" => Some(include_str!(
+            "../../../profiles/discord/video-upload-nitro-basic.yaml"
+        )),
+        "discord/video-upload-nitro" => Some(include_str!(
+            "../../../profiles/discord/video-upload-nitro.yaml"
+        )),
+        "discord/image-upload" => Some(include_str!("../../../profiles/discord/image-upload.yaml")),
+        "discord/image-upload-nitro-basic" => Some(include_str!(
+            "../../../profiles/discord/image-upload-nitro-basic.yaml"
+        )),
+        "discord/image-upload-nitro" => Some(include_str!(
+            "../../../profiles/discord/image-upload-nitro.yaml"
+        )),
+        "gmail/attachment" => Some(include_str!("../../../profiles/gmail/attachment.yaml")),
+        "github/comment-image" => Some(include_str!("../../../profiles/github/comment-image.yaml")),
+        "whatsapp/photo" => Some(include_str!("../../../profiles/whatsapp/photo.yaml")),
+        "x/image" => Some(include_str!("../../../profiles/x/image.yaml")),
+        "slack/file-image" => Some(include_str!("../../../profiles/slack/file-image.yaml")),
+        "jpeg/photo-upload" => Some(include_str!("../../../profiles/jpeg/photo-upload.yaml")),
+        "generic/video-upload" => Some(include_str!("../../../profiles/generic/video-upload.yaml")),
+        _ => None,
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -354,19 +406,13 @@ constraints:
         assert!(compile_profile_yaml(yaml).is_err());
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn shipped_profiles_compile_to_constraint_sets() {
-        for id in [
-            "discord/video-upload",
-            "gmail/attachment",
-            "jpeg/photo-upload",
-            "generic/video-upload",
-        ] {
-            let set = load_profile(id).expect(id);
+        for id in shipped_profile_ids() {
+            let set = compile_shipped_profile(id).expect(id);
             assert!(!set.hard.is_empty(), "{id} must emit hard constraints");
         }
-        let discord = load_profile("discord/video-upload").unwrap();
+        let discord = compile_shipped_profile("discord/video-upload").unwrap();
         assert_eq!(
             crate::media_fit::file_bytes_limit(&discord),
             Some(20_000_000)
@@ -382,6 +428,46 @@ constraints:
                 .hard
                 .iter()
                 .any(|item| item.field == Field::MediaVideoCodec)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("discord/video-upload-nitro-basic").unwrap()
+            ),
+            Some(50_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("discord/video-upload-nitro").unwrap()
+            ),
+            Some(500_000_000)
+        );
+        let image = compile_shipped_profile("discord/image-upload").unwrap();
+        assert!(
+            image
+                .hard
+                .iter()
+                .any(|item| item.field == Field::ImageFormat)
+        );
+        assert_eq!(crate::media_fit::file_bytes_limit(&image), Some(20_000_000));
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("github/comment-image").unwrap()
+            ),
+            Some(10_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/photo").unwrap()),
+            Some(16_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/image").unwrap()),
+            Some(5_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("slack/file-image").unwrap()
+            ),
+            Some(1_000_000_000)
         );
     }
 }

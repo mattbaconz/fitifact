@@ -5,25 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; connect-src 'self'"
+      content="default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost"
     />
-    <meta name="description" content="Fix a rejected image on this device. Paste what the form said. Download a validated JPEG or PNG. Nothing is uploaded." />
+    <meta name="description" content="Fix a rejected image on this device. Drop a file, tap where it needs to work, download a validated JPEG or PNG. Nothing is uploaded." />
     <meta name="theme-color" content="#080a0a" />
     <link rel="canonical" href="https://mattbaconz.github.io/fitifact/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Fitifact — Make your image pass the upload" />
-    <meta property="og:description" content="Fix a rejected image on this device. Paste what the form said. Download a validated JPEG or PNG. Nothing is uploaded." />
+    <meta property="og:description" content="Fix a rejected image on this device. Drop a file, tap where it needs to work, download a validated JPEG or PNG. Nothing is uploaded." />
     <meta property="og:url" content="https://mattbaconz.github.io/fitifact/" />
     <meta property="og:image" content="https://mattbaconz.github.io/fitifact/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Fitifact — Make your image pass the upload" />
-    <meta name="twitter:description" content="Fix a rejected image on this device. Paste what the form said. Download a validated JPEG or PNG. Nothing is uploaded." />
+    <meta name="twitter:description" content="Fix a rejected image on this device. Drop a file, tap where it needs to work, download a validated JPEG or PNG. Nothing is uploaded." />
     <meta name="twitter:image" content="https://mattbaconz.github.io/fitifact/og.png" />
-    <link rel="icon" type="image/png" href="%BASE_URL%ft-logo.png" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%ft-mark.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
+    <link rel="stylesheet" href="%BASE_URL%boot.css" />
     <title>Fitifact — Make your image pass the upload</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot">
+        <header class="boot-header">Fitifact</header>
+        <p class="boot-job">Make your image pass the upload.</p>
+        <p class="boot-limits">max 32 MiB or 24 megapixels</p>
+        <div class="boot-drop">
+          <p>Drop a file</p>
+          <p>JPEG PNG WebP HEIC · TIFF BMP GIF · max 32 MiB or 24 megapixels</p>
+        </div>
+      </div>
+    </div>
+    <noscript>Fitifact runs in this browser with JavaScript on. Nothing is uploaded.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

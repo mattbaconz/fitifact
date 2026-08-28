@@ -1,0 +1,40 @@
+schema: fitifact.profile/v1
+id: x/image
+name: X image
+revision: 1
+last_verified: 2026-08-28
+
+scope:
+  kind: web-upload
+  platform: x
+  feature: image-post
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, webp]
+    source: src-media
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 5000000
+    source: src-media
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-media
+    type: official-doc
+    url: https://help.x.com/en/using-x/x-media
+    observed_at: 2026-08-28
+    note: X documents a 5 MB class for JPEG and PNG still images. This profile is a conservative still-image post. It does not use the 15 MB WebP-only or video ceilings.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

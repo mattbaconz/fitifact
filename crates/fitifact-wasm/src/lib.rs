@@ -51,6 +51,15 @@ pub fn compile_constraints(constraints_json: &str) -> String {
     }
 }
 
+pub fn compile_profile(id: &str) -> String {
+    match fitifact::compile_shipped_profile(id) {
+        Ok(constraints) => {
+            serde_json::to_string(&constraints).expect("constraint report serializes")
+        }
+        Err(error) => json_error(error),
+    }
+}
+
 pub fn image_limits() -> String {
     serde_json::json!({
         "schema": "fitifact.image-limits/v1",
@@ -240,6 +249,11 @@ mod wasm_exports {
     #[wasm_bindgen]
     pub fn compile_constraints(constraints_json: &str) -> String {
         super::compile_constraints(constraints_json)
+    }
+
+    #[wasm_bindgen]
+    pub fn compile_profile(id: &str) -> String {
+        super::compile_profile(id)
     }
 
     #[wasm_bindgen]

@@ -25,6 +25,8 @@ describe("worker protocol", () => {
     expect(productStateForError({ code: "NO_VALID_PLAN" })).toBe("cannot_satisfy");
     expect(productStateForError({ code: "VALIDATION_FAILED" })).toBe("validation_failure");
     expect(productStateForError({ code: "INSPECTION_LIMIT" })).toBe("resource_limit");
+    expect(productStateForError({ code: "image.input_too_large" })).toBe("resource_limit");
+    expect(productStateForError({ code: "image.decoded_too_large" })).toBe("resource_limit");
     expect(productStateForError({ code: "EXECUTION_CANCELLED" })).toBe("cancelled");
     expect(productStateForError({ code: "UNSUPPORTED_HEIC" })).toBe("unsupported_heic");
   });

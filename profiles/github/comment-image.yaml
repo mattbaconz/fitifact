@@ -1,0 +1,40 @@
+schema: fitifact.profile/v1
+id: github/comment-image
+name: GitHub comment image
+revision: 1
+last_verified: 2026-08-28
+
+scope:
+  kind: web-upload
+  platform: github
+  feature: comment-image
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, gif, webp]
+    source: src-attach
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 10000000
+    source: src-attach
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-attach
+    type: official-doc
+    url: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
+    observed_at: 2026-08-28
+    note: GitHub documents a 10 MB ceiling for images and GIFs attached in issues, pull requests, and comments. This profile is still-image comment upload, not GitHub video (10 MB / 100 MB) or other file types.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

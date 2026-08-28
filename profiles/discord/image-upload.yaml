@@ -1,0 +1,41 @@
+schema: fitifact.profile/v1
+id: discord/image-upload
+name: Discord free image upload
+revision: 1
+last_verified: 2026-08-27
+
+scope:
+  kind: web-upload
+  platform: discord
+  feature: image-upload
+  account_tier: free
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, webp]
+    source: src-attachments
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 20000000
+    source: src-attachments
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-attachments
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
+    observed_at: 2026-08-27
+    note: Chat attachment byte ceiling for the free tier is 20 MB (20000000 as published). Discord may enforce 20*1024*1024. This profile is still-image chat upload, not emoji, sticker, or avatar rules.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

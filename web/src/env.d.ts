@@ -6,6 +6,7 @@ declare module "*fitifact_wasm.js" {
   export default function init(): Promise<void>;
   export function compile_requirements(value: string): string;
   export function compile_constraints(value: string): string;
+  export function compile_profile(id: string): string;
   export function image_limits(): string;
   export function inspect_bytes(bytes: Uint8Array): string;
   export function validate_bytes(bytes: Uint8Array, constraints: string): string;

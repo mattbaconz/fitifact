@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkLabel, describeActions, describeProblems, formatCheckValue, formatLabel, inspectLine, leftoverNote } from "./explain";
+import { checkLabel, describeActions, describeProblems, formatCheckValue, formatLabel, inspectLine, leftoverNote, understoodNote } from "./explain";
 import type { PlanReport } from "../types";
 
 function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["checks"] }): PlanReport {
@@ -53,14 +53,28 @@ describe("human plan copy", () => {
     expect(checkLabel("image.format")).toBe("Format");
     expect(checkLabel("file.bytes")).toBe("File size");
     expect(formatCheckValue("file.bytes", "2000000")).toBe("2.00 MB");
-    expect(leftoverNote(["File must be"])).toBe(
-      "These words were ignored (not a format, size, or dimension rule): File must be",
-    );
+    expect(leftoverNote(["File must be"])).toBe("Not used: File must be.");
+    expect(
+      understoodNote({
+        schema: "fitifact.requirements/v1",
+        constraints: {
+          schema: "fitifact.constraints/v1",
+          hard: [
+            { id: "format", field: "image.format", op: "in", value: ["jpeg"] },
+            { id: "bytes", field: "file.bytes", op: "lte", value: 2_000_000 },
+          ],
+          preferences: { preserve_audio: true, preserve_resolution: true },
+        },
+        source_spans: [],
+        ambiguities: [],
+        unresolved: [{ start: 0, end: 12, text: "please use a recent photo" }],
+      }),
+    ).toBe("I took: JPEG, max 2.00 MB.");
   });
 
   it("lists only the mutations Fitifact will actually perform", () => {
     expect(describeActions(plan({}))).toEqual([
-      "Convert to JPEG",
+      "The destination needs JPEG",
       "Crop to the required shape — choose framing",
       "Resize to 600×600",
       "Reduce quality only as much as required to stay under the size limit",

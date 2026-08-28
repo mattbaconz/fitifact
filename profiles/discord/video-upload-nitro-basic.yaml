@@ -1,0 +1,57 @@
+schema: fitifact.profile/v1
+id: discord/video-upload-nitro-basic
+name: Discord Nitro Basic video upload
+revision: 1
+last_verified: 2026-08-27
+
+scope:
+  kind: web-upload
+  platform: discord
+  feature: video-upload
+  account_tier: nitro-basic
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-attachments
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-attachments
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-attachments
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 50000000
+    source: src-nitro
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-attachments
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
+    observed_at: 2026-08-27
+    note: Chat attachment formats. This profile stays MP4/H.264/AAC for viewer compatibility. The FAQ also lists HEVC/AV1; those are not in this conservative encode set.
+  - id: src-nitro
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic
+    observed_at: 2026-08-27
+    note: Nitro Basic "up to 50 MB". Integer is 50000000 as published. Discord may enforce 50*1024*1024. Boosted-server caps are other profile ids; paste a larger limit for this file if the server allows it.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

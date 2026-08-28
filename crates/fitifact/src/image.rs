@@ -310,7 +310,7 @@ pub fn unrecognized_input(bytes: &[u8]) -> Error {
     if looks_like_video(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is a video. The web app adapts images. The CLI remuxes and transcodes.",
+            "This is a video. The web app adapts images. Use the desktop app or CLI after ffmpeg is on PATH.",
         );
     }
     if looks_like_pdf(bytes) {

@@ -187,7 +187,7 @@ async function inspect(request: Extract<WorkerRequest, { type: "inspect" }>) {
     const bytes = new Uint8Array(buffer);
     const kind = classifyInput(bytes);
     progress(request.id, "Checking the file type", 18);
-    if (kind === "video" || kind === "pdf" || kind === "zip" || kind === "unsupported") {
+    if (kind === "video" || kind === "matroska" || kind === "pdf" || kind === "zip" || kind === "unsupported") {
       throw localFailure("INSPECTION_UNSUPPORTED", refuseMessage(kind));
     }
     if (kind === "heic") {
@@ -341,6 +341,11 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         const wasm = await engine(request.id);
         progress(request.id, "Checking the edited target", 55);
         const report = parseReport(wasm.compile_constraints(request.constraintsJson));
+        post({ id: request.id, type: "result", report });
+      } else if (request.type === "compile_profile") {
+        const wasm = await engine(request.id);
+        progress(request.id, "Loading the destination profile", 55);
+        const report = parseReport(wasm.compile_profile(request.profileId));
         post({ id: request.id, type: "result", report });
       } else if (request.type === "inspect") {
         const result = await inspect(request);

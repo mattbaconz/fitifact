@@ -8,7 +8,9 @@ export interface AppSettings {
 
 export interface LastTarget {
   requirements: string;
-  constraintsJson: string;
+  profile?: string;
+  constraintsJson?: string;
+  savedAt?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -43,13 +45,17 @@ export function loadLastTarget(): LastTarget | null {
   const parsed = readJson(LAST_TARGET_KEY);
   if (!parsed || typeof parsed !== "object") return null;
   const candidate = parsed as Partial<LastTarget>;
-  if (typeof candidate.requirements !== "string" || typeof candidate.constraintsJson !== "string") {
-    return null;
-  }
-  if (!candidate.constraintsJson.trim()) return null;
+  if (typeof candidate.requirements !== "string") return null;
+  const profile = typeof candidate.profile === "string" && candidate.profile.includes("/")
+    ? candidate.profile
+    : undefined;
+  const constraintsJson = typeof candidate.constraintsJson === "string" ? candidate.constraintsJson : undefined;
+  if (!profile && !constraintsJson?.trim()) return null;
   return {
     requirements: candidate.requirements,
-    constraintsJson: candidate.constraintsJson,
+    profile,
+    constraintsJson: constraintsJson?.trim() ? constraintsJson : undefined,
+    savedAt: typeof candidate.savedAt === "string" ? candidate.savedAt : undefined,
   };
 }
 

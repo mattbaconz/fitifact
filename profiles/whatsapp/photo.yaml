@@ -1,0 +1,40 @@
+schema: fitifact.profile/v1
+id: whatsapp/photo
+name: WhatsApp photo
+revision: 1
+last_verified: 2026-08-28
+
+scope:
+  kind: web-upload
+  platform: whatsapp
+  feature: photo
+
+trust:
+  level: documented
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg]
+    source: src-photo
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 16000000
+    source: src-photo
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-photo
+    type: official-doc
+    url: https://faq.whatsapp.com/1317564962315842
+    observed_at: 2026-08-28
+    note: Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes.
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt

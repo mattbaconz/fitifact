@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 398" fill="none" aria-hidden="true">
+  <title>ft.</title>
+  <style>
+    .m { fill: #f1f3f2; }
+    @media (prefers-color-scheme: light) {
+      .m { fill: #080a0a; }
+    }
+  </style>
+  <path class="m" d="M50 3H143V70H72V113H143V180H72V395H2V51A48 48 0 0 1 50 3Z"/>
+  <path class="m" d="M162 70H232V113H280L290 145L280 180H232V395H162V70Z"/>
+  <path class="m" d="M311 329H381V395H311V329Z"/>
+</svg>

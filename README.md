@@ -7,8 +7,8 @@
 [Try Fitifact](https://mattbaconz.github.io/fitifact/)
 
 Fitifact is a destination-first file compatibility engine with a CLI and a
-local-only image web app. Drop the rejected file, paste what the form told you,
-and it makes only the changes needed. JPEG, PNG, still WebP, TIFF, BMP, GIF,
+local-only image web app. Drop the file, tap where it needs to work (or paste
+what the form said if a chip is wrong), and it makes only the changes needed. JPEG, PNG, still WebP, TIFF, BMP, GIF,
 and single-image HEIC can be inputs; outputs are JPEG or PNG, plus WebP when
 the confirmed target names it. Animated GIF and animated WebP keep only the
 first frame after explicit consent. Image bytes stay in the browser worker and

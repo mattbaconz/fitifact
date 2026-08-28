@@ -39,4 +39,28 @@ describe("web session settings", () => {
     clearLastTarget();
     expect(loadLastTarget()).toBeNull();
   });
+
+  it("restores a profile id without requiring a ConstraintSet snapshot", () => {
+    saveLastTarget({
+      requirements: "discord/image-upload",
+      profile: "discord/image-upload",
+      savedAt: "2026-08-27T00:00:00.000Z",
+    });
+    expect(loadLastTarget()).toMatchObject({
+      profile: "discord/image-upload",
+      requirements: "discord/image-upload",
+    });
+  });
+
+  it("keeps a chip job when the paste box is empty", () => {
+    saveLastTarget({
+      requirements: "",
+      profile: "gmail/attachment",
+      savedAt: "2026-08-27T00:00:00.000Z",
+    });
+    expect(loadLastTarget()).toMatchObject({
+      profile: "gmail/attachment",
+      requirements: "",
+    });
+  });
 });

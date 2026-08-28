@@ -41,7 +41,12 @@ async function expectRealDownload(
 
 test("drop zone is visible on first paint without a requirements placeholder", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Make your image pass the upload." })).toBeVisible();
+  await expect(page.getByText("max 32 MiB or 24 megapixels")).toBeVisible();
   await expect(page.locator(".drop-zone")).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Try a sample image" }).first()).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText("Local · nothing is uploaded");
+  await expect(page.getByRole("link", { name: "GitHub" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Review requirements" })).toHaveCount(0);
@@ -57,6 +62,9 @@ test("happy path drops first, auto-parses, and exposes a validated download", as
   await page.getByRole("button", { name: "Fix image" }).click();
   await expect(page.getByRole("heading", { name: "Image adapted and validated" })).toBeVisible();
   await expect(page.getByText("validated against the requirements you confirmed", { exact: false })).toBeVisible();
+  await expect(page.locator(".file-thumb")).toBeVisible();
+  await expect(page.locator(".before-after figcaption", { hasText: "Before" })).toBeVisible();
+  await expect(page.locator(".before-after figcaption", { hasText: "After" })).toBeVisible();
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "mismatch-png.fitifact.jpg");
   await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
@@ -65,7 +73,7 @@ test("happy path drops first, auto-parses, and exposes a validated download", as
   await page.getByLabel("Maximum bytes").fill("1999999");
   await expect(download).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Fix image" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Fix image" })).toBeDisabled();
 });
 
 test("already-compatible path preserves the original", async ({ page }) => {
@@ -73,6 +81,7 @@ test("already-compatible path preserves the original", async ({ page }) => {
   await dropImage(page, "compatible-jpeg.jpg");
   await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Already compatible" })).toBeVisible();
+  await expect(page.getByText("This file already fits. Nothing needs to change.")).toBeVisible();
   const download = page.getByRole("link", { name: "Use original image" });
   await expect(download).toHaveAttribute("download", "compatible-jpeg.fitifact.jpg");
   await expectRealDownload(
@@ -90,7 +99,7 @@ test("already-compatible path preserves the original", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Use original image" })).toBeVisible();
 });
 
-test("a failed replacement clears the previous source and is never rendered", async ({ page }) => {
+test("a failed replacement keeps the previous source and names the rejected file", async ({ page }) => {
   await page.goto("/");
   await dropImage(page, "compatible-jpeg.jpg");
   await pasteRequirements(page, "JPEG, max 2 MB");
@@ -100,12 +109,12 @@ test("a failed replacement clears the previous source and is never rendered", as
     mimeType: "image/svg+xml",
     buffer: Buffer.from("<svg><script>document.body.textContent='unsafe'</script></svg>"),
   });
-  await expect(page.getByRole("heading", { name: "Cannot satisfy these requirements" })).toBeVisible();
+  await expect(page.getByText("attack.svg")).toBeVisible();
   await expect(page.getByText("SVG and HTML are never rendered")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Use original|Download/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Review target changes" })).toHaveCount(0);
-  await expect(page.locator(".plan-summary")).toHaveCount(0);
-  await expect(page.locator("main img")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Use original|Download/ })).toBeVisible();
+  await expect(page.locator(".file-row")).toContainText("JPEG");
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("JPEG, max 2 MB");
+  await expect(page.locator(".file-thumb")).toBeVisible();
 });
 
 test("crop approval is keyboard operable and required before adaptation", async ({ page }) => {
@@ -146,7 +155,7 @@ test("complete range and format alternatives survive compile, plan, and adaptati
   await dropImage(page, "transparent-png.png");
   await pasteRequirements(page, "JPEG or PNG, min 640 x 480, max 1920 x 1080, max 2 MB");
   await openEditor(page);
-  await expect(page.getByLabel("JPEG")).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "JPEG", exact: true })).toBeChecked();
   await expect(page.getByLabel("PNG")).toBeChecked();
   await expect(page.getByLabel("Minimum width")).toHaveValue("640");
   await expect(page.getByLabel("Maximum width")).toHaveValue("1920");
@@ -275,7 +284,7 @@ test("video and PDF drops refuse in one sentence", async ({ page }) => {
   mp4.writeUInt32BE(16, 0);
   mp4.write("ftypisom", 4, "ascii");
   await page.getByLabel("Choose an image").setInputFiles({ name: "clip.mp4", mimeType: "video/mp4", buffer: mp4 });
-  await expect(page.getByText("This is a video. The web app adapts images. The CLI remuxes and transcodes.")).toBeVisible();
+  await expect(page.getByText("This is a video. The web app adapts images. Use the desktop app or CLI after ffmpeg is on PATH.")).toBeVisible();
   await page.getByLabel("Choose an image").setInputFiles({
     name: "doc.pdf",
     mimeType: "application/pdf",
@@ -289,6 +298,7 @@ test("sidebar is closed on first paint and closes on Escape", async ({ page }) =
   await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: "Menu" }).click();
   await expect(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://mattbaconz.github.io/fitifact/docs/");
   await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -320,4 +330,75 @@ test("last-used target is applied after a new drop", async ({ page }) => {
   await dropImage(page, "mismatch-png.png");
   await expect(page.locator(".target-summary")).toContainText(/JPG|JPEG/i);
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+});
+
+test("inspect without a target shows the file and keeps Fix image disabled", async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.locator(".file-thumb")).toBeVisible();
+  await expect(page.locator(".inspect-status")).toBeVisible();
+  await expect(page.getByPlaceholder("Or paste the exact rejection (size, format, dimensions).")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Fix image" })).toBeDisabled();
+});
+
+test("idle drop offers a sample image without destination tiles", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".format-chips")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Make your image pass the upload." })).toBeVisible();
+  await page.getByRole("button", { name: "Try a sample image" }).first().click();
+  await expect(page.locator(".file-row")).toContainText("PNG", { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Where does it need to work?" })).toBeVisible();
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("");
+});
+
+test("paste leftover shows understood versus ignored rules", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await pasteRequirements(page, "JPEG, max 2 MB, keep faces centered");
+  await expect(page.getByText(/I took:/)).toBeVisible();
+  await expect(page.getByText(/Not used: keep faces centered/)).toBeVisible();
+});
+
+test("a Discord destination chip adapts a JPEG under the documented image cap", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await page.getByRole("button", { name: /Discord/ }).click();
+  await expect(page.getByText("Using Discord free upload (the cap you set).")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("");
+  await expect(page.locator(".target-summary")).toContainText(/20(\.00)?\s*MB/i);
+  await expect(page.getByRole("heading", { name: /Already compatible|Minimum changes ready/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Destination still said no? Paste the new message." })).toBeVisible();
+});
+
+test("a GitHub destination chip plans a sample PNG under the documented image cap", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try a sample image" }).first().click();
+  await expect(page.locator(".file-row")).toContainText("PNG", { timeout: 30_000 });
+  await page.getByRole("button", { name: /GitHub/ }).click();
+  await expect(page.getByText("Using GitHub comment image.")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("");
+  await expect(page.locator(".target-summary")).toContainText(/10(\.00)?\s*MB/i);
+  await expect(page.getByRole("heading", { name: /Already compatible|Minimum changes ready/ })).toBeVisible();
+});
+
+test("Pages inspect grid has no Generic video chip", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.getByRole("heading", { name: "Where does it need to work?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Generic video/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Discord/ })).toBeVisible();
+});
+
+test("last-used profile restores after a new drop", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await page.getByRole("button", { name: /Discord/ }).click();
+  await expect(page.getByText("Using Discord free upload (the cap you set).")).toBeVisible({ timeout: 30_000 });
+  await page.reload();
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.getByText("Same as last time: Discord free (the cap you set).")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("");
+  await expect(page.locator(".target-summary")).toContainText(/20(\.00)?\s*MB/i);
+  await expect(page.getByRole("heading", { name: /Already compatible|Minimum changes ready/ })).toBeVisible();
 });

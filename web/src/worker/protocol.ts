@@ -3,6 +3,7 @@ import type { CropRectangle, ErrorReport, ProductState } from "../types";
 export type WorkerRequest =
   | { id: number; type: "compile"; requirements: string }
   | { id: number; type: "compile_constraints"; constraintsJson: string }
+  | { id: number; type: "compile_profile"; profileId: string }
   | { id: number; type: "inspect"; file: File }
   | { id: number; type: "plan"; constraintsJson: string }
   | { id: number; type: "replan"; previousConstraintsJson: string; constraintsJson: string }
@@ -19,6 +20,8 @@ export function productStateForError(report: Pick<ErrorReport, "code">): Product
       return "unsupported_heic";
     case "INSPECTION_LIMIT":
     case "EXECUTION_LIMIT":
+    case "image.input_too_large":
+    case "image.decoded_too_large":
       return "resource_limit";
     case "VALIDATION_FAILED":
       return "validation_failure";

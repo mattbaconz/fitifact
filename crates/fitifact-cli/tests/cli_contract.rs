@@ -217,6 +217,26 @@ fn for_profile_loads_a_shipped_id_before_inspection() {
 }
 
 #[test]
+fn for_profile_loads_discord_nitro_basic() {
+    let output = run(&[
+        "check",
+        "definitely-missing.mp4",
+        "--for",
+        "discord/video-upload-nitro-basic",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(4));
+    assert!(
+        json_stderr(&output)["message"]
+            .as_str()
+            .unwrap()
+            .contains("file not found"),
+        "a valid nitro profile must reach input inspection, got {}",
+        json_stderr(&output)
+    );
+}
+
+#[test]
 fn unknown_for_profile_is_a_usage_class_input_error() {
     let output = run(&[
         "check",

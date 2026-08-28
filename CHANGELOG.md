@@ -2,9 +2,28 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] — after `0.1.0-rc.5`
+## [Unreleased] - after `0.1.0-rc.6`
 
 No changes yet.
+
+## [0.1.0-rc.6] - 0.2 session Pages UI
+
+Docs call this the 0.2 session. Do not invent a `v0.2.0` tag. Existing
+`v0.1.0-rc.1` through `v0.1.0-rc.5` tags stay where they are.
+
+### [added]
+
+- Destination chips ("Where does it need to work?") with shipped YAML profiles compiled in WASM.
+- First-paint drop skeleton via `boot.css`, plus brand mark, 32px favicon, and a 1200x630 `og.png`.
+
+### [changed]
+
+- Public Pages stays still-image only: Generic video is not a Pages chip. Setup is desktop first-run, not a Pages tour.
+- Idle job is "Make your image pass the upload." Paste is an override when a chip is wrong.
+
+### [fixed]
+
+- Keep an unsupported drop instead of wiping the session. Map oversized stills onto inspection/resource limits.
 
 ## [0.1.0-rc.5] - 0.2 usable session
 

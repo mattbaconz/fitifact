@@ -59,6 +59,10 @@ export class ImageWorkerClient {
     return this.call<T>({ type: "compile_constraints", constraintsJson }, [], onProgress);
   }
 
+  compileProfile<T>(profileId: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "compile_profile", profileId }, [], onProgress);
+  }
+
   inspect<T>(file: File, onProgress?: (progress: ProgressUpdate) => void) {
     return this.call<T>({ type: "inspect", file }, [], onProgress);
   }

@@ -13,5 +13,8 @@ describe("consumer error copy", () => {
       "SVG and HTML are never rendered.",
     );
     expect(errorCopy("INPUT_INVALID", "fallback")).not.toContain("INPUT_INVALID");
+    expect(errorCopy("image.input_too_large", "image.input_too_large")).toContain("32 MiB");
+    expect(errorCopy("image.decoded_too_large", "image.decoded_too_large")).toContain("24 megapixels");
+    expect(errorCopy("INSPECTION_LIMIT", "image.input_too_large")).not.toContain("image.input_too_large");
   });
 });
