@@ -44,7 +44,7 @@ update the decision log.
 
 ## v0.1 release boundary (D-018 through D-022)
 
-The current public candidate is `0.1.0-rc.5`: a Rust workspace containing the
+The current public candidate is `0.1.0-rc.6`: a Rust workspace containing the
 `fitifact` library, `fitifact-cli` binary, and `fitifact-wasm` bindings plus the
 D-026/D-028 static consumer image product. The `0.1.0-rc.1` freeze SHA remains the
 media-only D-020 boundary. Media still uses system `ffmpeg`/`ffprobe` from

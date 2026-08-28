@@ -21,7 +21,7 @@ inspect -> constraints -> check -> plan -> execute -> validate
 ## v0.1 scope
 
 This prerelease preserves the frozen CLI/media matrix and adds the D-026/D-028
-local consumer image workflow. Cargo/web version is `0.1.0-rc.5` (the 0.2
+local consumer image workflow. Cargo/web version is `0.1.0-rc.6` (the 0.2
 usable session). Do not invent a `v0.2.0` tag.
 
 | Input and requested result | Behavior |
@@ -134,7 +134,7 @@ archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
 `fitifact-cli.cdx.xml` SBOM.
 
 The checked-in package and binary version is the public
-`0.1.0-rc.5` candidate. Stable `0.1.0` requires a later reviewed version-bump
+`0.1.0-rc.6` candidate. Stable `0.1.0` requires a later reviewed version-bump
 commit after RC acceptance; this commit must not receive the stable tag.
 
 Download `sha256.sum` and the one archive for your target into the same
