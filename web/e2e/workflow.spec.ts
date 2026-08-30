@@ -73,7 +73,7 @@ test("happy path drops first, auto-parses, and exposes a validated download", as
   await page.getByLabel("Maximum bytes").fill("1999999");
   await expect(download).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Fix image" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Fix image" })).toHaveCount(0);
 });
 
 test("already-compatible path preserves the original", async ({ page }) => {
@@ -201,7 +201,7 @@ test("oversized File is refused before main-thread arrayBuffer allocation", asyn
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await expect(page.getByRole("heading", { name: "Resource limit reached" })).toBeVisible();
-  await expect(page.getByText(/byte local input limit/i)).toBeVisible();
+  await expect(page.getByText(/larger than Fitifact can process in the browser/i)).toBeVisible();
   await expect(page.getByText("main-thread arrayBuffer must not run")).toHaveCount(0);
 });
 

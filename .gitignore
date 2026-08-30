@@ -11,3 +11,10 @@ fixtures/media/.generate-*
 /web/src/wasm
 /web/playwright-report
 /web/test-results
+/apps/desktop/node_modules
+/apps/desktop/src-tauri/target
+/apps/desktop/src-tauri/gen
+/apps/docs/node_modules
+/apps/docs/.next
+/apps/docs/out
+/apps/docs/.source

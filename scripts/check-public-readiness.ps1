@@ -107,6 +107,15 @@ try {
         Write-Host "Tracked binary allow-list: PASS"
     }
 
+    $ignoredTracked = @(git ls-files -ci --exclude-standard | Where-Object { $_ })
+    if ($ignoredTracked.Count -gt 0) {
+        $ignoredTracked | ForEach-Object { Write-Error "Tracked gitignored path: $_" }
+        $failures.Add("tracked gitignored path scan")
+    }
+    else {
+        Write-Host "No tracked gitignored paths: PASS"
+    }
+
     $licenseFiles = @(git ls-files | Where-Object { (Split-Path -Leaf $_) -match '^(?i:licen[sc]e|copying|notice)(\..*)?$' })
     if ($licenseFiles.Count -ne 1 -or $licenseFiles[0].Replace('\', '/') -ne "LICENSE") {
         $licenseFiles | ForEach-Object { Write-Error "Unexpected tracked license/notice file: $_" }

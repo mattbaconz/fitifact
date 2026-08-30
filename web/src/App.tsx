@@ -1480,7 +1480,7 @@ export function App() {
                 </label>
               ) : null}
 
-              {showWork && state !== "adapted" && state !== "compatible" && state !== "processing" ? (
+              {showWork && !targetDirty && state !== "adapted" && state !== "compatible" && state !== "processing" ? (
                 <button
                   type="button"
                   onClick={() => void adaptImage()}
