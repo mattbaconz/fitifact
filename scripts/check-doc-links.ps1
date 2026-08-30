@@ -32,14 +32,7 @@ foreach ($file in $markdownFiles) {
         Test-Target $file $match.Groups[1].Value
     }
     foreach ($match in [regex]::Matches($text, '\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]')) {
-        $target = $match.Groups[1].Value
-        if (-not [IO.Path]::HasExtension($target)) {
-            $target += ".md"
-        }
-        $candidate = Join-Path (Join-Path $root "docs") $target
-        if (-not (Test-Path -LiteralPath $candidate)) {
-            $missing.Add("$file -> $($match.Value)")
-        }
+        $missing.Add("$file -> $($match.Value)")
     }
 }
 
@@ -51,13 +44,6 @@ if ($missing.Count -gt 0) {
 Write-Host "Local Markdown and wiki-link targets: PASS ($($markdownFiles.Count) files)"
 
 $copyPaths = @(
-    "docs/00-Foundation/Decision-Log.md",
-    "docs/01-Product/Positioning-Messaging.md",
-    "docs/01-Product/Product-Definition.md",
-    "docs/03-Surfaces/Web-App.md",
-    "docs/04-Engineering/MVP-Scope.md",
-    "docs/06-Research/Competitors.md",
-    "docs/06-Research/Threats.md",
     "web/src/App.tsx"
 )
 $copyText = ($copyPaths | ForEach-Object {

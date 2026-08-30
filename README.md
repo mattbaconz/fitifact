@@ -1,4 +1,4 @@
-<img src="docs/brand/ft-mark-light.png" alt="Fitifact" width="180">
+<img src="web/public/ft-mark-light.png" alt="Fitifact" width="180">
 
 # Fitifact
 
@@ -193,11 +193,7 @@ distribution is GitHub-only; the Cargo packages are not published. Public
 prerelease publication remains restricted to a protected, explicitly approved
 release window.
 
-The release procedure and clean-machine acceptance gates are documented in
-[`docs/04-Engineering/Release-Checklist.md`](docs/04-Engineering/Release-Checklist.md).
-
-See [`docs/README.md`](docs/README.md) for the documentation status model and
-[`AGENTS.md`](AGENTS.md) for canonical project constraints.
+See [`AGENTS.md`](AGENTS.md) for canonical project constraints.
 
 ## Contributing and security
 

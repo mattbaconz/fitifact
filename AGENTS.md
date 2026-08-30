@@ -12,8 +12,7 @@ tags:
 # AGENTS.md
 
 This repository-root file is the canonical instruction document for coding
-agents, research agents, documentation agents, and future maintainers. The file
-at `docs/AGENTS.md` is only a pointer to this one.
+agents, research agents, documentation agents, and future maintainers.
 
 ## Mission
 
@@ -27,20 +26,9 @@ adapt(file, constraints) -> compatible artifact + machine-readable report
 
 ## Source-of-truth hierarchy
 
-When documents disagree, use this precedence:
-
-1. [`docs/00-Foundation/Decision-Log.md`](docs/00-Foundation/Decision-Log.md)
-2. [`docs/00-Foundation/Product-Principles.md`](docs/00-Foundation/Product-Principles.md)
-3. [`docs/01-Product/Product-Definition.md`](docs/01-Product/Product-Definition.md)
-4. [`docs/02-Architecture/System-Architecture.md`](docs/02-Architecture/System-Architecture.md)
-5. Relevant spec in `docs/07-Specs`
-6. Relevant engineering / product document
-7. Research notes
-8. Examples
-
-Never silently resolve a contradiction. Add it to
-[`docs/00-Foundation/Open-Questions.md`](docs/00-Foundation/Open-Questions.md) or
-update the decision log.
+When instructions disagree, this file wins, then `README.md` / `SECURITY.md` /
+`CONTRIBUTING.md`, then code and tests. Never silently resolve a contradiction:
+open an issue or record it here.
 
 ## v0.1 release boundary (D-018 through D-022)
 
@@ -149,7 +137,7 @@ For each feature:
 7. Add execution in a sandbox.
 8. Validate output.
 9. Add an explanation snapshot.
-10. Update docs and decision log if architecture changed.
+10. Update `AGENTS.md` if architecture changed.
 
 ## Definition of done
 
@@ -186,8 +174,7 @@ Fitifact is the selected public name, but it is not legally cleared. The
 GitHub, crates.io hyphen/underscore variants, npm, command names, and ICANN/RDAP.
 Owner directed public GitHub create/push/tag on 2026-08-18 against the
 2026-08-16 packet; that is not billed attorney clearance. GitHub Release
-publication stays gated by `FITIFACT_PUBLICATION_APPROVED`. See
-[`docs/01-Product/Naming-Brand.md`](docs/01-Product/Naming-Brand.md).
+publication stays gated by `FITIFACT_PUBLICATION_APPROVED`.
 
 ## Forbidden shortcuts
 

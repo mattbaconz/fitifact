@@ -4,8 +4,7 @@ Thank you for helping make file compatibility safer and more predictable.
 
 ## Before you start
 
-- Read [`AGENTS.md`](AGENTS.md) and the accepted decisions in
-  [`docs/00-Foundation/Decision-Log.md`](docs/00-Foundation/Decision-Log.md).
+- Read [`AGENTS.md`](AGENTS.md).
 - Keep changes inside the v0.1 CLI/media boundary unless a decision explicitly
   expands it.
 - Open an issue before substantial contract or architecture changes.

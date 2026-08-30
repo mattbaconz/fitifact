@@ -95,7 +95,7 @@ These changes must not be tagged as `v0.1.0-rc.1`. The freeze SHA remains
   adapt spawns ffmpeg zero times.
 - `fitifact-wasm` byte API and a static `web/` drop page for that image matrix
   only. Video files tell the user to use the CLI. No ffmpeg.wasm and no uploads.
-- `ft.` visual monogram in `docs/brand/` for README and future icon use. It is
+- `ft.` visual monogram in `web/public/` for README and future icon use. It is
   not a trademark filing.
 
 ### [fixed]

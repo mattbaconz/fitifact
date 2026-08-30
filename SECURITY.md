@@ -27,9 +27,8 @@ seven days. Disclosure timing will be coordinated after triage and a fix.
 Fitifact treats media files and external tool output as untrusted. It invokes
 system `ffmpeg` and `ffprobe` with argument arrays, preserves original files,
 refuses existing output paths, and validates generated output. It performs no
-telemetry, network access, or implicit upload. See
-[`docs/07-Specs/Security-Model.md`](docs/07-Specs/Security-Model.md) for the
-broader design; deferred cloud sections are not part of v0.1.
+telemetry, network access, or implicit upload. Deferred cloud sections are not
+part of v0.1.
 
 Release automation uses least-privilege job permissions, full-SHA GitHub Action
 pins, SHA-256 manifests, CycloneDX SBOMs, and GitHub artifact attestations.
