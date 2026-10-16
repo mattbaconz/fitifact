@@ -1,0 +1,38 @@
+---
+title: Troubleshooting
+description: Recover without losing your source or mistaking a refusal for success.
+---
+
+## My file is not supported
+
+The browser processes still-image workflows. Use desktop or CLI for video and audio. Corrupt data, unsupported HEIC variants, excess dimensions, or a file over the browser’s resource limit may be refused. Renaming the extension will not change the actual format.
+
+If you were replacing another file, the previous valid source remains available. Choose another file or correct the input and try again.
+
+## Requirements are ambiguous
+
+Use explicit units and distinguish exact dimensions from maximum dimensions. For example, `JPEG, max 2 MB, exactly 600 x 600`. Inspect **Understood** and any ignored text, then use the editor for precise values.
+
+## There is no valid plan
+
+The current provider may not support the requested change, or the requirements may conflict with preservation. A transparent image targeting JPEG, impossible quality floor, or audio file targeting a video-only destination can be refused. Adjust the requirements only if the destination actually allows it.
+
+## The result still gets rejected
+
+Choose **Destination still said no?** and paste the new message. Fitifact validates the confirmed rules; it cannot know every undocumented destination check. Verify account-specific limits and the upload surface.
+
+## Processing failed or was cancelled
+
+Use **Retry** to re-inspect the retained source and rebuild its plan. On desktop, wait for cancellation to finish. If output was already committed, Fitifact reports its actual completed location instead of claiming it was cancelled.
+
+## Video tools are unavailable
+
+Open Settings to inspect tool diagnostics and use **Check again** after repair. Restore the packaged FFmpeg/ffprobe sidecars or reinstall the desktop build. CLI users need both tools on PATH. Photos do not require FFmpeg.
+
+## Preferences will not save
+
+Private browsing, storage policy, or a full storage quota can prevent persistence. The current session continues with an in-memory fallback. Export useful constraints before closing the tab. A storage warning means your edits may not survive a reload.
+
+## Show in folder or download failed
+
+Check the displayed output path and your browser’s download permissions. A file may have been moved or deleted since processing. Reveal failures do not invalidate already measured output; locate the reported path manually or retry after restoring access.

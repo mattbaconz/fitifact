@@ -1,0 +1,39 @@
+---
+title: Desktop guide
+description: The same workflow, with local video and audio tools.
+---
+
+## Downloads
+
+Fitifact is a release candidate. Check the [GitHub release assets](https://github.com/mattbaconz/fitifact/releases) for published downloads. The verified published archives are **CLI builds**, not desktop installers. Do not rename or run a CLI archive as a desktop installer.
+
+Desktop packaging is available from the source checkout. No signed desktop installer is linked here. Locally built installers are unsigned unless separately signed by the builder; your operating system may show an unknown-publisher warning. Verify the source and artifact before deciding to run a build.
+
+## First launch
+
+Choose the destinations you use and declare your Discord upload cap. You can dismiss setup and change these preferences later in Settings. Fitifact does not inspect your account or detect Nitro.
+
+Choose one local file. Photos use the image engine. Video and audio use native FFmpeg and ffprobe tools. Files stay on this computer.
+
+## Supported media workflows
+
+- Already compatible media is unchanged.
+- Compatible H.264/AAC streams in MOV, MKV, or WebM can be remuxed into MP4 without re-encoding when the other constraints pass.
+- Supported video codecs can be changed to H.264 while copying an already compatible AAC soundtrack.
+- H.264 video can be copied while changing a non-AAC soundtrack to AAC.
+- Size and dimension limits can use bounded scaling and bitrate candidates.
+- Common audio files can remain unchanged under size-only limits, or use supported AAC adaptation when needed. Audio aimed at a video-only target is refused.
+
+Only supported plans execute. Fitifact refuses transformations it cannot safely plan or validate.
+
+## Output and cancellation
+
+The result identifies the actual output location. **Show in folder** reveals the original for a no-op or the completed output after adaptation. Existing files are not overwritten.
+
+Cancel requests termination of the active operation and owned media subprocess. Temporary output is cleaned before a cancelled operation finishes. If the output was already committed when cancellation arrived, the result truthfully reports completion and its location.
+
+## Repair video tools
+
+If FFmpeg or ffprobe is unavailable, photo processing still works. Use **Check again** after restoring the tools. For a packaged build, reinstall the same desktop build with its bundled sidecars. For a development build, prepare the sidecars using the repository’s desktop setup instructions.
+
+Tool resolution checks explicit environment configuration, bundled binaries beside the app, then PATH. Diagnostics are separate from your destination preferences; declaring a destination does not install a tool.

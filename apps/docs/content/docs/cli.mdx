@@ -1,0 +1,49 @@
+---
+title: CLI
+description: Inspect, plan, and adapt from a terminal with machine-readable evidence.
+---
+
+## Install
+
+Use a CLI archive for your operating system from [GitHub Releases](https://github.com/mattbaconz/fitifact/releases). Extract it and place the executable on your PATH. Media inspection and adaptation require `ffmpeg` and `ffprobe` on PATH. Image processing runs in process.
+
+Check the installed build and tools:
+
+```sh
+fitifact --version
+fitifact doctor --json
+```
+
+## Inspect before changing
+
+```sh
+fitifact inspect clip.mov --json
+fitifact plan clip.mov --for discord/video-upload --json
+```
+
+A plan is an explanation of the decision. It is not a shell command or an executable file to replay.
+
+## Adapt for a destination
+
+```sh
+fitifact adapt clip.mov --for discord/video-upload --json
+```
+
+Fitifact preserves the original and validates the produced output against the same constraints used for planning. If the file already meets the target, it is returned unchanged.
+
+## Supply exact constraints
+
+Use a confirmed `fitifact.constraints/v1` document, including one exported from the image app:
+
+```sh
+fitifact plan photo.png --constraints target.json --json
+fitifact adapt photo.png --constraints target.json --json
+```
+
+The CLI refuses conflicting target sources. Do not combine `--constraints` with `--for` or individual hard-target flags. `MB` uses decimal bytes and `MiB` uses binary bytes.
+
+## Errors and reports
+
+Use `--json` for structured output and check the exit status. A provider exit code alone is not proof of compatibility. Read the returned validation and output location; never assume an output was published just because execution started.
+
+Run `fitifact --help` and `fitifact adapt --help` for the flags supported by your installed version. Release-candidate capabilities may differ between older archives and the current source checkout.
