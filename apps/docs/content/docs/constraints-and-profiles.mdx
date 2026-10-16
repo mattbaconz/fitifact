@@ -1,0 +1,34 @@
+---
+title: Constraints and profiles
+description: Explicit rules, traceable sources, and preferences that never override a hard requirement.
+---
+
+## Destinations describe requirements
+
+A destination profile compiles to the same constraint contract as custom requirements. The planner works with constraints, not destination names. Profile provenance records the source and scope of its limits.
+
+Account tiers and upload surfaces can differ. Set your own Discord cap in Settings and verify that the chosen profile applies to the place you are uploading.
+
+## Hard constraints and preferences
+
+Hard constraints decide whether a file fits: accepted format or codec, maximum bytes, dimensions, and other supported checks. Preservation preferences guide how to reach that target. A preference cannot make a failed hard constraint pass.
+
+Fitifact ranks supported plans to minimize semantic loss, lossy operations, streams changed, and then total steps. It does not re-encode when a supported lossless operation is enough.
+
+## Size and dimensions
+
+`2 MB` means 2,000,000 bytes. `2 MiB` means 2,097,152 bytes. The size editor accepts either unit or an exact byte count. A number without a unit means bytes. Values that would produce a fraction of a byte are refused instead of rounded.
+
+An exact dimension differs from a maximum. “At most 600 × 600” can preserve aspect ratio by fitting inside the box. “Exactly 600 × 600” may require a crop. Fitifact asks before discarding edges.
+
+## Parsing pasted text
+
+The parser recognizes supported rules in plain text or an upload rejection. It shows the rules it understood and leftover text. Unsupported wording does not silently become an executable transformation.
+
+Correct ambiguous values or contradictory ranges. Review the compiled requirements before adapting; this is especially useful when a rejection message contains unrelated numbers.
+
+## Saved targets and exports
+
+Saved targets store confirmed requirements locally under a unique name. Rename them or undo a removal from **Saved targets**. Up to 20 targets are kept; saving never silently replaces another target. Existing targets continue to load after an interface update. Exported constraint documents retain the existing `fitifact.constraints/v1` schema.
+
+A report records what happened. It is not a saved executable plan. Reinspect the current file and compile the current constraints whenever you need a new execution.

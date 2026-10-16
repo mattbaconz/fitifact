@@ -1,0 +1,36 @@
+---
+title: Examples
+description: Four ways that the minimum change can be very different from “convert everything.”
+---
+
+## Already compatible: keep every byte
+
+**Source:** PNG, 640 × 480, below 2 MB. **Target:** PNG, at most 2 MB.
+
+All checks pass. Fitifact skips adaptation and offers the original file, with the same bytes and filename. Choose **Try an unchanged file** on the app’s starting screen.
+
+## Image format change
+
+**Source:** opaque PNG. **Target:** JPEG, at most 2 MB.
+
+The format must change. The engine plans a JPEG encoding and validates its actual bytes and dimensions. Re-encoding removes metadata; quality may change. A transparent source is not silently flattened to satisfy a JPEG-only target.
+
+## An explicit square crop
+
+**Source:** 640 × 480 image. **Target:** exactly 480 × 480.
+
+Fitting the original rectangle inside a square would not meet exact dimensions. The crop preview shows the removed edges and lets you adjust the position. Fitifact waits for your approval before discarding them.
+
+## Remux a video
+
+**Source:** MOV containing compatible H.264 video and AAC audio, within the byte limit. **Target:** MP4/H.264/AAC.
+
+Only the container needs to change. The native provider can remux the streams to MP4 without re-encoding. The result is still inspected and validated. Available on desktop and CLI.
+
+## Change only the incompatible stream
+
+**Source:** MP4 with HEVC video and AAC audio. **Target:** MP4/H.264/AAC.
+
+The video codec fails the target. The supported plan re-encodes video to H.264 and copies the compatible AAC soundtrack. Conversely, H.264 video with incompatible audio can keep the video and encode only audio.
+
+Actual plans depend on inspected properties and confirmed constraints. A tighter byte ceiling may require more work than the examples above.

@@ -1,0 +1,42 @@
+---
+title: Browser guide
+description: From a local photo to a checked result, without an upload.
+---
+
+## Choose a source
+
+Drop one image or use **Choose file**. You can try the sample scenarios before choosing your own: an unchanged PNG, a PNG-to-JPEG format change, and a square crop requiring approval.
+
+The source summary shows the inspected format, dimensions, and size. The extension alone is not proof of the format. If a replacement is rejected, your valid source remains available.
+
+## Set the requirements
+
+Choose a destination, a saved target, or **Custom**. Destination preferences such as your Discord upload cap are declared in Settings; Fitifact does not detect your subscription.
+
+Custom requirements are parsed automatically. Review the understood rules and any text that was ignored. Ambiguous or contradictory rules need correction before you can adapt.
+
+```text
+JPEG or PNG, max 2 MB, exactly 600 x 600
+```
+
+Use **Edit requirements** to inspect exact byte and dimension limits. Changing requirements invalidates the old plan and download immediately. Review the new plan before continuing.
+
+## Review a plan
+
+The plan separates the necessary changes from what will be preserved. Metadata can be removed when an image is re-encoded; this is provider behavior, not an invented destination requirement. Byte limits may require lower quality or smaller dimensions. Upscaling cannot restore missing detail.
+
+A crop removes edges. First-frame extraction discards extra frames or pages. Both require explicit approval for the current file; they are never silently enabled by a saved preference.
+
+## Use the result
+
+The result starts with its measured properties, validation status, and download action. Expand **Validation details** to see the individual checks. Download the report and confirmed constraints as JSON if you need to inspect or reproduce the decision.
+
+An already compatible file offers the original bytes and original filename. Adapted downloads can add a `.fitifact` suffix, controlled in Settings.
+
+## Save a target
+
+Choose **Saved targets**, give the current confirmed requirements a name, and save. You can rename it or undo a removal. Targets live in this browser’s local storage. If storage is unavailable, the working session remains usable, but changes may not survive closing the tab.
+
+## When something fails
+
+Use **Retry** for a processing failure, **Change requirements** for a rejected target, or **Choose another file** for an unsupported source. Cancel stops the browser worker; retry starts it again with the current source.
