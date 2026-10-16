@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkLabel, describeActions, describeProblems, formatCheckValue, formatLabel, inspectLine, leftoverNote, understoodNote } from "./explain";
+import { checkLabel, describeActions, describeKept, describeMediaActions, describeProblems, describeProblemsFromChecks, describeVerified, formatCheckValue, formatLabel, inspectLine, leftoverNote, understoodNote } from "./explain";
 import type { PlanReport } from "../types";
 
 function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["checks"] }): PlanReport {
@@ -69,15 +69,60 @@ describe("human plan copy", () => {
         ambiguities: [],
         unresolved: [{ start: 0, end: 12, text: "please use a recent photo" }],
       }),
-    ).toBe("I took: JPEG, max 2.00 MB.");
+    ).toBe("Understood: JPEG, max 2.00 MB.");
   });
 
   it("lists only the mutations Fitifact will actually perform", () => {
     expect(describeActions(plan({}))).toEqual([
       "The destination needs JPEG",
-      "Crop to the required shape — choose framing",
+      "Crop to the required shape. Choose framing",
       "Resize to 600×600",
       "Reduce quality only as much as required to stay under the size limit",
+      "Metadata is removed during re-encoding",
     ]);
+    expect(describeActions(plan({
+      report: {
+        schema: "fitifact.check/v1",
+        compatible: false,
+        checks: [
+          { constraint_id: "format", field: "image.format", actual: "png", required: "jpeg", result: "fail" },
+          { constraint_id: "bytes", field: "file.bytes", actual: "4000", required: "<= 2000000", result: "pass" },
+        ],
+      },
+    }))).toEqual([
+      "The destination needs JPEG",
+      "Crop to the required shape. Choose framing",
+      "Resize to 600×600",
+      "Metadata is removed during re-encoding",
+    ]);
+  });
+
+  it("names kept facts and verified outcomes without codec jargon", () => {
+    const report = plan({});
+    report.plan.target.preservation = ["source_format", "alpha"];
+    expect(describeKept(report)).toEqual(["Original format", "Transparency"]);
+    expect(describeMediaActions([
+      { operation: "media.remux" },
+      { operation: "media.transcode_video", reasons: [{ message: "file.bytes exceeds the ceiling" }] },
+    ])).toEqual([
+      "Change the wrapper. Keep the same picture and sound",
+      "Re-encode so the file fits the size limit",
+    ]);
+    expect(describeProblemsFromChecks({
+      schema: "fitifact.check/v1",
+      compatible: false,
+      checks: [
+        { constraint_id: "container", field: "media.container", actual: "webm", required: "mp4", result: "fail" },
+        { constraint_id: "video", field: "media.video.codec", actual: "vp9", required: "h264", result: "fail" },
+      ],
+    })).toEqual([
+      "This is WebM; the destination needs MP4",
+      "The video won't play there as-is",
+    ]);
+    expect(describeVerified({
+      compatible: true,
+      adapted: false,
+      checks: [{ constraint_id: "bytes", field: "file.bytes", actual: "1000", required: "<= 2000000", result: "pass" }],
+    })).toMatch(/already matches/);
   });
 });

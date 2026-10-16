@@ -14,13 +14,16 @@
     "lint": "eslint . && tsc --noEmit",
     "test": "vitest run",
     "test:heic": "vitest run src/worker/heic-decoder.test.ts",
-    "build": "npm run build:wasm && vite build",
+    "build": "node ../scripts/build-site.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:heic": "playwright test --project=chromium-desktop --grep \"approved HEIC\"",
-    "test:e2e:heic-off": "playwright test --project=chromium-desktop --grep \"off-gate HEIC\""
+    "test:e2e:heic-off": "playwright test --project=chromium-desktop --grep \"off-gate HEIC\"",
+    "build:app": "npm run build:wasm && vite build"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@tauri-apps/api": "2.9.1",
     "@tauri-apps/plugin-dialog": "2.6.0",
     "libheif-js": "1.19.8",
@@ -28,6 +31,7 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
     "@types/node": "26.2.0",

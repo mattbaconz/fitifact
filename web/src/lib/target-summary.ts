@@ -1,4 +1,4 @@
-import { formatBytes } from "./constraints";
+import { byteLimitFromText, formatBytes } from "./constraints";
 import type { EditableTarget, OutputFormat } from "../types";
 
 function formatName(format: OutputFormat): string {
@@ -23,8 +23,12 @@ function dimensionSummary(target: EditableTarget): string | null {
 export function summarizeTarget(target: EditableTarget): string {
   const parts = [target.formats.map(formatName).join(" or ") || "Any format"];
   if (target.maxBytes.trim()) {
-    const bytes = Number(target.maxBytes);
-    parts.push(Number.isFinite(bytes) && bytes > 0 ? `≤${formatBytes(bytes)}` : `≤${target.maxBytes} B`);
+    try {
+      const bytes = byteLimitFromText(target.maxBytes);
+      if (bytes !== null) parts.push(`≤${formatBytes(bytes)}`);
+    } catch {
+      parts.push("Size needs attention");
+    }
   }
   const dimensions = dimensionSummary(target);
   if (dimensions) parts.push(dimensions);

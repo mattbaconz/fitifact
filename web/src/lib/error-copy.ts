@@ -7,6 +7,8 @@ const COPY: Record<string, string> = {
     "This image is larger than Fitifact can process in the browser (32 MiB or 24 megapixels).",
   UNSUPPORTED_HEIC: "This phone photo (HEIC) can't be decoded in this build.",
   EXECUTION_CANCELLED: "Stopped. Nothing was saved.",
+  PROVIDER_MISSING:
+    "Video tools did not run. The desktop app ships FFmpeg; reinstall the app. The command-line tool still needs FFmpeg on PATH.",
 };
 
 const LIMIT_CODES = new Set([

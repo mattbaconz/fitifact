@@ -63,6 +63,8 @@ try {
         "web/public/favicon-32.png",
         "web/public/og.png",
         "web/public/samples/too-small-640x480.png",
+        "web/public/brand/geist.woff2",
+        "web/public/brand/geist-mono.woff2",
         "apps/desktop/src-tauri/icons/32x32.png",
         "apps/desktop/src-tauri/icons/64x64.png",
         "apps/desktop/src-tauri/icons/128x128.png",

@@ -105,6 +105,20 @@ function positiveInteger(value: string, label: string): number | null {
   return Number(value);
 }
 
+export function byteLimitFromText(value: string): number | null {
+  const text = value.trim();
+  if (!text) return null;
+  const match = /^(\d{1,16})(?:\.(\d{1,12}))?\s*(B|KB|MB|GB|KiB|MiB|GiB)?$/i.exec(text);
+  if (!match) throw new Error("Enter a size such as 2 MB, 1.5 MiB, or a whole number of bytes.");
+  const scales: Record<string, bigint> = { b: 1n, kb: 1000n, mb: 1000000n, gb: 1000000000n, kib: 1024n, mib: 1048576n, gib: 1073741824n };
+  const fraction = match[2] ?? "";
+  const denominator = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(match[1] + fraction) * scales[(match[3] ?? "b").toLowerCase()];
+  if (numerator % denominator !== 0n || numerator <= 0n || numerator / denominator > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error("The size must resolve to a positive, exact whole number of bytes.");
+  return Number(numerator / denominator);
+}
+
 function addDimension(
   hard: Constraint[], field: "image.width" | "image.height", label: string,
   exactText: string, minText: string, maxText: string,
@@ -128,7 +142,7 @@ export function constraintSetFromEditable(target: EditableTarget): ConstraintSet
   const formats = PRODUCIBLE_FORMATS.filter((format) => target.formats.includes(format));
   if (formats.length === 0) throw new Error("Select at least one allowed image format.");
   const hard: Constraint[] = [{ id: "image-format", field: "image.format", op: "in", value: formats }];
-  const maxBytes = positiveInteger(target.maxBytes, "Maximum bytes");
+  const maxBytes = byteLimitFromText(target.maxBytes);
   if (maxBytes !== null) hard.push({ id: "max-bytes", field: "file.bytes", op: "lte", value: maxBytes });
   addDimension(hard, "image.width", "width", target.widthExact, target.widthMin, target.widthMax);
   addDimension(hard, "image.height", "height", target.heightExact, target.heightMin, target.heightMax);

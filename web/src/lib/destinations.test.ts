@@ -3,6 +3,7 @@ import {
   discordUsingCopy,
   isImageCapableProfile,
   profileForFamily,
+  profilePlainSummary,
   resolveProfile,
   sameAsLastTimeCopy,
   usingDestinationCopy,
@@ -21,7 +22,18 @@ describe("destination catalog", () => {
     expect(profileForFamily("whatsapp", "free", "image")).toBe("whatsapp/photo");
     expect(profileForFamily("x", "free", "image")).toBe("x/image");
     expect(profileForFamily("slack", "free", "image")).toBe("slack/file-image");
-    expect(profileForFamily("github", "free", "video")).toBeNull();
+    expect(profileForFamily("github", "free", "video")).toBe("github/comment-video");
+    expect(profileForFamily("whatsapp", "free", "video")).toBe("whatsapp/video");
+    expect(profileForFamily("x", "free", "video")).toBe("x/video");
+    expect(profileForFamily("slack", "free", "video")).toBe("slack/file-video");
+    expect(profileForFamily("jpeg", "free", "image")).toBe("generic/web-image");
+    expect(profileForFamily("discord", "free", "audio")).toBe("discord/file-upload");
+    expect(profileForFamily("gmail", "free", "audio")).toBe("gmail/attachment");
+    expect(profileForFamily("slack", "free", "audio")).toBe("slack/file-upload");
+    expect(profileForFamily("whatsapp", "free", "audio")).toBe("whatsapp/audio");
+    expect(profileForFamily("github", "free", "audio")).toBeNull();
+    expect(profileForFamily("jpeg", "free", "audio")).toBeNull();
+    expect(profileForFamily("generic-video", "free", "audio")).toBeNull();
     expect(isImageCapableProfile("github/comment-image")).toBe(true);
     expect(isImageCapableProfile("generic/video-upload")).toBe(false);
   });
@@ -32,7 +44,7 @@ describe("destination catalog", () => {
     ).toBe("discord/video-upload-nitro-basic");
     expect(
       resolveProfile({ families: ["jpeg", "generic-video"], discordCap: "free" }, "image"),
-    ).toBe("jpeg/photo-upload");
+    ).toBe("generic/web-image");
     expect(
       resolveProfile({ families: ["jpeg"], discordCap: "free" }, "video"),
     ).toBeNull();
@@ -42,12 +54,17 @@ describe("destination catalog", () => {
     expect(discordUsingCopy("free")).toBe("Using Discord free upload (the cap you set).");
     expect(discordUsingCopy("nitro")).toBe("Using Discord Nitro upload (the cap you set).");
     expect(usingDestinationCopy("gmail", "free")).toBe("Using Gmail attachment.");
-    expect(usingDestinationCopy("github", "free")).toBe("Using GitHub comment image.");
-    expect(usingDestinationCopy("whatsapp", "free")).toBe("Using WhatsApp photo.");
-    expect(usingDestinationCopy("x", "free")).toBe("Using X image.");
-    expect(usingDestinationCopy("slack", "free")).toBe("Using Slack file image.");
+    expect(usingDestinationCopy("github", "free")).toBe("Using GitHub comments.");
+    expect(usingDestinationCopy("whatsapp", "free")).toBe("Using WhatsApp.");
+    expect(usingDestinationCopy("x", "free")).toBe("Using X.");
+    expect(usingDestinationCopy("slack", "free")).toBe("Using Slack files.");
     expect(sameAsLastTimeCopy("discord", "free")).toBe(
       "Same as last time: Discord free (the cap you set).",
     );
+    expect(profilePlainSummary("whatsapp/video", "free")).toBe("WhatsApp video · 16 MB");
+    expect(profilePlainSummary("whatsapp/audio", "free")).toBe("WhatsApp audio · 16 MB");
+    expect(profilePlainSummary("discord/file-upload", "free")).toBe("Discord free file · 20 MB");
+    expect(profilePlainSummary("slack/file-upload", "free")).toBe("Slack file · 1 GB");
+    expect(profilePlainSummary("generic/web-image", "free")).toBe("Web image · JPEG PNG WebP · 8 MB");
   });
 });

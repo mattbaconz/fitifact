@@ -9,6 +9,7 @@ describe("consumer error copy", () => {
     expect(errorCopy("INSPECTION_LIMIT", "fallback")).toContain("32 MiB");
     expect(errorCopy("UNSUPPORTED_HEIC", "fallback")).toContain("HEIC");
     expect(errorCopy("EXECUTION_CANCELLED", "fallback")).toBe("Stopped. Nothing was saved.");
+    expect(errorCopy("PROVIDER_MISSING", "fallback")).toContain("desktop app ships FFmpeg");
     expect(errorCopy("INSPECTION_UNSUPPORTED", "SVG and HTML are never rendered.")).toBe(
       "SVG and HTML are never rendered.",
     );
