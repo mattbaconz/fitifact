@@ -10,6 +10,8 @@ pub enum TransformId {
     Remux,
     #[serde(rename = "media.transcode_video")]
     TranscodeVideo,
+    #[serde(rename = "media.transcode_audio")]
+    TranscodeAudio,
     #[serde(rename = "image.encode_jpeg")]
     EncodeJpeg,
     #[serde(rename = "image.adapt")]
@@ -21,6 +23,7 @@ impl TransformId {
         match self {
             Self::Remux => "media.remux",
             Self::TranscodeVideo => "media.transcode_video",
+            Self::TranscodeAudio => "media.transcode_audio",
             Self::EncodeJpeg => "image.encode_jpeg",
             Self::ImageAdapt => "image.adapt",
         }
@@ -67,10 +70,27 @@ pub fn default_catalog() -> CapabilityCatalog {
                 requires_video_codec_change: false,
             },
             Capability {
+                id: TransformId::TranscodeAudio,
+                can_set: vec![
+                    Field::MediaAudioCodec,
+                    Field::MediaContainer,
+                    Field::FileBytes,
+                ],
+                loss: LossClass::Low,
+                streams_changed: 1,
+                requires_media: true,
+                requires_video: false,
+                requires_image: false,
+                requires_video_codec_change: false,
+            },
+            Capability {
                 id: TransformId::TranscodeVideo,
                 can_set: vec![
                     Field::MediaVideoCodec,
                     Field::MediaContainer,
+                    Field::MediaAudioCodec,
+                    Field::MediaVideoWidth,
+                    Field::MediaVideoHeight,
                     Field::FileBytes,
                 ],
                 loss: LossClass::Low,

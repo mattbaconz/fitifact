@@ -64,6 +64,15 @@ pub fn check(artifact: &Artifact, constraints: &ConstraintSet) -> CompatibilityR
 
 fn evaluate(artifact: &Artifact, constraint: &Constraint) -> ConstraintCheck {
     let required = constraint.value.display();
+    if constraint.field == Field::MediaAudioCodec && artifact.first_audio().is_none() {
+        return ConstraintCheck {
+            constraint_id: constraint.id.clone(),
+            field: constraint.field,
+            actual: Some("none".into()),
+            required,
+            result: CheckResult::Pass,
+        };
+    }
     let actual = fact(artifact, constraint.field);
     let result = match actual {
         None => CheckResult::Unknown,

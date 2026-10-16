@@ -17,6 +17,7 @@ pub mod image_adapt;
 pub mod inspect;
 pub mod local;
 pub mod media_fit;
+pub mod media_tools;
 pub mod plan;
 pub mod profile;
 pub mod report;
@@ -59,7 +60,10 @@ pub use inspect::{
     DefaultInspector, FfprobeInspector, Inspector, artifact_from_ffprobe_json, inspect,
 };
 pub use local::{LocalImageResult, adapt_local_image_bytes, inspect_local_bytes};
-pub use media_fit::{can_fit_media, file_bytes_limit};
+pub use media_fit::{
+    can_fit_media, can_fit_media_with_limits, dimension_limit, file_bytes_limit, fit_output_size,
+};
+pub use media_tools::{MediaToolPaths, bind_media_tools_from_dirs, resolve_media_tools};
 pub use plan::{Plan, PlanOutcome, plan};
 pub use profile::{
     compile_profile_yaml, compile_shipped_profile, load_profile, shipped_profile_ids,

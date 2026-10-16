@@ -1,0 +1,37 @@
+schema: fitifact.profile/v1
+id: discord/file-upload
+name: Discord free file upload
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: discord
+  feature: file-upload
+  account_tier: free
+
+trust:
+  level: documented
+
+constraints:
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 20000000
+    source: src-attachments
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-attachments
+    type: official-doc
+    url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
+    observed_at: 2026-08-31
+    note: Free-tier upload ceiling is 20 MB. This profile is size-only so already-accepted sound files are a no-op.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

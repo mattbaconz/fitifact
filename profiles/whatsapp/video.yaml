@@ -1,0 +1,61 @@
+schema: fitifact.profile/v1
+id: whatsapp/video
+name: WhatsApp video
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: whatsapp
+  feature: video
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-video
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-video
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-video
+  - id: max-width
+    field: media.video.width
+    op: lte
+    value: 1280
+    source: src-video
+  - id: max-height
+    field: media.video.height
+    op: lte
+    value: 1280
+    source: src-video
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 16000000
+    source: src-video
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-video
+    type: official-doc
+    url: https://faq.whatsapp.com/1317564962315842
+    observed_at: 2026-08-31
+    note: Meta documents sending videos as MP4. This profile uses the 16 MB send ceiling and a 1280px edge so in-chat playback stays reliable. WhatsApp may recompress on the wire.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

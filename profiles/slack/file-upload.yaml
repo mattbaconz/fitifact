@@ -1,0 +1,36 @@
+schema: fitifact.profile/v1
+id: slack/file-upload
+name: Slack file upload
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: slack
+  feature: file-upload
+
+trust:
+  level: documented
+
+constraints:
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 1000000000
+    source: src-files
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-files
+    type: official-doc
+    url: https://slack.com/help/articles/201330736-Add-files-to-Slack
+    observed_at: 2026-08-31
+    note: Slack file uploads are size-capped. Playback rules are extra and undocumented here.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

@@ -1,0 +1,51 @@
+schema: fitifact.profile/v1
+id: slack/file-video
+name: Slack file video
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: slack
+  feature: file-video
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-files
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-files
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-files
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 1000000000
+    source: src-files
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-files
+    type: official-doc
+    url: https://slack.com/help/articles/201330736-Add-files-to-Slack
+    observed_at: 2026-08-31
+    note: Slack documents 1 GB per uploaded file. In-client playback is reliable for MP4 H.264/AAC, so this profile produces that instead of claiming Slack plays every container.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

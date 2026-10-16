@@ -104,6 +104,10 @@ pub enum Container {
     Mov,
     Webm,
     Mkv,
+    Mp3,
+    Wav,
+    Flac,
+    Ogg,
     Unknown(String),
 }
 
@@ -147,13 +151,24 @@ impl Container {
                 }
                 if matches!(
                     brand.as_str(),
-                    "isom" | "iso2" | "iso5" | "iso6" | "mp41" | "mp42" | "mp71" | "avc1" | "msdh"
+                    "isom"
+                        | "iso2"
+                        | "iso5"
+                        | "iso6"
+                        | "mp41"
+                        | "mp42"
+                        | "mp71"
+                        | "avc1"
+                        | "msdh"
+                        | "m4a"
+                        | "m4b"
+                        | "mp4a"
                 ) {
                     return Self::Mp4;
                 }
             }
             return match normalized.as_str() {
-                "mp4" => Self::Mp4,
+                "mp4" | "m4a" => Self::Mp4,
                 "mov" | "quicktime" | "qt" => Self::Mov,
                 _ => Self::Unknown(format_name.to_string()),
             };
@@ -161,7 +176,20 @@ impl Container {
         match normalized.as_str() {
             "webm" => Self::Webm,
             "matroska" | "mkv" => Self::Mkv,
-            _ => Self::Unknown(format_name.to_string()),
+            "mp3" => Self::Mp3,
+            "wav" | "wave" => Self::Wav,
+            "flac" => Self::Flac,
+            "ogg" => Self::Ogg,
+            _ => {
+                let parts: Vec<&str> = normalized.split(',').map(str::trim).collect();
+                if parts.contains(&"webm") {
+                    Self::Webm
+                } else if parts.iter().any(|part| matches!(*part, "matroska" | "mkv")) {
+                    Self::Mkv
+                } else {
+                    Self::Unknown(format_name.to_string())
+                }
+            }
         }
     }
 
@@ -171,6 +199,10 @@ impl Container {
             Self::Mov => "mov",
             Self::Webm => "webm",
             Self::Mkv => "mkv",
+            Self::Mp3 => "mp3",
+            Self::Wav => "wav",
+            Self::Flac => "flac",
+            Self::Ogg => "ogg",
             Self::Unknown(other) => other,
         }
     }
@@ -199,6 +231,7 @@ pub enum VideoCodec {
     H264,
     Hevc,
     Vp9,
+    Vp8,
     Av1,
     Unknown(String),
 }
@@ -209,6 +242,7 @@ impl VideoCodec {
             "h264" | "avc" | "avc1" | "avc3" => Some(Self::H264),
             "hevc" | "h265" | "hvc1" | "hev1" => Some(Self::Hevc),
             "vp9" | "vp09" => Some(Self::Vp9),
+            "vp8" | "vp8x" => Some(Self::Vp8),
             "av1" | "av01" => Some(Self::Av1),
             _ => None,
         }
@@ -218,8 +252,9 @@ impl VideoCodec {
         match raw.to_ascii_lowercase().as_str() {
             "h264" | "avc" | "avc1" | "avc3" | "libx264" => Self::H264,
             "hevc" | "h265" | "hvc1" | "hev1" | "libx265" => Self::Hevc,
-            "vp9" | "vp09" => Self::Vp9,
-            "av1" | "av01" => Self::Av1,
+            "vp9" | "vp09" | "libvpx-vp9" => Self::Vp9,
+            "vp8" | "vp8x" | "libvpx" => Self::Vp8,
+            "av1" | "av01" | "libaom-av1" => Self::Av1,
             other => Self::Unknown(other.to_string()),
         }
     }
@@ -229,6 +264,7 @@ impl VideoCodec {
             Self::H264 => "h264",
             Self::Hevc => "hevc",
             Self::Vp9 => "vp9",
+            Self::Vp8 => "vp8",
             Self::Av1 => "av1",
             Self::Unknown(other) => other,
         }
@@ -256,10 +292,25 @@ impl AudioCodec {
 
     pub fn parse_loose(raw: &str) -> Self {
         match raw.to_ascii_lowercase().as_str() {
-            "aac" | "mp4a" => Self::Aac,
+            "aac" | "mp4a" | "aac_latm" => Self::Aac,
             "mp3" | "mp3float" => Self::Mp3,
             "opus" => Self::Opus,
             other => Self::Unknown(other.to_string()),
+        }
+    }
+
+    pub fn is_transcodable_source(&self) -> bool {
+        match self {
+            Self::Aac | Self::Mp3 | Self::Opus => true,
+            Self::Unknown(name) => {
+                let name = name.to_ascii_lowercase();
+                name.starts_with("pcm")
+                    || name == "flac"
+                    || name.contains("vorbis")
+                    || name == "alac"
+                    || name == "wmav2"
+                    || name == "mp2"
+            }
         }
     }
 
@@ -510,6 +561,34 @@ impl Artifact {
         }
     }
 
+    pub fn audio(container: Container, codec: AudioCodec, bytes: u64) -> Self {
+        Self {
+            schema: ArtifactSchema,
+            path: None,
+            family: Family::Media,
+            byte_length: bytes,
+            container: Some(container),
+            streams: vec![Stream {
+                index: Some(0),
+                details: StreamDetails::Audio {
+                    facts: AudioStream {
+                        codec: Some(codec),
+                        channels: Some(2),
+                        sample_rate: Some(44_100),
+                    },
+                },
+            }],
+            duration_ms: Some(3_000),
+            image: None,
+            inspection: InspectionMeta {
+                provider: "fixture".into(),
+                provider_version: Some("test".into()),
+                completeness: Completeness::Full,
+                warnings: Vec::new(),
+            },
+        }
+    }
+
     pub fn image(
         format: ImageFormat,
         width: u32,
@@ -566,6 +645,16 @@ impl Artifact {
     pub fn first_audio_mut(&mut self) -> Option<&mut AudioStream> {
         self.streams.iter_mut().find_map(Stream::audio_mut)
     }
+
+    pub fn is_audio_only(&self) -> bool {
+        self.family == Family::Media
+            && self.video_streams().count() == 0
+            && self.audio_streams().count() == 1
+            && self
+                .streams
+                .iter()
+                .all(|stream| matches!(stream.stream_type(), StreamType::Video | StreamType::Audio))
+    }
 }
 
 #[cfg(test)]
@@ -603,7 +692,7 @@ mod tests {
         assert_eq!(Container::from_probe("webm", None), Container::Webm);
         assert_eq!(
             Container::from_probe("matroska,webm", None),
-            Container::Unknown("matroska,webm".into())
+            Container::Webm
         );
         assert_eq!(Container::from_probe("matroska", None), Container::Mkv);
     }
@@ -612,13 +701,21 @@ mod tests {
     fn probe_brands_do_not_promote_non_iso_bmff_labels() {
         assert_eq!(
             Container::from_probe("matroska,webm", Some("isom")),
-            Container::Unknown("matroska,webm".into())
+            Container::Webm
         );
         assert_eq!(Container::from_probe("webm", Some("isom")), Container::Webm);
         assert_eq!(
             Container::from_probe("matroska", Some("qt")),
             Container::Mkv
         );
+        assert_eq!(
+            Container::from_probe("mov,mp4,m4a,3gp,3g2,mj2", Some("M4A ")),
+            Container::Mp4
+        );
+        assert_eq!(Container::from_probe("mp3", None), Container::Mp3);
+        assert_eq!(Container::from_probe("wav", None), Container::Wav);
+        assert_eq!(Container::from_probe("flac", None), Container::Flac);
+        assert_eq!(Container::from_probe("ogg", None), Container::Ogg);
     }
 
     #[test]
