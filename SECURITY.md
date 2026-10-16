@@ -25,14 +25,15 @@ seven days. Disclosure timing will be coordinated after triage and a fix.
 ## Security model
 
 Fitifact treats media files and external tool output as untrusted. It invokes
-system `ffmpeg` and `ffprobe` with argument arrays, preserves original files,
-refuses existing output paths, and validates generated output. It performs no
-telemetry, network access, or implicit upload. Deferred cloud sections are not
+`ffmpeg` and `ffprobe` with argument arrays (desktop sidecar or PATH), preserves
+original files, refuses existing output paths, and validates generated output.
+It performs no telemetry, network access, or implicit upload. Deferred cloud sections are not
 part of v0.1.
 
 Release automation uses least-privilege job permissions, full-SHA GitHub Action
 pins, SHA-256 manifests, CycloneDX SBOMs, and GitHub artifact attestations.
 Dependencies are checked against RustSec advisories and the repository's
 license/source policy. Windows and macOS binaries are intentionally unsigned in
-v0.1, and system FFmpeg is external and must be assessed under its own build
+v0.1. FFmpeg is a separate process, whether shipped next to the desktop app or
+found on PATH for the CLI, and must be assessed under its own build
 configuration and licensing.

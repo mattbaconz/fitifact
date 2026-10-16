@@ -4,7 +4,58 @@ All notable changes to Fitifact are documented here.
 
 ## [Unreleased] - after `0.1.0-rc.6`
 
-No changes yet.
+### [fixed]
+
+- Native tool diagnostics no longer mistake the app's launch directory for an
+  output destination and disable otherwise healthy bundled media tools.
+- Native file selection uses keyboard-accessible buttons. Damaged-file and
+  Explorer failure messages describe recovery without promising a missing file exists.
+- Captured media subprocesses no longer flash console windows on Windows.
+
+### [added]
+
+- A shared graphite/chalk interface, local dark/light/system appearance, real
+  sample scenarios, and a compact workspace with inspect → plan → adapt → validate states.
+- A static Fumadocs site with local search, task guides, examples, and accurate
+  browser, desktop, and CLI download guidance, included in the application build.
+- Named saved targets with rename and undo, report/constraint exports, and
+  recovery actions that retain valid source files after rejected replacements.
+- Native operation identifiers, cancellable subprocess execution, an atomic
+  cancellation/publication boundary, and recoverable Show in folder actions.
+
+- Desktop and CLI video: WebM/MKV sources, AAC audio encode, scale-to-fit, and
+  VP8/VP9/AV1 transcode to H.264 when the destination needs it.
+- Desktop and CLI: audio-only inspect/adapt/verify. Size-only destinations
+  (Gmail, Discord file upload, Slack, WhatsApp, X) no-op when the file already
+  fits; oversized or AAC-required sound encodes to AAC in MP4. Video destinations
+  refuse audio-only files.
+- Shipped size-only profiles: `discord/file-upload` (and Nitro caps),
+  `slack/file-upload`, `whatsapp/audio`, `x/audio`.
+- Visible intelligence in the UI: what was wrong, what Fitifact changes, what
+  stays, and whether the result is verified.
+- Desktop app ships `ffmpeg`/`ffprobe` as sidecars so video and audio work
+  without a PATH install. CLI still uses FFmpeg from PATH. ffmpeg.wasm stays
+  forbidden. PDF, ZIP, Office, and SVG are refused in one sentence.
+- Windows desktop CI packages an unsigned NSIS installer (`desktop-windows` artifact). MSI is skipped because `0.1.0-rc.6` is not a valid MSI prerelease.
+
+### [changed]
+
+- Results put measured properties and output actions first. Compatible files keep
+  their original bytes and filename, and mobile results collapse the target picker.
+- Crop and first-frame removal require explicit approval for each file. Plans
+  disclose provider metadata removal instead of attributing it to a destination.
+
+- Destination-first copy and chips (Discord, Gmail, GitHub, WhatsApp, Slack, X,
+  web image, web video). Public Pages stays still-image only.
+- Desktop accepts WebM and MKV. The web app still refuses video and audio with a
+  pointer to desktop.
+- FFmpeg missing: per-OS copy buttons instead of a command wall.
+- Work surface is file, destinations, then the verdict and download. Paste override sits below so compatible/no-op is visible without scrolling past the form.
+- Desktop no longer asks consumers to install FFmpeg. The CLI still does.
+- Compatible H.264/AAC MP4 files with missing color tags stay a no-op. HDR,
+  10-bit, and non-yuv420p still get a smallest-change encode.
+- `matroska,webm` probes classify as WebM only when the codecs are WebM-legal
+  (VP8/VP9/AV1 plus Opus or Vorbis). H.264 in that probe is MKV and can remux.
 
 ## [0.1.0-rc.6] - 0.2 session Pages UI
 

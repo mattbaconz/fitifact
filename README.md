@@ -2,17 +2,38 @@
 
 # Fitifact
 
-**Make your image pass the upload.**
+**Make your file work there.**
 
-[Try Fitifact](https://mattbaconz.github.io/fitifact/)
+[Try Fitifact](https://mattbaconz.github.io/fitifact/) ·
+[Docs](https://mattbaconz.github.io/fitifact/docs/) ·
+[Downloads](https://github.com/mattbaconz/fitifact/releases)
 
-Fitifact is a destination-first file compatibility engine with a CLI and a
-local-only image web app. Drop the file, tap where it needs to work (or paste
-what the form said if a chip is wrong), and it makes only the changes needed. JPEG, PNG, still WebP, TIFF, BMP, GIF,
-and single-image HEIC can be inputs; outputs are JPEG or PNG, plus WebP when
-the confirmed target names it. Animated GIF and animated WebP keep only the
-first frame after explicit consent. Image bytes stay in the browser worker and
-are never uploaded to Fitifact.
+Fitifact is a destination-first file adapter. Drop a common photo, video, or
+sound file, pick where it has to work, and it inspects the file, changes only
+what that destination rejects, then verifies the result. Compatible files are a
+no-op. Nothing is uploaded.
+
+The public web app adapts still photos locally in the browser. The desktop
+interface adds video and audio using bundled FFmpeg tools. Published release
+archives currently verified are CLI builds, not desktop installers. See the
+[desktop guide](https://mattbaconz.github.io/fitifact/docs/desktop-guide/) for
+build and download guidance. Locally built desktop installers are unsigned
+unless separately signed. The CLI uses FFmpeg and ffprobe from PATH.
+
+The browser, desktop interface, and static documentation share Fitifact’s
+visual system, local appearance preference, and inspect → plan → adapt → validate
+workflow. Start with a real sample, choose a destination or custom requirements,
+review the changes and preservation, then download a validated result and its
+report. Already compatible files keep their original bytes and filename.
+
+JPEG, PNG, still WebP, TIFF, BMP, GIF, and single-image HEIC can be photo
+inputs; outputs are JPEG or PNG, plus WebP when the confirmed target names it.
+Animated GIF and animated WebP keep only the first frame after explicit consent.
+Desktop and CLI video inputs include MP4, MOV, WebM, and MKV; typical outputs
+are MP4 with H.264 and AAC. Audio-only inputs include MP3, WAV, FLAC, OGG, and
+M4A; oversized or incompatible sound becomes AAC in MP4 when the destination
+needs it, and already-accepted files are a no-op. Photo bytes stay in the browser worker and are
+never uploaded to Fitifact.
 
 ```text
 inspect -> constraints -> check -> plan -> execute -> validate
@@ -20,49 +41,65 @@ inspect -> constraints -> check -> plan -> execute -> validate
 
 ## v0.1 scope
 
-This prerelease preserves the frozen CLI/media matrix and adds the D-026/D-028
-local consumer image workflow. Cargo/web version is `0.1.0-rc.6` (the 0.2
-usable session). Do not invent a `v0.2.0` tag.
+Cargo/web/desktop version is `0.1.0-rc.6`. Do not invent a `v0.2.0` tag.
 
 | Input and requested result | Behavior |
 | --- | --- |
 | MP4 with H.264 video and AAC audio already satisfying the target | No-op; no encoder starts |
-| MOV with H.264 video and AAC audio, target MP4/H.264/AAC | Remux without re-encoding when the byte ceiling already passes |
-| MP4 or MOV with HEVC video and AAC audio, target MP4/H.264/AAC | Transcode video to H.264 and copy audio |
-| Media file over a `--max-size` or profile byte ceiling | H.264 bitrate-ladder encode; refuse at the quality floor. Dimensions unchanged |
+| MOV, MKV, or WebM with H.264 video and AAC audio, target MP4/H.264/AAC, already safe | Remux without re-encoding when the byte ceiling already passes |
+| HEVC, VP8, VP9, or AV1 video, target MP4/H.264/AAC | Transcode video to H.264; copy AAC when present |
+| H.264 video with a non-AAC soundtrack | Encode audio to AAC and copy the video when that is enough |
+| WAV, FLAC, MP3, or other common sound already under a size-only destination | No-op |
+| Sound file over a byte ceiling, or a destination that needs AAC in MP4 | Encode AAC in MP4; refuse only at the quality floor |
+| Sound file aimed at a video destination | Refuse; that destination is for video |
+| Media file over a byte or dimension ceiling | Scale-to-fit and/or H.264 bitrate-ladder encode; refuse only at the quality floor |
 | JPEG/PNG already satisfying the confirmed target | No-op |
 | JPEG/PNG/still WebP/TIFF/BMP/GIF/HEIC requiring format, bounded resize, crop or first-frame consent, or byte fitting | In-process adaptation to JPEG, PNG, or WebP (when named) with re-inspection and validation |
 | Animated PNG, AVIF, RAW, ZIP, PDF | Refuse explicitly |
 | Any other mutation | Refuse explicitly |
 
-The native CLI/media provider executes media byte ceilings with an H.264 bitrate
-ladder and leaves video resize check-only. Named destinations load from local
-YAML via `--for` (for example `fitifact adapt clip.mov --for discord/video-upload`).
-The browser image provider executes bounded image fitting. Neither surface
+Named destinations load from local YAML via `--for` (for example
+`fitifact adapt clip.webm --for discord/video-upload`). Shipped presets cover
+Discord, Gmail, WhatsApp, Slack, X, GitHub, a typical web image, and a typical
+web video, plus size-only file uploads for sound. The browser image provider
+executes bounded image fitting. The desktop app ships FFmpeg as a sidecar
+process for video and audio. The CLI uses FFmpeg from PATH. Neither surface
 overwrites the input or an existing output, silently drops streams, or treats
 provider success as proof of compatibility.
 
 Public and default web builds include a lazy single-image HEIC decoder
 (`libheif-js` 1.19.8) after local magic detection; notices ship with the app.
 `FITIFACT_HEIC_APPROVED=false` remains a decoder-free proof build. Animation
-as an output, hosted APIs, bundled FFmpeg, ffmpeg.wasm,
-package registries, OS signing, and package-manager formulae stay deferred.
+as an output, hosted APIs, ffmpeg.wasm, package registries, OS signing, and
+package-manager formulae stay deferred.
+
+## Documentation
+
+Curated public documentation lives in `apps/docs/content/docs`. Fumadocs and
+Next.js produce a static export with browser-local search. `npm run build` in
+`web` builds the Vite app and merges the docs into `web/dist/docs`. Set
+`FITIFACT_BASE_PATH=/fitifact/` for the Pages artifact; the same build defaults
+to `/` for local and desktop use. No hosted docs server is required.
 
 ## Requirements
 
 - Rust toolchain with edition 2024 support (when building from source)
-- `ffprobe` on `PATH` for inspection, check, and plan
-- `ffmpeg` on `PATH` for adaptations that require a change
+- For the **CLI**: `ffprobe` and `ffmpeg` on `PATH`
+- For the **desktop app**: no FFmpeg install. The app ships `ffmpeg` and `ffprobe`. Optional env `FITIFACT_FFMPEG` / `FITIFACT_FFPROBE` override those paths.
 
 Run `fitifact doctor` (or `fitifact doctor --json`) to verify versions,
 `libx264`, MP4 muxing, and destination/temp write access. Doctor warns when the
 FFmpeg major version is older than 6; CI currently tests FFmpeg 7.x. FFmpeg 6.x
-is accepted without an age warning and is not rejected solely for age.
+is accepted without an age warning and is not rejected solely for age. Desktop
+doctor reports shipped tools as ready instead of asking you to install FFmpeg.
 
-Fitifact has no telemetry and performs no network activity. FFmpeg and ffprobe
-are system dependencies and are not bundled.
+Fitifact has no telemetry and performs no network activity. Building the
+desktop app (not running it) may download FFmpeg once into a local sidecar
+folder. FFmpeg stays
+a separate process with its own license.
 
-Install FFmpeg from its official project or an operating-system package source:
+For the CLI, install FFmpeg from its official project or an operating-system
+package source:
 [FFmpeg's download page](https://ffmpeg.org/download.html) links official source
 code and compiled-package providers.
 
@@ -78,8 +115,9 @@ winget install --id Gyan.FFmpeg -e
 ```
 
 Confirm both `ffmpeg -version` and `ffprobe -version`, then run
-`fitifact doctor`. FFmpeg remains external software under the license terms of
-the build you install.
+`fitifact doctor`. The CLI's FFmpeg remains external software under the
+license of the build you install. The desktop app ships a sidecar copy;
+see `apps/desktop/FFMPEG-NOTICE.md`.
 
 ## Build and use
 
@@ -100,6 +138,7 @@ emits static assets under `web/dist`:
 ```console
 cd web
 npm ci
+npm ci --prefix ../apps/docs
 npm run build
 npm run test:e2e
 ```
@@ -114,6 +153,10 @@ Use `adapt --dry-run` to plan without writing a file. By default, adaptation
 writes a unique sibling such as `video.fitifact.mp4` or `photo.fitifact.jpg`; `-o` chooses another new path and existing paths are
 refused. The transform timeout defaults to 1800 seconds and can be set from 1
 through 86400 seconds with `--timeout-seconds`.
+
+Desktop packaging lives in [`apps/desktop/README.md`](apps/desktop/README.md).
+The web UI is still-image only on GitHub Pages; the desktop host adds MP4, MOV,
+WebM, MKV, and common audio (MP3, WAV, FLAC, M4A).
 
 `--max-size` accepts exact whole bytes, decimal `MB`, or binary `MiB` (for
 example `25000000`, `25 MB`, or `25 MiB`). Adaptation plans are always recreated
