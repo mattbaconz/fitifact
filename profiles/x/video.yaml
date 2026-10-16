@@ -1,0 +1,61 @@
+schema: fitifact.profile/v1
+id: x/video
+name: X video
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: x
+  feature: video-post
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-media
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-media
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-media
+  - id: max-width
+    field: media.video.width
+    op: lte
+    value: 1920
+    source: src-media
+  - id: max-height
+    field: media.video.height
+    op: lte
+    value: 1200
+    source: src-media
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 512000000
+    source: src-media
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-media
+    type: official-doc
+    url: https://help.x.com/en/using-x/x-media
+    observed_at: 2026-08-31
+    note: X documents MP4 H.264/AAC video posts. This profile uses the 512 MB class and a 1920x1200 edge. Duration limits (140 seconds on some accounts) are not encoded here because the engine does not clip time.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

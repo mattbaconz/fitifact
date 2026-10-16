@@ -1,0 +1,51 @@
+schema: fitifact.profile/v1
+id: github/comment-video
+name: GitHub comment video
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: github
+  feature: comment-video
+
+trust:
+  level: documented
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp4]
+    source: src-attach
+  - id: video-codec
+    field: media.video.codec
+    op: in
+    value: [h264]
+    source: src-attach
+  - id: audio-codec
+    field: media.audio.codec
+    op: in
+    value: [aac]
+    source: src-attach
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 10000000
+    source: src-attach
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-attach
+    type: official-doc
+    url: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
+    observed_at: 2026-08-31
+    note: GitHub documents MP4 and MOV video attachments in issues, pull requests, and comments with a 10 MB ceiling on the free plan. This profile produces MP4 H.264/AAC at that ceiling.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

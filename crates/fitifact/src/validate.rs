@@ -130,16 +130,36 @@ pub fn validate_adaptation(
             format!("{:?}", stream_topology(source)),
             format!("{:?}", stream_topology(&artifact)),
         ));
-        integrity.push(option_equality_check(
-            "width",
-            source.first_video().and_then(|video| video.width),
-            artifact.first_video().and_then(|video| video.width),
-        ));
-        integrity.push(option_equality_check(
-            "height",
-            source.first_video().and_then(|video| video.height),
-            artifact.first_video().and_then(|video| video.height),
-        ));
+        if source.first_video().is_some() || artifact.first_video().is_some() {
+            let preserve_dimensions = plan
+                .preserved
+                .contains(&crate::plan::PreservationClaim::VideoDimensions);
+            let expected_width = plan.steps[0].target.width;
+            let expected_height = plan.steps[0].target.height;
+            if preserve_dimensions || expected_width.is_none() || expected_height.is_none() {
+                integrity.push(option_equality_check(
+                    "width",
+                    source.first_video().and_then(|video| video.width),
+                    artifact.first_video().and_then(|video| video.width),
+                ));
+                integrity.push(option_equality_check(
+                    "height",
+                    source.first_video().and_then(|video| video.height),
+                    artifact.first_video().and_then(|video| video.height),
+                ));
+            } else {
+                integrity.push(option_equality_check(
+                    "width",
+                    expected_width,
+                    artifact.first_video().and_then(|video| video.width),
+                ));
+                integrity.push(option_equality_check(
+                    "height",
+                    expected_height,
+                    artifact.first_video().and_then(|video| video.height),
+                ));
+            }
+        }
         integrity.push(duration_check(source.duration_ms, artifact.duration_ms));
     }
 
@@ -163,33 +183,55 @@ pub fn validate_adaptation(
 
     let mut provenance = Vec::new();
     if !image_job {
-        let video_equal = source_hashes.video == output_hashes.video;
-        provenance.push(provenance_check(
-            if operation == TransformId::Remux {
-                "video_copied"
-            } else {
-                "video_changed"
-            },
-            "video",
-            source_hashes,
-            output_hashes,
-            if operation == TransformId::Remux {
-                video_equal
-            } else {
-                !video_equal
-            },
-            &source_hashes.video,
-            &output_hashes.video,
-        ));
+        if source.first_video().is_some() {
+            let video_copied = operation == TransformId::Remux
+                || operation == TransformId::TranscodeAudio
+                || plan
+                    .preserved
+                    .contains(&crate::plan::PreservationClaim::AllStreamsCopied);
+            let video_equal = source_hashes.video == output_hashes.video;
+            provenance.push(provenance_check(
+                if video_copied {
+                    "video_copied"
+                } else {
+                    "video_changed"
+                },
+                "video",
+                source_hashes,
+                output_hashes,
+                if video_copied {
+                    video_equal
+                } else {
+                    !video_equal
+                },
+                &source_hashes.video,
+                &output_hashes.video,
+            ));
+        }
         if source.first_audio().is_some() {
             let input_audio = source_hashes.audio.as_deref().unwrap_or_default();
             let output_audio = output_hashes.audio.as_deref().unwrap_or_default();
+            let audio_copied = operation == TransformId::Remux
+                || plan
+                    .preserved
+                    .contains(&crate::plan::PreservationClaim::AudioStreamCopied)
+                || plan
+                    .preserved
+                    .contains(&crate::plan::PreservationClaim::AllStreamsCopied);
             provenance.push(provenance_check(
-                "audio_copied",
+                if audio_copied {
+                    "audio_copied"
+                } else {
+                    "audio_changed"
+                },
                 "audio",
                 source_hashes,
                 output_hashes,
-                !input_audio.is_empty() && input_audio == output_audio,
+                if audio_copied {
+                    !input_audio.is_empty() && input_audio == output_audio
+                } else {
+                    input_audio != output_audio
+                },
                 input_audio,
                 output_audio,
             ));
@@ -320,6 +362,10 @@ fn actual_value(artifact: &Artifact, field: Field) -> Option<ExpectedValue> {
     match field {
         Field::MediaContainer => artifact.container.clone().map(ExpectedValue::Container),
         Field::MediaVideoCodec => video?.codec.clone().map(ExpectedValue::VideoCodec),
+        Field::MediaAudioCodec => artifact
+            .first_audio()
+            .and_then(|audio| audio.codec.clone())
+            .map(ExpectedValue::AudioCodec),
         Field::MediaVideoWidth => video?
             .width
             .map(|value| ExpectedValue::Integer(value.into())),

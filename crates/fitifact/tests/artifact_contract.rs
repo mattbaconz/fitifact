@@ -127,28 +127,36 @@ fn ambiguous_mov_family_inspection_never_claims_mp4() {
 }
 
 #[test]
-fn shared_matroska_webm_probe_is_unknown_and_never_webm_compatible() {
-    let target = compile(ConstraintInput {
+fn shared_matroska_webm_probe_classifies_webm_vs_mkv() {
+    let webm_target = compile(ConstraintInput {
         container: Some(vec!["webm".into()]),
         ..ConstraintInput::default()
     })
     .unwrap();
-    for format_name in ["matroska,webm", "matroska"] {
-        let json = format!(
-            r#"{{
-                "streams": [{{"codec_type": "video", "codec_name": "h264"}}],
-                "format": {{"format_name": "{format_name}"}}
-            }}"#
-        );
-        let artifact = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, &json).unwrap();
-        if format_name.contains(',') {
-            assert!(matches!(artifact.container, Some(Container::Unknown(_))));
-        } else {
-            assert_eq!(artifact.container, Some(Container::Mkv));
-        }
-        assert!(!check(&artifact, &target).compatible);
-        assert_ne!(Container::parse_loose(format_name).as_str(), "webm");
-    }
+    let webm_json = r#"{
+        "streams": [{"codec_type": "video", "codec_name": "vp9"}],
+        "format": {"format_name": "matroska,webm"}
+    }"#;
+    let webm = artifact_from_ffprobe_json(Path::new("sample.webm"), 1, webm_json).unwrap();
+    assert_eq!(webm.container, Some(Container::Webm));
+    assert!(check(&webm, &webm_target).compatible);
+
+    let h264_mkv_json = r#"{
+        "streams": [{"codec_type": "video", "codec_name": "h264"}],
+        "format": {"format_name": "matroska,webm"}
+    }"#;
+    let h264_mkv = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, h264_mkv_json).unwrap();
+    assert_eq!(h264_mkv.container, Some(Container::Mkv));
+    assert!(!check(&h264_mkv, &webm_target).compatible);
+
+    let mkv_json = r#"{
+        "streams": [{"codec_type": "video", "codec_name": "h264"}],
+        "format": {"format_name": "matroska"}
+    }"#;
+    let mkv = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, mkv_json).unwrap();
+    assert_eq!(mkv.container, Some(Container::Mkv));
+    assert!(!check(&mkv, &webm_target).compatible);
+    assert_ne!(Container::parse_loose("matroska,webm").as_str(), "webm");
 }
 
 #[test]
@@ -158,7 +166,7 @@ fn iso_bmff_brand_cannot_promote_matroska_webm_probe() {
         "format": {"format_name": "matroska,webm", "tags": {"major_brand": "isom"}}
     }"#;
     let artifact = artifact_from_ffprobe_json(Path::new("sample.mkv"), 1, json).unwrap();
-    assert!(matches!(artifact.container, Some(Container::Unknown(_))));
+    assert_eq!(artifact.container, Some(Container::Mkv));
     let target = compile(ConstraintInput {
         container: Some(vec!["mp4".into()]),
         ..ConstraintInput::default()

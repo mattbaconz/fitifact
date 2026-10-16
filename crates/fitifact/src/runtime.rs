@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{Artifact, AudioCodec, Container, Family, HdrStatus, StreamType, VideoCodec};
+use crate::artifact::{Artifact, AudioCodec, Container, Family, StreamType, VideoCodec};
 use crate::capability::TransformId;
 use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
@@ -192,8 +192,6 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
         return validate_image_plan(plan, artifact);
     }
     if artifact.family != Family::Media
-        || artifact.video_streams().count() != 1
-        || artifact.audio_streams().count() > 1
         || artifact
             .streams
             .iter()
@@ -201,12 +199,17 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
     {
         return Err(forged_plan());
     }
-    let video = artifact.first_video().ok_or_else(forged_plan)?;
+    let videos = artifact.video_streams().count();
+    let audios = artifact.audio_streams().count();
+    let audio_only = videos == 0 && audios == 1;
+    if !(audio_only || videos == 1 && audios <= 1) {
+        return Err(forged_plan());
+    }
+    let video = artifact.first_video();
     let audio = artifact.first_audio();
-    if audio.is_some_and(|stream| stream.codec != Some(AudioCodec::Aac))
-        || video.width.is_none()
-        || video.height.is_none()
-        || artifact.duration_ms.is_none()
+    if !audio_only
+        && (video.is_none_or(|stream| stream.width.is_none() || stream.height.is_none())
+            || artifact.duration_ms.is_none())
     {
         return Err(forged_plan());
     }
@@ -214,8 +217,14 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
     let step = &plan.steps[0];
     match step.operation {
         TransformId::Remux => {
-            if artifact.container != Some(Container::Mov)
-                || video.codec != Some(VideoCodec::H264)
+            let Some(video) = video else {
+                return Err(forged_plan());
+            };
+            if !matches!(
+                artifact.container,
+                Some(Container::Mov) | Some(Container::Mkv) | Some(Container::Webm)
+            ) || video.codec != Some(VideoCodec::H264)
+                || audio.is_some_and(|stream| stream.codec != Some(AudioCodec::Aac))
                 || step.expected
                     != vec![ExpectedFact {
                         field: Field::MediaContainer,
@@ -226,35 +235,82 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
                 return Err(forged_plan());
             }
         }
+        TransformId::TranscodeAudio => {
+            if step
+                .preservation
+                .contains(&PreservationClaim::AudioStreamCopied)
+                || step
+                    .preservation
+                    .contains(&PreservationClaim::AllStreamsCopied)
+            {
+                return Err(forged_plan());
+            }
+            if !transcode_audio_expected_shape(&step.expected) {
+                return Err(forged_plan());
+            }
+            if audio_only {
+                if !step.is_audio_only_transcode()
+                    || audio.is_none()
+                    || step.target.max_bytes.is_some() && artifact.duration_ms.is_none()
+                {
+                    return Err(forged_plan());
+                }
+            } else {
+                let Some(video) = video else {
+                    return Err(forged_plan());
+                };
+                if !matches!(
+                    artifact.container,
+                    Some(Container::Mp4)
+                        | Some(Container::Mov)
+                        | Some(Container::Mkv)
+                        | Some(Container::Webm)
+                ) || video.codec != Some(VideoCodec::H264)
+                    || audio.is_none()
+                {
+                    return Err(forged_plan());
+                }
+            }
+        }
         TransformId::TranscodeVideo => {
+            let Some(video) = video else {
+                return Err(forged_plan());
+            };
             if !matches!(
                 artifact.container,
-                Some(Container::Mp4) | Some(Container::Mov)
-            ) || !matches!(video.codec, Some(VideoCodec::Hevc) | Some(VideoCodec::H264))
-                || video.pixel_format.as_deref() != Some("yuv420p")
-                || video.bit_depth != Some(8)
-                || video.color_range.as_deref() != Some("tv")
-                || video.color_space.as_deref() != Some("bt709")
-                || video.color_transfer.as_deref() != Some("bt709")
-                || video.color_primaries.as_deref() != Some("bt709")
-                || video.hdr != HdrStatus::Sdr
-                || !transcode_expected_shape(&step.expected)
+                Some(Container::Mp4)
+                    | Some(Container::Mov)
+                    | Some(Container::Webm)
+                    | Some(Container::Mkv)
+            ) || !matches!(
+                video.codec,
+                Some(VideoCodec::Hevc)
+                    | Some(VideoCodec::H264)
+                    | Some(VideoCodec::Vp9)
+                    | Some(VideoCodec::Vp8)
+                    | Some(VideoCodec::Av1)
+            ) || !transcode_expected_shape(&step.expected)
             {
                 return Err(forged_plan());
             }
             if step.target.max_bytes.is_some() && step.target.duration_ms != artifact.duration_ms {
                 return Err(forged_plan());
             }
-            let mut preservation = vec![
-                PreservationClaim::VideoDimensions,
-                PreservationClaim::VideoPixelFormat,
-                PreservationClaim::VideoColorMetadata,
-            ];
-            if audio.is_some() {
-                preservation.push(PreservationClaim::AudioStreamCopied);
-            }
-            if step.preservation != preservation {
+            if step
+                .preservation
+                .contains(&PreservationClaim::AudioStreamCopied)
+                && audio.is_some_and(|stream| stream.codec != Some(AudioCodec::Aac))
+            {
                 return Err(forged_plan());
+            }
+            if step
+                .preservation
+                .contains(&PreservationClaim::VideoDimensions)
+            {
+                let (width, height) = (video.width, video.height);
+                if step.target.width != width || step.target.height != height {
+                    return Err(forged_plan());
+                }
             }
         }
         TransformId::EncodeJpeg | TransformId::ImageAdapt => return Err(forged_plan()),
@@ -285,18 +341,18 @@ fn validate_image_plan(plan: &Plan, artifact: &Artifact) -> Result<()> {
 }
 
 pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
-    if plan.planner_version != PLANNER_VERSION || plan.steps.len() != 1 || !plan.warnings.is_empty()
-    {
+    if plan.planner_version != PLANNER_VERSION || plan.steps.len() != 1 {
         return Err(forged_plan());
     }
     let step = &plan.steps[0];
-    if step.id != "step-1" || step.reasons.is_empty() || !step.warnings.is_empty() {
+    if step.id != "step-1" || step.reasons.is_empty() {
         return Err(forged_plan());
     }
     let valid_target = match step.operation {
         TransformId::Remux => {
             step.target.container == Some(Container::Mp4)
                 && step.target.video_codec.is_none()
+                && step.target.audio_codec.is_none()
                 && step.target.max_bytes.is_none()
                 && step.expected
                     == vec![ExpectedFact {
@@ -305,20 +361,25 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
                     }]
                 && step.preservation == vec![PreservationClaim::AllStreamsCopied]
         }
+        TransformId::TranscodeAudio => {
+            step.target.container == Some(Container::Mp4)
+                && step.target.audio_codec == Some(AudioCodec::Aac)
+                && step.target.video_codec.is_none()
+                && transcode_audio_expected_shape(&step.expected)
+                && !step
+                    .preservation
+                    .contains(&PreservationClaim::AllStreamsCopied)
+                && !step
+                    .preservation
+                    .contains(&PreservationClaim::AudioStreamCopied)
+        }
         TransformId::TranscodeVideo => {
             step.target.container == Some(Container::Mp4)
                 && step.target.video_codec == Some(VideoCodec::H264)
                 && (step.target.max_bytes.is_none() || step.target.duration_ms.is_some())
+                && step.target.width.is_some()
+                && step.target.height.is_some()
                 && transcode_expected_shape(&step.expected)
-                && step
-                    .preservation
-                    .contains(&PreservationClaim::VideoDimensions)
-                && step
-                    .preservation
-                    .contains(&PreservationClaim::VideoPixelFormat)
-                && step
-                    .preservation
-                    .contains(&PreservationClaim::VideoColorMetadata)
         }
         TransformId::EncodeJpeg => {
             step.target.image_format == Some(crate::artifact::ImageFormat::Jpeg)
@@ -337,8 +398,24 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
     Ok(())
 }
 
+fn transcode_audio_expected_shape(expected: &[ExpectedFact]) -> bool {
+    expected.iter().any(|fact| {
+        *fact
+            == ExpectedFact {
+                field: Field::MediaContainer,
+                value: ExpectedValue::Container(Container::Mp4),
+            }
+    }) && expected.iter().any(|fact| {
+        *fact
+            == ExpectedFact {
+                field: Field::MediaAudioCodec,
+                value: ExpectedValue::AudioCodec(AudioCodec::Aac),
+            }
+    })
+}
+
 fn transcode_expected_shape(expected: &[ExpectedFact]) -> bool {
-    if expected.len() != 11 {
+    if expected.len() != 11 && expected.len() != 12 {
         return false;
     }
     let Some(ExpectedFact {
@@ -355,7 +432,7 @@ fn transcode_expected_shape(expected: &[ExpectedFact]) -> bool {
     else {
         return false;
     };
-    *width > 0
+    let video_ok = *width > 0
         && *height > 0
         && expected[0]
             == (ExpectedFact {
@@ -367,7 +444,18 @@ fn transcode_expected_shape(expected: &[ExpectedFact]) -> bool {
                 field: Field::MediaContainer,
                 value: ExpectedValue::Container(Container::Mp4),
             })
-        && expected[4..11] == transcode_expected(1, 1)[4..]
+        && expected[4..11] == transcode_expected(1, 1)[4..];
+    if !video_ok {
+        return false;
+    }
+    if expected.len() == 11 {
+        return true;
+    }
+    expected.get(11)
+        == Some(&ExpectedFact {
+            field: Field::MediaAudioCodec,
+            value: ExpectedValue::AudioCodec(AudioCodec::Aac),
+        })
 }
 
 fn transcode_expected(width: u32, height: u32) -> Vec<ExpectedFact> {
@@ -671,7 +759,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_rejects_webm_for_the_transcode_capability() {
+    fn runtime_rejects_unknown_container_for_the_transcode_capability() {
         let mp4_hevc = crate::artifact::Artifact::media(
             Container::Mp4,
             crate::artifact::VideoCodec::Hevc,
@@ -686,9 +774,9 @@ mod tests {
         .plan()
         .unwrap()
         .clone();
-        let mut webm_hevc = mp4_hevc;
-        webm_hevc.container = Some(Container::Webm);
-        let error = validate_plan_for_execution(&plan, &webm_hevc).unwrap_err();
+        let mut unknown = mp4_hevc;
+        unknown.container = Some(Container::Unknown("ambiguous".into()));
+        let error = validate_plan_for_execution(&plan, &unknown).unwrap_err();
         assert_eq!(error.code, ErrorCode::SecurityBlocked);
     }
 

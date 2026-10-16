@@ -1,0 +1,36 @@
+schema: fitifact.profile/v1
+id: whatsapp/audio
+name: WhatsApp audio
+revision: 1
+last_verified: 2026-08-31
+
+scope:
+  kind: web-upload
+  platform: whatsapp
+  feature: audio
+
+trust:
+  level: documented
+
+constraints:
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 16000000
+    source: src-media
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-media
+    type: official-doc
+    url: https://faq.whatsapp.com/1180414079177245
+    observed_at: 2026-08-31
+    note: WhatsApp media sends are size-capped. In-chat playback may still refuse some formats.
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt

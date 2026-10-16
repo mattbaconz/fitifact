@@ -8,6 +8,7 @@ use crate::artifact::{
     InspectionMeta, OtherStream, Rational, Stream, StreamDetails, VideoCodec, VideoStream,
 };
 use crate::error::{Error, ErrorCode, Result};
+use crate::media_tools::resolve_media_tools;
 use crate::runtime::{ProcessSpawner, SystemSpawner};
 
 pub trait Inspector {
@@ -29,8 +30,12 @@ impl Default for FfprobeInspector<SystemSpawner> {
 
 impl<S> FfprobeInspector<S> {
     pub fn new(spawner: S) -> Self {
+        Self::with_program(spawner, resolve_media_tools().ffprobe_program())
+    }
+
+    pub fn with_program(spawner: S, ffprobe_program: impl Into<String>) -> Self {
         Self {
-            ffprobe_program: "ffprobe".into(),
+            ffprobe_program: ffprobe_program.into(),
             timeout: Duration::from_secs(30),
             spawner,
         }
@@ -215,12 +220,12 @@ pub fn artifact_from_ffprobe_json(path: &Path, byte_length: u64, json: &str) -> 
         tags: None,
     });
     let major_brand = format.tags.as_ref().and_then(|t| t.major_brand.as_deref());
+    let streams: Vec<Stream> = streams.into_iter().map(normalize_stream).collect();
     let container = format
         .format_name
         .as_deref()
-        .map(|name| Container::from_probe(name, major_brand));
-
-    let streams = streams.into_iter().map(normalize_stream).collect();
+        .map(|name| Container::from_probe(name, major_brand))
+        .map(|container| refine_matroska_webm(container, &streams));
 
     let duration_ms = format.duration.as_deref().and_then(|d| {
         d.parse::<f64>()
@@ -244,6 +249,45 @@ pub fn artifact_from_ffprobe_json(path: &Path, byte_length: u64, json: &str) -> 
             warnings: Vec::new(),
         },
     })
+}
+
+fn refine_matroska_webm(container: Container, streams: &[Stream]) -> Container {
+    if container != Container::Webm {
+        return container;
+    }
+    if webm_codec_compatible(streams) {
+        Container::Webm
+    } else {
+        Container::Mkv
+    }
+}
+
+fn webm_codec_compatible(streams: &[Stream]) -> bool {
+    let mut saw_video = false;
+    let ok = streams.iter().all(|stream| match &stream.details {
+        StreamDetails::Video { facts } => {
+            saw_video = true;
+            matches!(
+                facts.codec,
+                Some(VideoCodec::Vp8 | VideoCodec::Vp9 | VideoCodec::Av1)
+            )
+        }
+        StreamDetails::Audio { facts } => webm_audio_ok(facts.codec.as_ref()),
+        _ => true,
+    });
+    ok && saw_video
+}
+
+fn webm_audio_ok(codec: Option<&AudioCodec>) -> bool {
+    match codec {
+        None => true,
+        Some(AudioCodec::Opus) => true,
+        Some(AudioCodec::Aac | AudioCodec::Mp3) => false,
+        Some(AudioCodec::Unknown(name)) => {
+            let name = name.to_ascii_lowercase();
+            name.contains("vorbis") || name == "opus"
+        }
+    }
 }
 
 fn normalize_stream(stream: ProbeStream) -> Stream {

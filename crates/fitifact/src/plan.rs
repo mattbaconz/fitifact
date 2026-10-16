@@ -10,7 +10,9 @@ use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, ConstraintValue, Field};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 use crate::image_adapt::ImageAdaptStepTarget;
-use crate::media_fit::{can_fit_media, file_bytes_limit};
+use crate::media_fit::{
+    can_fit_media_with_limits, dimension_limit, even_dimension, file_bytes_limit, fit_output_size,
+};
 
 pub const PLANNER_VERSION: &str = "0.1.0";
 const MAX_DEPTH: usize = 2;
@@ -21,6 +23,8 @@ pub struct StepTarget {
     pub container: Option<Container>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_codec: Option<VideoCodec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_codec: Option<AudioCodec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_format: Option<ImageFormat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,6 +94,20 @@ pub struct PlanStep {
     pub expected: Vec<ExpectedFact>,
     pub preservation: Vec<PreservationClaim>,
     pub warnings: Vec<String>,
+}
+
+impl PlanStep {
+    pub(crate) fn is_audio_only_transcode(&self) -> bool {
+        self.operation == TransformId::TranscodeAudio
+            && self.target.video_codec.is_none()
+            && !self
+                .preservation
+                .contains(&PreservationClaim::VideoDimensions)
+            && self
+                .expected
+                .iter()
+                .all(|fact| fact.field != Field::MediaVideoCodec)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +236,9 @@ pub fn plan(
     if let Some(reason) = topology_blocker(artifact) {
         return cannot(vec![reason]);
     }
+    if let Some(reason) = picture_required_blocker(artifact, constraints) {
+        return cannot(vec![reason]);
+    }
     if let Some(reason) = target_blocker(constraints) {
         return cannot(vec![reason]);
     }
@@ -226,7 +247,9 @@ pub fn plan(
     if let Some(reason) = check_only_blocker(&initial) {
         return cannot(vec![reason]);
     }
-    if initial.all_pass() {
+    let max_width = dimension_limit(constraints, Field::MediaVideoWidth);
+    let max_height = dimension_limit(constraints, Field::MediaVideoHeight);
+    if initial.all_pass() && !needs_playback_normalize(artifact) {
         return PlanOutcome::Compatible {
             schema: PlanSchema,
             planner_version: PLANNER_VERSION.into(),
@@ -237,7 +260,10 @@ pub fn plan(
         return cannot(vec![reason]);
     }
     match file_bytes_limit(constraints) {
-        Some(limit) if artifact.byte_length > limit && !can_fit_media(artifact, limit) => {
+        Some(limit)
+            if artifact.byte_length > limit
+                && !can_fit_media_with_limits(artifact, limit, max_width, max_height) =>
+        {
             return cannot(vec![blocking(
                 BlockingCode::SizeFittingUnsupported,
                 ids_for(&initial, Field::FileBytes),
@@ -306,6 +332,11 @@ pub fn plan(
                     preserved.push(claim);
                 }
             }
+            let warnings: Vec<String> = winner
+                .steps
+                .iter()
+                .flat_map(|step| step.warnings.iter().cloned())
+                .collect();
             PlanOutcome::Planned {
                 schema: PlanSchema,
                 planner_version: PLANNER_VERSION.into(),
@@ -314,7 +345,7 @@ pub fn plan(
                     planner_version: PLANNER_VERSION.into(),
                     steps: winner.steps,
                     preserved,
-                    warnings: Vec::new(),
+                    warnings,
                 },
             }
         }
@@ -343,14 +374,17 @@ fn topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
         .streams
         .iter()
         .any(|stream| !matches!(stream.stream_type(), StreamType::Video | StreamType::Audio));
-    if videos != 1 || audios > 1 || other {
-        return Some(blocking(
-            BlockingCode::UnsafeStreamTopology,
-            Vec::new(),
-            "v0.1 requires exactly one video, at most one audio, and no other streams",
-        ));
+    if videos == 1 && audios <= 1 && !other {
+        return None;
     }
-    None
+    if videos == 0 && audios == 1 && !other {
+        return None;
+    }
+    Some(blocking(
+        BlockingCode::UnsafeStreamTopology,
+        Vec::new(),
+        "Fitifact can adapt one video (optional sound) or one sound file, and nothing else",
+    ))
 }
 
 fn image_topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
@@ -363,6 +397,34 @@ fn image_topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
         ));
     }
     None
+}
+
+fn picture_required_blocker(
+    artifact: &Artifact,
+    constraints: &ConstraintSet,
+) -> Option<BlockingReason> {
+    if artifact.first_video().is_some() {
+        return None;
+    }
+    let ids: Vec<String> = constraints
+        .hard
+        .iter()
+        .filter(|constraint| {
+            matches!(
+                constraint.field,
+                Field::MediaVideoCodec | Field::MediaVideoWidth | Field::MediaVideoHeight
+            )
+        })
+        .map(|constraint| constraint.id.clone())
+        .collect();
+    if ids.is_empty() {
+        return None;
+    }
+    Some(blocking(
+        BlockingCode::UnsupportedVideoTarget,
+        ids,
+        "this destination is for video",
+    ))
 }
 
 fn is_image_target(constraints: &ConstraintSet) -> bool {
@@ -469,12 +531,7 @@ fn constraint_ids(constraints: &ConstraintSet, field: Field) -> Vec<String> {
 }
 
 fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
-    for field in [
-        Field::MediaVideoWidth,
-        Field::MediaVideoHeight,
-        Field::ImageWidth,
-        Field::ImageHeight,
-    ] {
+    for field in [Field::ImageWidth, Field::ImageHeight] {
         if let Some(check) = report.failing_or_unknown(field) {
             return Some(blocking(
                 if check.result == CheckResult::Unknown {
@@ -483,7 +540,19 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
                     BlockingCode::ResizeUnsupported
                 },
                 vec![check.constraint_id.clone()],
-                "v0.1 can check dimensions but cannot resize",
+                "the image planner handles still-image sizing; this media planner cannot resize images",
+            ));
+        }
+    }
+    for field in [Field::MediaVideoWidth, Field::MediaVideoHeight] {
+        if let Some(check) = report
+            .failing_or_unknown(field)
+            .filter(|check| check.result == CheckResult::Unknown)
+        {
+            return Some(blocking(
+                BlockingCode::UnknownRequiredFact,
+                vec![check.constraint_id.clone()],
+                "video dimensions are unknown",
             ));
         }
     }
@@ -504,48 +573,54 @@ fn mutation_blocker(artifact: &Artifact, report: &CompatibilityReport) -> Option
     if artifact.family == Family::Image {
         return image_mutation_blocker(artifact, report);
     }
-    if let Some(check) = report.failing_or_unknown(Field::MediaAudioCodec) {
-        return Some(blocking(
-            if check.result == CheckResult::Unknown {
-                BlockingCode::UnknownRequiredFact
-            } else {
-                BlockingCode::AudioTranscodeUnsupported
-            },
-            vec![check.constraint_id.clone()],
-            "v0.1 cannot transcode audio",
-        ));
-    }
-    let audio_supported = artifact
-        .first_audio()
-        .is_none_or(|audio| audio.codec == Some(AudioCodec::Aac));
-    if !audio_supported {
-        return Some(blocking(
-            BlockingCode::AudioTranscodeUnsupported,
-            ids_for(report, Field::MediaAudioCodec),
-            "v0.1 operations can copy only AAC audio",
-        ));
+    if artifact.is_audio_only() {
+        return audio_mutation_blocker(artifact, report);
     }
     let video = artifact.first_video().expect("topology checked");
     if video.width.is_none() || video.height.is_none() || artifact.duration_ms.is_none() {
         return Some(blocking(
             BlockingCode::UnknownRequiredFact,
             Vec::new(),
-            "v0.1 cannot execute a transform without known video dimensions and duration",
+            "cannot execute a transform without known video dimensions and duration",
         ));
     }
-    let bytes_fail = report.failing_or_unknown(Field::FileBytes).is_some();
-    let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec).is_some();
-    if bytes_fail || codec_fail {
-        return encode_mutation_blocker(artifact, report);
+    encode_mutation_blocker(artifact, report)
+}
+
+fn audio_mutation_blocker(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+) -> Option<BlockingReason> {
+    if artifact.duration_ms.is_none() && report.failing_or_unknown(Field::FileBytes).is_some() {
+        return Some(blocking(
+            BlockingCode::UnknownRequiredFact,
+            ids_for(report, Field::FileBytes),
+            "cannot size-fit audio without a known duration",
+        ));
     }
-    if let Some(check) = report
-        .failing_or_unknown(Field::MediaContainer)
-        .filter(|_| artifact.container != Some(Container::Mov))
+    let Some(audio) = artifact.first_audio() else {
+        return Some(blocking(
+            BlockingCode::UnsafeStreamTopology,
+            Vec::new(),
+            "Fitifact can adapt one video (optional sound) or one sound file, and nothing else",
+        ));
+    };
+    if !audio
+        .codec
+        .as_ref()
+        .is_some_and(AudioCodec::is_transcodable_source)
     {
         return Some(blocking(
+            BlockingCode::UnsupportedAudioTarget,
+            ids_for(report, Field::MediaAudioCodec),
+            "this sound format cannot be adapted here",
+        ));
+    }
+    if !audio_source_container(artifact.container.as_ref()) {
+        return Some(blocking(
             BlockingCode::UnsupportedContainer,
-            vec![check.constraint_id.clone()],
-            "the v0.1 remux capability accepts only MOV source containers",
+            ids_for(report, Field::MediaContainer),
+            "this planner accepts MP4, MOV, WebM, MKV, MP3, WAV, FLAC, and OGG sound sources",
         ));
     }
     None
@@ -563,61 +638,103 @@ fn encode_mutation_blocker(
             "the video codec is unknown",
         ));
     }
-    let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec).is_some();
-    if codec_fail && video.codec != Some(VideoCodec::Hevc) {
+    if !transcodable_codec(video.codec.as_ref()) {
         return Some(blocking(
             BlockingCode::UnsupportedVideoCodec,
             ids_for(report, Field::MediaVideoCodec),
-            "v0.1 can transcode only HEVC video to H.264",
+            "this planner can transcode H.264, HEVC, VP8, VP9, and AV1 sources to H.264",
         ));
     }
-    if !codec_fail && video.codec != Some(VideoCodec::H264) && video.codec != Some(VideoCodec::Hevc)
-    {
-        return Some(blocking(
-            BlockingCode::UnsupportedVideoCodec,
-            ids_for(report, Field::MediaVideoCodec),
-            "v0.1 can re-encode only H.264 or HEVC video to H.264",
-        ));
-    }
-    if !matches!(
-        artifact.container,
-        Some(Container::Mp4) | Some(Container::Mov)
-    ) {
+    if !supported_source_container(artifact.container.as_ref()) {
         return Some(blocking(
             BlockingCode::UnsupportedContainer,
             ids_for(report, Field::MediaContainer),
-            "the v0.1 video-encode capability accepts only MP4 and MOV source containers",
-        ));
-    }
-    if video.hdr != HdrStatus::Sdr {
-        return Some(blocking(
-            BlockingCode::HdrConversionUnsupported,
-            ids_for(report, Field::MediaVideoCodec),
-            "v0.1 does not perform or assume HDR semantic conversion",
-        ));
-    }
-    if video.bit_depth != Some(8) {
-        return Some(blocking(
-            BlockingCode::BitDepthConversionUnsupported,
-            ids_for(report, Field::MediaVideoCodec),
-            "v0.1 transcodes only known 8-bit video and does not assume bit-depth conversion",
-        ));
-    }
-    if video.pixel_format.as_deref() != Some("yuv420p") {
-        return Some(blocking(
-            BlockingCode::PixelFormatConversionUnsupported,
-            ids_for(report, Field::MediaVideoCodec),
-            "v0.1 transcodes only known yuv420p video and will not force pixel-format conversion",
-        ));
-    }
-    if !approved_sdr_color(video) {
-        return Some(blocking(
-            BlockingCode::ColorConversionUnsupported,
-            ids_for(report, Field::MediaVideoCodec),
-            "v0.1 transcodes only known limited-range BT.709 color and will not assume color conversion",
+            "this planner accepts MP4, MOV, WebM, and MKV sources",
         ));
     }
     None
+}
+
+fn transcodable_codec(codec: Option<&VideoCodec>) -> bool {
+    matches!(
+        codec,
+        Some(VideoCodec::H264)
+            | Some(VideoCodec::Hevc)
+            | Some(VideoCodec::Vp9)
+            | Some(VideoCodec::Vp8)
+            | Some(VideoCodec::Av1)
+    )
+}
+
+fn supported_source_container(container: Option<&Container>) -> bool {
+    matches!(
+        container,
+        Some(Container::Mp4) | Some(Container::Mov) | Some(Container::Webm) | Some(Container::Mkv)
+    )
+}
+
+fn audio_source_container(container: Option<&Container>) -> bool {
+    match container {
+        Some(
+            Container::Mp4
+            | Container::Mov
+            | Container::Webm
+            | Container::Mkv
+            | Container::Mp3
+            | Container::Wav
+            | Container::Flac
+            | Container::Ogg,
+        ) => true,
+        Some(Container::Unknown(name)) => {
+            let name = name.to_ascii_lowercase();
+            name == "aac"
+                || name == "adts"
+                || name == "m4a"
+                || name.contains("mp3")
+                || name.contains("wav")
+                || name.contains("flac")
+                || name.contains("ogg")
+        }
+        None => false,
+    }
+}
+
+fn remux_source_container(container: Option<&Container>) -> bool {
+    matches!(
+        container,
+        Some(Container::Mov) | Some(Container::Mkv) | Some(Container::Webm)
+    )
+}
+
+fn copyable_audio(artifact: &Artifact) -> bool {
+    artifact
+        .first_audio()
+        .is_none_or(|audio| audio.codec == Some(AudioCodec::Aac))
+}
+
+fn approved_pixel_format(video: &crate::artifact::VideoStream) -> bool {
+    video.pixel_format.as_deref() == Some("yuv420p")
+}
+
+fn approved_bit_depth(video: &crate::artifact::VideoStream) -> bool {
+    video.bit_depth == Some(8)
+}
+
+fn known_unplayable_picture(video: &crate::artifact::VideoStream) -> bool {
+    video.hdr == HdrStatus::Hdr
+        || video.bit_depth.is_some_and(|depth| depth != 8)
+        || video
+            .pixel_format
+            .as_deref()
+            .is_some_and(|format| format != "yuv420p")
+}
+
+fn needs_playback_normalize(artifact: &Artifact) -> bool {
+    artifact.first_video().is_some_and(|video| {
+        transcodable_codec(video.codec.as_ref())
+            && supported_source_container(artifact.container.as_ref())
+            && known_unplayable_picture(video)
+    })
 }
 
 fn image_mutation_blocker(
@@ -674,117 +791,9 @@ fn instantiate(
     index: usize,
 ) -> Option<PlanStep> {
     match operation {
-        TransformId::Remux => {
-            let container = report.failing_or_unknown(Field::MediaContainer)?;
-            let video = artifact.first_video()?;
-            if artifact.container != Some(Container::Mov)
-                || video.codec != Some(VideoCodec::H264)
-                || video.width.is_none()
-                || video.height.is_none()
-                || artifact.duration_ms.is_none()
-                || report.failing_or_unknown(Field::FileBytes).is_some()
-            {
-                return None;
-            }
-            Some(PlanStep {
-                id: format!("step-{}", index + 1),
-                operation,
-                target: StepTarget {
-                    container: Some(Container::Mp4),
-                    ..StepTarget::default()
-                },
-                reasons: vec![PlanReason {
-                    constraint_id: container.constraint_id.clone(),
-                    message: "The target requires an MP4 container.".into(),
-                }],
-                expected: vec![ExpectedFact {
-                    field: Field::MediaContainer,
-                    value: ExpectedValue::Container(Container::Mp4),
-                }],
-                preservation: vec![PreservationClaim::AllStreamsCopied],
-                warnings: Vec::new(),
-            })
-        }
-        TransformId::TranscodeVideo => {
-            let input_video = artifact.first_video()?;
-            let width = input_video.width?;
-            let height = input_video.height?;
-            let duration_ms = artifact.duration_ms?;
-            let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec);
-            let bytes_fail = report.failing_or_unknown(Field::FileBytes);
-            if codec_fail.is_none() && bytes_fail.is_none() {
-                return None;
-            }
-            if !matches!(
-                artifact.container,
-                Some(Container::Mp4) | Some(Container::Mov)
-            ) {
-                return None;
-            }
-            if codec_fail.is_some() && input_video.codec != Some(VideoCodec::Hevc) {
-                return None;
-            }
-            if codec_fail.is_none()
-                && input_video.codec != Some(VideoCodec::H264)
-                && input_video.codec != Some(VideoCodec::Hevc)
-            {
-                return None;
-            }
-            let max_bytes = file_bytes_from_report(report);
-            match max_bytes {
-                Some(limit) if artifact.byte_length > limit && !can_fit_media(artifact, limit) => {
-                    return None;
-                }
-                _ => {}
-            }
-            let mut reasons = Vec::new();
-            if let Some(video) = codec_fail {
-                reasons.push(PlanReason {
-                    constraint_id: video.constraint_id.clone(),
-                    message: "The target requires H.264 video.".into(),
-                });
-            }
-            if let Some(container) = report.failing_or_unknown(Field::MediaContainer) {
-                reasons.push(PlanReason {
-                    constraint_id: container.constraint_id.clone(),
-                    message: "The target requires an MP4 container.".into(),
-                });
-            }
-            if let Some(bytes) = bytes_fail {
-                reasons.push(PlanReason {
-                    constraint_id: bytes.constraint_id.clone(),
-                    message: "The target requires a smaller file.".into(),
-                });
-            }
-            if reasons.is_empty() {
-                return None;
-            }
-            let mut preservation = vec![
-                PreservationClaim::VideoDimensions,
-                PreservationClaim::VideoPixelFormat,
-                PreservationClaim::VideoColorMetadata,
-            ];
-            if artifact.first_audio().is_some() {
-                preservation.push(PreservationClaim::AudioStreamCopied);
-            }
-            Some(PlanStep {
-                id: format!("step-{}", index + 1),
-                operation,
-                target: StepTarget {
-                    container: Some(Container::Mp4),
-                    video_codec: Some(VideoCodec::H264),
-                    max_bytes,
-                    duration_ms: max_bytes.map(|_| duration_ms),
-                    width: Some(width),
-                    height: Some(height),
-                    ..StepTarget::default()
-                },
-                reasons,
-                expected: transcode_expected_facts(width, height),
-                preservation,
-                warnings: Vec::new(),
-            })
-        }
+        TransformId::Remux => instantiate_remux(artifact, report, index),
+        TransformId::TranscodeVideo => instantiate_transcode_video(artifact, report, index),
+        TransformId::TranscodeAudio => instantiate_transcode_audio(artifact, report, index),
         TransformId::EncodeJpeg => {
             let format = report.failing_or_unknown(Field::ImageFormat)?;
             let image = artifact.image.as_ref()?;
@@ -813,21 +822,438 @@ fn instantiate(
     }
 }
 
+fn instantiate_remux(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+    index: usize,
+) -> Option<PlanStep> {
+    let container = report.failing_or_unknown(Field::MediaContainer)?;
+    let video = artifact.first_video()?;
+    if !remux_source_container(artifact.container.as_ref())
+        || video.codec != Some(VideoCodec::H264)
+        || !copyable_audio(artifact)
+        || !approved_pixel_format(video)
+        || !approved_bit_depth(video)
+        || video.hdr == HdrStatus::Hdr
+        || video.width.is_none()
+        || video.height.is_none()
+        || artifact.duration_ms.is_none()
+        || report.failing_or_unknown(Field::FileBytes).is_some()
+        || report.failing_or_unknown(Field::MediaVideoCodec).is_some()
+        || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
+        || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
+        || report.failing_or_unknown(Field::MediaAudioCodec).is_some()
+        || needs_playback_normalize(artifact)
+    {
+        return None;
+    }
+    Some(PlanStep {
+        id: format!("step-{}", index + 1),
+        operation: TransformId::Remux,
+        target: StepTarget {
+            container: Some(Container::Mp4),
+            ..StepTarget::default()
+        },
+        reasons: vec![PlanReason {
+            constraint_id: container.constraint_id.clone(),
+            message: "The target requires an MP4 container.".into(),
+        }],
+        expected: vec![ExpectedFact {
+            field: Field::MediaContainer,
+            value: ExpectedValue::Container(Container::Mp4),
+        }],
+        preservation: vec![PreservationClaim::AllStreamsCopied],
+        warnings: Vec::new(),
+    })
+}
+
+fn instantiate_transcode_audio_only(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+    index: usize,
+) -> Option<PlanStep> {
+    let audio = artifact.first_audio()?;
+    if !audio
+        .codec
+        .as_ref()
+        .is_some_and(AudioCodec::is_transcodable_source)
+        || !audio_source_container(artifact.container.as_ref())
+    {
+        return None;
+    }
+    let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec);
+    let container_fail = report.failing_or_unknown(Field::MediaContainer);
+    let bytes_fail = report.failing_or_unknown(Field::FileBytes);
+    if audio_fail.is_none() && container_fail.is_none() && bytes_fail.is_none() {
+        return None;
+    }
+    let max_bytes = bytes_fail.and_then(|_| file_bytes_from_report(report));
+    if bytes_fail.is_some() {
+        let duration = artifact.duration_ms?;
+        let limit = max_bytes?;
+        if !crate::media_fit::can_fit_audio(duration, limit) {
+            return None;
+        }
+    }
+    let mut reasons = Vec::new();
+    if let Some(check) = bytes_fail {
+        reasons.push(PlanReason {
+            constraint_id: check.constraint_id.clone(),
+            message: "The file is over the size limit.".into(),
+        });
+    }
+    if let Some(check) = audio_fail {
+        reasons.push(PlanReason {
+            constraint_id: check.constraint_id.clone(),
+            message: "The target requires AAC audio.".into(),
+        });
+    }
+    if let Some(check) = container_fail {
+        reasons.push(PlanReason {
+            constraint_id: check.constraint_id.clone(),
+            message: "The target requires an MP4 container.".into(),
+        });
+    }
+    if reasons.is_empty() {
+        return None;
+    }
+    Some(PlanStep {
+        id: format!("step-{}", index + 1),
+        operation: TransformId::TranscodeAudio,
+        target: StepTarget {
+            container: Some(Container::Mp4),
+            audio_codec: Some(AudioCodec::Aac),
+            max_bytes,
+            duration_ms: max_bytes.and(artifact.duration_ms),
+            ..StepTarget::default()
+        },
+        reasons,
+        expected: vec![
+            ExpectedFact {
+                field: Field::MediaContainer,
+                value: ExpectedValue::Container(Container::Mp4),
+            },
+            ExpectedFact {
+                field: Field::MediaAudioCodec,
+                value: ExpectedValue::AudioCodec(AudioCodec::Aac),
+            },
+        ],
+        preservation: Vec::new(),
+        warnings: Vec::new(),
+    })
+}
+
+fn instantiate_transcode_audio(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+    index: usize,
+) -> Option<PlanStep> {
+    if artifact.is_audio_only() {
+        return instantiate_transcode_audio_only(artifact, report, index);
+    }
+    let video = artifact.first_video()?;
+    let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec)?;
+    if artifact.first_audio().is_none()
+        || video.codec != Some(VideoCodec::H264)
+        || !supported_source_container(artifact.container.as_ref())
+        || video.width.is_none()
+        || video.height.is_none()
+        || artifact.duration_ms.is_none()
+        || report.failing_or_unknown(Field::MediaVideoCodec).is_some()
+        || report.failing_or_unknown(Field::FileBytes).is_some()
+        || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
+        || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
+        || needs_playback_normalize(artifact)
+        || !matches!(
+            artifact.container,
+            Some(Container::Mp4)
+                | Some(Container::Mov)
+                | Some(Container::Mkv)
+                | Some(Container::Webm)
+        )
+    {
+        return None;
+    }
+    let mut reasons = vec![PlanReason {
+        constraint_id: audio_fail.constraint_id.clone(),
+        message: "The target requires AAC audio.".into(),
+    }];
+    if let Some(container) = report.failing_or_unknown(Field::MediaContainer) {
+        reasons.push(PlanReason {
+            constraint_id: container.constraint_id.clone(),
+            message: "The target requires an MP4 container.".into(),
+        });
+    }
+    Some(PlanStep {
+        id: format!("step-{}", index + 1),
+        operation: TransformId::TranscodeAudio,
+        target: StepTarget {
+            container: Some(Container::Mp4),
+            audio_codec: Some(AudioCodec::Aac),
+            width: video.width,
+            height: video.height,
+            ..StepTarget::default()
+        },
+        reasons,
+        expected: vec![
+            ExpectedFact {
+                field: Field::MediaContainer,
+                value: ExpectedValue::Container(Container::Mp4),
+            },
+            ExpectedFact {
+                field: Field::MediaAudioCodec,
+                value: ExpectedValue::AudioCodec(AudioCodec::Aac),
+            },
+            ExpectedFact {
+                field: Field::MediaVideoCodec,
+                value: ExpectedValue::VideoCodec(VideoCodec::H264),
+            },
+        ],
+        preservation: vec![
+            PreservationClaim::VideoDimensions,
+            PreservationClaim::VideoPixelFormat,
+            PreservationClaim::VideoColorMetadata,
+        ],
+        warnings: Vec::new(),
+    })
+}
+
+fn instantiate_transcode_video(
+    artifact: &Artifact,
+    report: &CompatibilityReport,
+    index: usize,
+) -> Option<PlanStep> {
+    let input_video = artifact.first_video()?;
+    let source_width = input_video.width?;
+    let source_height = input_video.height?;
+    let duration_ms = artifact.duration_ms?;
+    if !supported_source_container(artifact.container.as_ref())
+        || !transcodable_codec(input_video.codec.as_ref())
+    {
+        return None;
+    }
+
+    let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec);
+    let bytes_fail = report.failing_or_unknown(Field::FileBytes);
+    let width_fail = report.failing_or_unknown(Field::MediaVideoWidth);
+    let height_fail = report.failing_or_unknown(Field::MediaVideoHeight);
+    let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec);
+    let container_fail = report.failing_or_unknown(Field::MediaContainer);
+    let max_bytes = file_bytes_from_report(report);
+    let max_width = report
+        .checks
+        .iter()
+        .filter(|check| check.field == Field::MediaVideoWidth)
+        .filter_map(|check| check.required.parse().ok())
+        .min();
+    let max_height = report
+        .checks
+        .iter()
+        .filter(|check| check.field == Field::MediaVideoHeight)
+        .filter_map(|check| check.required.parse().ok())
+        .min();
+
+    let need_video_encode = codec_fail.is_some()
+        || bytes_fail.is_some()
+        || width_fail.is_some()
+        || height_fail.is_some()
+        || needs_playback_normalize(artifact)
+        || (container_fail.is_some() && !can_remux_instead(artifact, report));
+    if !need_video_encode {
+        return None;
+    }
+
+    let fitted = fit_output_size(
+        source_width,
+        source_height,
+        max_width,
+        max_height,
+        max_bytes,
+        Some(duration_ms),
+        artifact.first_audio().is_some(),
+    )?;
+    let width = even_dimension(fitted.0);
+    let height = even_dimension(fitted.1);
+    if let Some(limit) = max_bytes
+        && artifact.byte_length > limit
+        && !crate::media_fit::can_fit_at(
+            width,
+            height,
+            limit,
+            duration_ms,
+            artifact.first_audio().is_some(),
+        )
+    {
+        return None;
+    }
+
+    let mut reasons = Vec::new();
+    if let Some(video) = codec_fail {
+        reasons.push(PlanReason {
+            constraint_id: video.constraint_id.clone(),
+            message: "The target requires H.264 video.".into(),
+        });
+    }
+    if let Some(container) = container_fail {
+        reasons.push(PlanReason {
+            constraint_id: container.constraint_id.clone(),
+            message: "The target requires an MP4 container.".into(),
+        });
+    }
+    if let Some(audio) = audio_fail {
+        reasons.push(PlanReason {
+            constraint_id: audio.constraint_id.clone(),
+            message: "The target requires AAC audio.".into(),
+        });
+    }
+    if let Some(bytes) = bytes_fail {
+        reasons.push(PlanReason {
+            constraint_id: bytes.constraint_id.clone(),
+            message: "The target requires a smaller file.".into(),
+        });
+    }
+    if let Some(width_check) = width_fail {
+        reasons.push(PlanReason {
+            constraint_id: width_check.constraint_id.clone(),
+            message: "The target has a maximum width.".into(),
+        });
+    }
+    if let Some(height_check) = height_fail {
+        reasons.push(PlanReason {
+            constraint_id: height_check.constraint_id.clone(),
+            message: "The target has a maximum height.".into(),
+        });
+    }
+    if reasons.is_empty() && needs_playback_normalize(artifact) {
+        reasons.push(PlanReason {
+            constraint_id: "playback-normalize".into(),
+            message: "This file needs a compatible 8-bit H.264 picture.".into(),
+        });
+    }
+    if reasons.is_empty() {
+        return None;
+    }
+
+    let resized = width != source_width || height != source_height;
+    let copy_audio = copyable_audio(artifact);
+    let mut preservation = Vec::new();
+    if !resized {
+        preservation.push(PreservationClaim::VideoDimensions);
+    }
+    if approved_pixel_format(input_video) && approved_bit_depth(input_video) {
+        preservation.push(PreservationClaim::VideoPixelFormat);
+    }
+    if approved_sdr_color(input_video) && input_video.hdr == HdrStatus::Sdr {
+        preservation.push(PreservationClaim::VideoColorMetadata);
+    }
+    if copy_audio && artifact.first_audio().is_some() {
+        preservation.push(PreservationClaim::AudioStreamCopied);
+    }
+
+    let mut warnings = Vec::new();
+    if input_video.hdr != HdrStatus::Sdr {
+        warnings.push("HDR was converted to SDR. Colors may look different.".into());
+    }
+    if !approved_bit_depth(input_video) {
+        warnings.push("Bit depth was converted to 8-bit.".into());
+    }
+    if !approved_pixel_format(input_video) {
+        warnings.push("The picture format was converted to yuv420p.".into());
+    }
+    if !approved_sdr_color(input_video) && input_video.hdr == HdrStatus::Sdr {
+        warnings.push("Color metadata was converted to BT.709.".into());
+    }
+    if resized {
+        warnings.push(format!("Resized to {width}x{height} so the file can fit."));
+    }
+
+    Some(PlanStep {
+        id: format!("step-{}", index + 1),
+        operation: TransformId::TranscodeVideo,
+        target: StepTarget {
+            container: Some(Container::Mp4),
+            video_codec: Some(VideoCodec::H264),
+            audio_codec: if copy_audio {
+                None
+            } else {
+                Some(AudioCodec::Aac)
+            },
+            max_bytes,
+            duration_ms: max_bytes.map(|_| duration_ms),
+            width: Some(width),
+            height: Some(height),
+            ..StepTarget::default()
+        },
+        reasons,
+        expected: transcode_expected_facts(width, height, artifact.first_audio().is_some()),
+        preservation,
+        warnings,
+    })
+}
+
+fn can_remux_instead(artifact: &Artifact, report: &CompatibilityReport) -> bool {
+    remux_source_container(artifact.container.as_ref())
+        && artifact
+            .first_video()
+            .is_some_and(|video| video.codec == Some(VideoCodec::H264))
+        && copyable_audio(artifact)
+        && !needs_playback_normalize(artifact)
+        && report.failing_or_unknown(Field::MediaVideoCodec).is_none()
+        && report.failing_or_unknown(Field::FileBytes).is_none()
+        && report.failing_or_unknown(Field::MediaVideoWidth).is_none()
+        && report.failing_or_unknown(Field::MediaVideoHeight).is_none()
+        && report.failing_or_unknown(Field::MediaAudioCodec).is_none()
+}
+
 pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
     let mut next = artifact.clone();
     if let Some(container) = &step.target.container {
         next.container = Some(container.clone());
     }
-    if let (Some(codec), Some(video)) = (&step.target.video_codec, next.first_video_mut()) {
-        video.codec = Some(codec.clone());
-    }
-    if let (Some(format), Some(image)) = (&step.target.image_format, next.image.as_mut()) {
-        image.format = Some(format.clone());
-        image.alpha = Some(false);
-        image.animated = Some(false);
-    }
     if let Some(max_bytes) = step.target.max_bytes {
         next.byte_length = max_bytes;
+    }
+    match step.operation {
+        TransformId::TranscodeVideo => {
+            if let Some(video) = next.first_video_mut() {
+                if let Some(codec) = &step.target.video_codec {
+                    video.codec = Some(codec.clone());
+                }
+                if let Some(width) = step.target.width {
+                    video.width = Some(width);
+                }
+                if let Some(height) = step.target.height {
+                    video.height = Some(height);
+                }
+                video.pixel_format = Some("yuv420p".into());
+                video.bit_depth = Some(8);
+                video.color_range = Some("tv".into());
+                video.color_space = Some("bt709".into());
+                video.color_transfer = Some("bt709".into());
+                video.color_primaries = Some("bt709".into());
+                video.hdr = HdrStatus::Sdr;
+            }
+            if let Some(codec) = &step.target.audio_codec
+                && let Some(audio) = next.first_audio_mut()
+            {
+                audio.codec = Some(codec.clone());
+            }
+        }
+        TransformId::TranscodeAudio => {
+            if let Some(codec) = &step.target.audio_codec
+                && let Some(audio) = next.first_audio_mut()
+            {
+                audio.codec = Some(codec.clone());
+            }
+        }
+        TransformId::EncodeJpeg => {
+            if let (Some(format), Some(image)) = (&step.target.image_format, next.image.as_mut()) {
+                image.format = Some(format.clone());
+                image.alpha = Some(false);
+                image.animated = Some(false);
+            }
+        }
+        TransformId::Remux | TransformId::ImageAdapt => {}
     }
     next
 }
@@ -840,8 +1266,8 @@ fn file_bytes_from_report(report: &CompatibilityReport) -> Option<u64> {
         .and_then(|check| check.required.parse().ok())
 }
 
-fn transcode_expected_facts(width: u32, height: u32) -> Vec<ExpectedFact> {
-    vec![
+fn transcode_expected_facts(width: u32, height: u32, has_audio: bool) -> Vec<ExpectedFact> {
+    let mut expected = vec![
         ExpectedFact {
             field: Field::MediaVideoCodec,
             value: ExpectedValue::VideoCodec(VideoCodec::H264),
@@ -886,7 +1312,14 @@ fn transcode_expected_facts(width: u32, height: u32) -> Vec<ExpectedFact> {
             field: Field::MediaVideoHdr,
             value: ExpectedValue::Text("sdr".into()),
         },
-    ]
+    ];
+    if has_audio {
+        expected.push(ExpectedFact {
+            field: Field::MediaAudioCodec,
+            value: ExpectedValue::AudioCodec(AudioCodec::Aac),
+        });
+    }
+    expected
 }
 
 fn ids_for(report: &CompatibilityReport, field: Field) -> Vec<String> {

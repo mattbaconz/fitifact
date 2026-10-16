@@ -254,13 +254,24 @@ pub fn shipped_profile_ids() -> &'static [&'static str] {
         "discord/image-upload",
         "discord/image-upload-nitro-basic",
         "discord/image-upload-nitro",
+        "discord/file-upload",
+        "discord/file-upload-nitro-basic",
+        "discord/file-upload-nitro",
         "gmail/attachment",
         "github/comment-image",
         "whatsapp/photo",
         "x/image",
         "slack/file-image",
+        "slack/file-video",
+        "slack/file-upload",
         "jpeg/photo-upload",
         "generic/video-upload",
+        "generic/web-image",
+        "whatsapp/video",
+        "whatsapp/audio",
+        "x/video",
+        "x/audio",
+        "github/comment-video",
     ]
 }
 
@@ -291,13 +302,28 @@ fn shipped_profile_yaml(id: &str) -> Option<&'static str> {
         "discord/image-upload-nitro" => Some(include_str!(
             "../../../profiles/discord/image-upload-nitro.yaml"
         )),
+        "discord/file-upload" => Some(include_str!("../../../profiles/discord/file-upload.yaml")),
+        "discord/file-upload-nitro-basic" => Some(include_str!(
+            "../../../profiles/discord/file-upload-nitro-basic.yaml"
+        )),
+        "discord/file-upload-nitro" => Some(include_str!(
+            "../../../profiles/discord/file-upload-nitro.yaml"
+        )),
         "gmail/attachment" => Some(include_str!("../../../profiles/gmail/attachment.yaml")),
         "github/comment-image" => Some(include_str!("../../../profiles/github/comment-image.yaml")),
         "whatsapp/photo" => Some(include_str!("../../../profiles/whatsapp/photo.yaml")),
         "x/image" => Some(include_str!("../../../profiles/x/image.yaml")),
         "slack/file-image" => Some(include_str!("../../../profiles/slack/file-image.yaml")),
+        "slack/file-video" => Some(include_str!("../../../profiles/slack/file-video.yaml")),
+        "slack/file-upload" => Some(include_str!("../../../profiles/slack/file-upload.yaml")),
         "jpeg/photo-upload" => Some(include_str!("../../../profiles/jpeg/photo-upload.yaml")),
         "generic/video-upload" => Some(include_str!("../../../profiles/generic/video-upload.yaml")),
+        "generic/web-image" => Some(include_str!("../../../profiles/generic/web-image.yaml")),
+        "whatsapp/video" => Some(include_str!("../../../profiles/whatsapp/video.yaml")),
+        "whatsapp/audio" => Some(include_str!("../../../profiles/whatsapp/audio.yaml")),
+        "x/video" => Some(include_str!("../../../profiles/x/video.yaml")),
+        "x/audio" => Some(include_str!("../../../profiles/x/audio.yaml")),
+        "github/comment-video" => Some(include_str!("../../../profiles/github/comment-video.yaml")),
         _ => None,
     }
 }
@@ -468,6 +494,46 @@ constraints:
                 &compile_shipped_profile("slack/file-image").unwrap()
             ),
             Some(1_000_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("github/comment-video").unwrap()
+            ),
+            Some(10_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/video").unwrap()),
+            Some(16_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/video").unwrap()),
+            Some(512_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("discord/file-upload").unwrap()
+            ),
+            Some(20_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/audio").unwrap()),
+            Some(16_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/audio").unwrap()),
+            Some(16_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("slack/file-upload").unwrap()
+            ),
+            Some(1_000_000_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("generic/web-image").unwrap()
+            ),
+            Some(8_000_000)
         );
     }
 }
