@@ -1,0 +1,17 @@
+{
+  "name": "fitifact-desktop",
+  "private": true,
+  "version": "0.1.0-rc.6",
+  "type": "module",
+  "scripts": {
+    "sidecar": "powershell -NoProfile -File ../../scripts/fetch-desktop-ffmpeg.ps1",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "ui:dev": "npm run dev --prefix ../../web",
+    "ui:build": "npm run build --prefix ../../web"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.9.6"
+  }
+}

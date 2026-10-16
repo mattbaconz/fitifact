@@ -112,4 +112,19 @@ if ($attestationIndex -lt 0 -or $releaseCreateIndex -lt 0 -or $attestationIndex 
     throw "GitHub artifact attestation must complete before the sole GitHub release creation command"
 }
 
+$desktopWorkflow = [IO.File]::ReadAllText((Join-Path $root ".github\workflows\desktop.yml"))
+$desktopRequirements = @(
+    @{ Name = "windows-2025 runner"; Pattern = 'windows-2025' },
+    @{ Name = "sidecar fetch"; Pattern = 'npm run sidecar' },
+    @{ Name = "unsigned Windows package"; Pattern = 'Package unsigned Windows app' },
+    @{ Name = "sidecar bundle assertion"; Pattern = '\./scripts/check-desktop-bundle\.ps1' },
+    @{ Name = "desktop-windows artifact"; Pattern = 'name: desktop-windows' },
+    @{ Name = "pinned artifact upload"; Pattern = 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7\.0\.1' }
+)
+foreach ($requirement in $desktopRequirements) {
+    if ($desktopWorkflow -notmatch $requirement.Pattern) {
+        throw "Desktop workflow is missing invariant: $($requirement.Name)"
+    }
+}
+
 Write-Host "GitHub YAML parse, action pins, publication gate, permissions, attestation order, single release creation, and SBOM scope: PASS ($($yamlFiles.Count) files)"
