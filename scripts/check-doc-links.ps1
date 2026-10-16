@@ -44,15 +44,24 @@ if ($missing.Count -gt 0) {
 Write-Host "Local Markdown and wiki-link targets: PASS ($($markdownFiles.Count) files)"
 
 $copyPaths = @(
-    "web/src/App.tsx"
+    "web/src/App.tsx",
+    "web/src/components/ProductIntro.tsx",
+    "web/src/components/ResultPanel.tsx",
+    "web/src/components/SettingsDrawer.tsx",
+    "apps/docs/content/docs/index.mdx",
+    "apps/docs/content/docs/desktop-guide.mdx"
 )
 $copyText = ($copyPaths | ForEach-Object {
     [IO.File]::ReadAllText((Join-Path $root $_))
 }) -join "`n"
+$copyText = $copyText -replace '\s+', ' '
 foreach ($requiredCopy in @(
-    "Make your image pass the upload",
-    "Your image stays on this device",
-    "validated against the requirements you confirmed"
+    "Make your file work there.",
+    "Your file stays on this device.",
+    "That app may still have extra undocumented rules.",
+    "FFmpeg shipped with this app",
+    "CLI builds",
+    "Locally built installers are unsigned"
 )) {
     if (-not $copyText.Contains($requiredCopy)) {
         throw "Product copy boundary is missing: $requiredCopy"

@@ -1,11 +1,17 @@
-import type { CompatibilityReport, ErrorReport, ProductState } from "../types";
+import type {
+  CompatibilityReport,
+  ConstraintSet,
+  ErrorReport,
+  ProductState,
+} from "../types";
 import { isErrorReport } from "../types";
+import type { FileKind } from "./destinations";
 import type { DesktopTarget } from "./desktop";
 import { WorkerFailure } from "../worker/client";
 
 export interface ProgressPayload {
   stage: string;
-  percent: number;
+  operationId: string;
 }
 
 export interface DoctorTool {
@@ -52,6 +58,7 @@ export interface DesktopPlanOutcome {
       reasons?: Array<{ message: string }>;
       warnings?: string[];
     }>;
+    preserved?: string[];
     warnings?: string[];
   };
   blocking?: Array<{ message: string; code?: string }>;
@@ -63,10 +70,18 @@ export interface DesktopAdaptResult {
   output?: string | null;
   explanation?: { summary: string; details: string[] };
   report?: CompatibilityReport;
+  validation?: {
+    status: "pass" | "fail" | "unknown";
+    checks: CompatibilityReport;
+    artifact: DesktopArtifact;
+  };
   error?: ErrorReport | { code?: string; message?: string };
 }
 
-async function invokeJson<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+async function invokeJson<T>(
+  command: string,
+  args: Record<string, unknown> = {},
+): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   try {
     return await invoke<T>(command, args);
@@ -81,7 +96,11 @@ function desktopFailure(caught: unknown): WorkerFailure {
     return new WorkerFailure(stateForCode(caught.code), caught);
   }
   if (caught && typeof caught === "object" && "message" in caught) {
-    const record = caught as { code?: string; message?: string; schema?: string };
+    const record = caught as {
+      code?: string;
+      message?: string;
+      schema?: string;
+    };
     const code = record.code ?? "EXECUTION_FAILED";
     return new WorkerFailure(stateForCode(code), {
       schema: "fitifact.error/v1",
@@ -89,7 +108,12 @@ function desktopFailure(caught: unknown): WorkerFailure {
       message: record.message ?? "Desktop command failed.",
     });
   }
-  const message = typeof caught === "string" ? caught : caught instanceof Error ? caught.message : "Desktop command failed.";
+  const message =
+    typeof caught === "string"
+      ? caught
+      : caught instanceof Error
+        ? caught.message
+        : "Desktop command failed.";
   const codeMatch = message.match(/^([A-Z_]+): /);
   const code = codeMatch?.[1] ?? "EXECUTION_FAILED";
   return new WorkerFailure(stateForCode(code), {
@@ -103,6 +127,8 @@ function stateForCode(code: string): ProductState {
   switch (code) {
     case "PROVIDER_MISSING":
       return "error";
+    case "EXECUTION_CANCELLED":
+      return "cancelled";
     case "NO_VALID_PLAN":
       return "cannot_satisfy";
     case "VALIDATION_FAILED":
@@ -123,20 +149,52 @@ function targetArgs(target: DesktopTarget) {
   };
 }
 
+export function fileKindFromArtifact(
+  artifact: DesktopArtifact | null | undefined,
+): FileKind | null {
+  if (!artifact) return null;
+  if (artifact.family === "image" || artifact.image) return "image";
+  const hasVideo = artifact.streams?.some((stream) => stream.type === "video");
+  if (hasVideo) return "video";
+  const hasAudio = artifact.streams?.some((stream) => stream.type === "audio");
+  if (hasAudio) return "audio";
+  return "video";
+}
+
 export async function desktopInspect(path: string) {
   return invokeJson<DesktopArtifact>("inspect", { path });
 }
 
 export async function desktopCheck(path: string, target: DesktopTarget) {
-  return invokeJson<CompatibilityReport>("check", { path, target: targetArgs(target) });
+  return invokeJson<CompatibilityReport>("check", {
+    path,
+    target: targetArgs(target),
+  });
 }
 
 export async function desktopPlan(path: string, target: DesktopTarget) {
-  return invokeJson<DesktopPlanOutcome>("plan", { path, target: targetArgs(target) });
+  return invokeJson<DesktopPlanOutcome>("plan", {
+    path,
+    target: targetArgs(target),
+  });
 }
 
-export async function desktopAdapt(path: string, target: DesktopTarget) {
-  return invokeJson<DesktopAdaptResult>("adapt", { path, target: targetArgs(target) });
+export async function desktopCompileTarget(target: DesktopTarget) {
+  return invokeJson<ConstraintSet>("compile_target", {
+    target: targetArgs(target),
+  });
+}
+
+export async function desktopAdapt(
+  path: string,
+  target: DesktopTarget,
+  operationId: string,
+) {
+  return invokeJson<DesktopAdaptResult>("adapt", {
+    path,
+    target: targetArgs(target),
+    operationId,
+  });
 }
 
 export async function desktopDoctor() {
@@ -151,7 +209,10 @@ export async function desktopReadHeader(path: string) {
 export async function desktopReadImage(path: string) {
   const { invoke } = await import("@tauri-apps/api/core");
   try {
-    const payload = await invoke<ArrayBuffer | number[] | Uint8Array>("read_limited_file", { path });
+    const payload = await invoke<ArrayBuffer | number[] | Uint8Array>(
+      "read_limited_file",
+      { path },
+    );
     if (payload instanceof ArrayBuffer) return new Uint8Array(payload);
     if (payload instanceof Uint8Array) return payload;
     return Uint8Array.from(payload);
@@ -168,7 +229,29 @@ export async function desktopOpenDialog(): Promise<string | null> {
     filters: [
       {
         name: "Fitifact",
-        extensions: ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff", "bmp", "gif", "mp4", "mov", "m4v"],
+        extensions: [
+          "jpg",
+          "jpeg",
+          "png",
+          "webp",
+          "heic",
+          "heif",
+          "tif",
+          "tiff",
+          "bmp",
+          "gif",
+          "mp4",
+          "mov",
+          "m4v",
+          "webm",
+          "mkv",
+          "mp3",
+          "wav",
+          "flac",
+          "m4a",
+          "ogg",
+          "aac",
+        ],
       },
     ],
   });
@@ -193,7 +276,10 @@ export function containerLabel(value: unknown): string | null {
   return null;
 }
 
-export function inspectMediaLine(artifact: DesktopArtifact, bytesLabel: string): string {
+export function inspectMediaLine(
+  artifact: DesktopArtifact,
+  bytesLabel: string,
+): string {
   const video = artifact.streams?.find((stream) => stream.type === "video");
   const audio = artifact.streams?.find((stream) => stream.type === "audio");
   const parts = [
@@ -202,18 +288,28 @@ export function inspectMediaLine(artifact: DesktopArtifact, bytesLabel: string):
     codecLabel(audio?.codec),
     bytesLabel,
   ].filter(Boolean);
-  if (video?.width && video.height) parts.push(`${video.width}×${video.height}`);
+  if (video?.width && video.height)
+    parts.push(`${video.width}×${video.height}`);
   return parts.join(" · ");
 }
 
 export const FFMPEG_INSTALL_COMMANDS = [
-  { label: "Ubuntu/Debian", command: "sudo apt update && sudo apt install ffmpeg" },
+  {
+    label: "Ubuntu/Debian",
+    command: "sudo apt update && sudo apt install ffmpeg",
+  },
   { label: "macOS (Homebrew)", command: "brew install ffmpeg" },
   { label: "Windows (WinGet)", command: "winget install --id Gyan.FFmpeg -e" },
 ] as const;
 
 export const FFMPEG_INSTALL_COPY = [
-  "Install a current FFmpeg build with libx264 and MP4 support, add it to PATH, then retry.",
+  "The desktop app ships FFmpeg. This is only for the command-line tool or a broken install.",
   ...FFMPEG_INSTALL_COMMANDS.map((item) => `${item.label}: ${item.command}`),
-  "Fitifact does not bundle FFmpeg.",
 ].join("\n");
+
+export function desktopCancel(operationId: string) {
+  return invokeJson<boolean>("cancel", { operationId });
+}
+export function desktopReveal(path: string) {
+  return invokeJson("reveal", { path });
+}

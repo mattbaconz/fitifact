@@ -1,3 +1,4 @@
+import { readStored, writeStored } from "./storage";
 const STORAGE_KEY = "fitifact.saved-targets.v1";
 const MAX_TARGETS = 20;
 
@@ -11,7 +12,7 @@ export interface SavedTarget {
 
 function readStore(): SavedTarget[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readStored(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -32,7 +33,7 @@ function readStore(): SavedTarget[] {
 }
 
 function writeStore(targets: SavedTarget[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(targets.slice(0, MAX_TARGETS)));
+  writeStored(STORAGE_KEY, JSON.stringify(targets.slice(0, MAX_TARGETS)));
 }
 
 export function listSavedTargets(): SavedTarget[] {
@@ -42,6 +43,11 @@ export function listSavedTargets(): SavedTarget[] {
 export function saveTarget(input: Omit<SavedTarget, "id" | "savedAt"> & { id?: string }): SavedTarget {
   const name = input.name.trim();
   if (!name) throw new Error("Name this target before saving it.");
+  const targets = readStore();
+  if (targets.some((item) => item.id !== input.id && item.name.toLocaleLowerCase() === name.toLocaleLowerCase()))
+    throw new Error("That name is already in use. Choose a different name.");
+  if (!targets.some((item) => item.id === input.id) && targets.length >= MAX_TARGETS)
+    throw new Error("You have 20 saved targets. Remove one before saving another.");
   const next: SavedTarget = {
     id: input.id ?? crypto.randomUUID(),
     name,
@@ -49,7 +55,7 @@ export function saveTarget(input: Omit<SavedTarget, "id" | "savedAt"> & { id?: s
     constraintsJson: input.constraintsJson,
     savedAt: new Date().toISOString(),
   };
-  const existing = readStore().filter((item) => item.id !== next.id && item.name !== next.name);
+  const existing = targets.filter((item) => item.id !== next.id);
   writeStore([next, ...existing]);
   return next;
 }

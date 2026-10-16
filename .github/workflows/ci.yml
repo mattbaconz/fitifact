@@ -68,6 +68,8 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: Install locked web dependencies
         run: npm ci
+      - name: Install locked documentation dependencies
+        run: npm ci --prefix ../apps/docs
       - name: Install pinned browser engines
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Web lint and typecheck

@@ -29,13 +29,14 @@ describe("desktop helpers", () => {
 });
 
 describe("FFmpeg install copy", () => {
-  it("matches the README install trio and refuses to claim a bundle", () => {
+  it("keeps CLI PATH recipes and does not tell desktop users to install FFmpeg", () => {
     expect(FFMPEG_INSTALL_COMMANDS.map((item) => item.command)).toEqual([
       "sudo apt update && sudo apt install ffmpeg",
       "brew install ffmpeg",
       "winget install --id Gyan.FFmpeg -e",
     ]);
-    expect(FFMPEG_INSTALL_COPY).toContain("Fitifact does not bundle FFmpeg.");
+    expect(FFMPEG_INSTALL_COPY).toContain("desktop app ships FFmpeg");
     expect(FFMPEG_INSTALL_COPY).toContain("winget install --id Gyan.FFmpeg -e");
+    expect(FFMPEG_INSTALL_COPY).not.toContain("Fitifact does not bundle FFmpeg.");
   });
 });
