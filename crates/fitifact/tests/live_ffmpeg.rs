@@ -31,6 +31,44 @@ fn require_tools() {
     );
 }
 
+#[test]
+#[ignore]
+fn cancellation_reaps_a_live_ffmpeg_process() {
+    use fitifact::runtime::{CancellableSystemSpawner, ProcessSpawner};
+    require_tools();
+    let token = fitifact::CancellationToken::default();
+    let worker = token.clone();
+    let start = std::time::Instant::now();
+    let job = std::thread::spawn(move || {
+        CancellableSystemSpawner(worker).spawn(
+            "ffmpeg",
+            &[
+                "-nostdin",
+                "-re",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x64:rate=10",
+                "-t",
+                "60",
+                "-f",
+                "null",
+                "-",
+            ]
+            .map(String::from),
+            Duration::from_secs(90),
+        )
+    });
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(token.cancel());
+    let error = job.join().unwrap().unwrap_err();
+    assert_eq!(error.code, ErrorCode::ExecutionCancelled);
+    assert!(
+        start.elapsed() < Duration::from_secs(10),
+        "cancel must reap the process promptly"
+    );
+}
+
 fn canonical_fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
