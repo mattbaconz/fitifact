@@ -59,7 +59,7 @@ pub struct SystemSpawner;
 
 impl ProcessSpawner for SystemSpawner {
     fn spawn(&self, program: &str, args: &[String], timeout: Duration) -> Result<SpawnOutput> {
-        spawn_system(program, args, timeout)
+        spawn_system(program, args, timeout, None)
     }
 }
 
@@ -436,12 +436,37 @@ fn same_path(a: &Path, b: &Path) -> bool {
     }
 }
 
-fn spawn_system(program: &str, args: &[String], timeout: Duration) -> Result<SpawnOutput> {
+#[derive(Debug, Clone)]
+pub struct CancellableSystemSpawner(pub crate::CancellationToken);
+
+impl ProcessSpawner for CancellableSystemSpawner {
+    fn spawn(&self, program: &str, args: &[String], timeout: Duration) -> Result<SpawnOutput> {
+        spawn_system(program, args, timeout, Some(&self.0))
+    }
+}
+
+fn spawn_system(
+    program: &str,
+    args: &[String],
+    timeout: Duration,
+    cancellation: Option<&crate::CancellationToken>,
+) -> Result<SpawnOutput> {
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::Instant;
 
-    let mut child = Command::new(program)
+    if let Some(token) = cancellation {
+        token.check()?;
+    }
+    let mut command = Command::new(program);
+    // All subprocess output is captured below. A GUI host must not create a
+    // console window for every ffprobe/FFmpeg operation on Windows.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -464,6 +489,13 @@ fn spawn_system(program: &str, args: &[String], timeout: Duration) -> Result<Spa
 
     let start = Instant::now();
     loop {
+        if let Some(error) = cancellation.and_then(|token| token.check().err()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = out_handle.join();
+            let _ = err_handle.join();
+            return Err(error);
+        }
         match child.try_wait() {
             Ok(Some(status)) => {
                 let stdout = out_handle.join().unwrap_or_default();

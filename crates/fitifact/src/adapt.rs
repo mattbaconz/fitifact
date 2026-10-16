@@ -57,6 +57,23 @@ pub struct CleanupWarning {
 }
 
 pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
+    adapt_inner(request, None)
+}
+
+pub fn adapt_with_cancellation(
+    request: AdaptRequest<'_>,
+    cancellation: &crate::CancellationToken,
+) -> Result<AdaptationResult> {
+    adapt_inner(request, Some(cancellation))
+}
+
+fn adapt_inner(
+    request: AdaptRequest<'_>,
+    cancellation: Option<&crate::CancellationToken>,
+) -> Result<AdaptationResult> {
+    if let Some(token) = cancellation {
+        token.check()?;
+    }
     let original = request.input.to_path_buf();
     let artifact = request.inspector.inspect(request.input)?;
     let report = check(&artifact, &request.constraints);
@@ -263,7 +280,11 @@ pub fn adapt(request: AdaptRequest<'_>) -> Result<AdaptationResult> {
                 &output_hashes,
             ) {
                 Ok(staged_validation) if staged_validation.status == ValidationStatus::Pass => {
-                    let identity_confirmed = match staged.publish(&output) {
+                    let publication = match cancellation {
+                        Some(token) => token.publish(|| staged.publish(&output)),
+                        None => staged.publish(&output),
+                    };
+                    let identity_confirmed = match publication {
                         Ok(confirmed) => confirmed,
                         Err(err) => {
                             let cleanup = staged.cleanup_owned();
@@ -1220,6 +1241,64 @@ mod tests {
 
     struct RacingProvider {
         destination: PathBuf,
+    }
+
+    #[test]
+    fn cancellation_after_validation_cleans_stage_and_preserves_original() {
+        struct CancelOnValidation {
+            input: PathBuf,
+            token: crate::CancellationToken,
+        }
+        impl Inspector for CancelOnValidation {
+            fn inspect(&self, path: &Path) -> Result<Artifact> {
+                let container = if path == self.input {
+                    Container::Mov
+                } else {
+                    self.token.cancel();
+                    Container::Mp4
+                };
+                Ok(Artifact::media(
+                    container,
+                    VideoCodec::H264,
+                    Some(AudioCodec::Aac),
+                    12,
+                ))
+            }
+        }
+        let dir = test_dir("cancel-before-publish");
+        let input = dir.join("input.mov");
+        let output = dir.join("output.mp4");
+        std::fs::write(&input, b"original").unwrap();
+        let token = crate::CancellationToken::default();
+        let inspector = CancelOnValidation {
+            input: input.clone(),
+            token: token.clone(),
+        };
+        let result = adapt_with_cancellation(
+            AdaptRequest {
+                input: &input,
+                constraints: media_h264_mp4_aac(),
+                output: Some(output.clone()),
+                catalog: None,
+                inspector: &inspector,
+                provider: Some(&PassProvider),
+                execution: ExecutionContext::default(),
+            },
+            &token,
+        )
+        .unwrap();
+        assert_eq!(result.status, AdaptationStatus::Failed);
+        assert_eq!(result.error.unwrap().code, ErrorCode::ExecutionCancelled);
+        assert!(result.output.is_none());
+        assert!(!output.exists());
+        assert_eq!(std::fs::read(&input).unwrap(), b"original");
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            1,
+            "no stage may remain"
+        );
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 
     impl TransformProvider for RacingProvider {

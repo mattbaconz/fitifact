@@ -77,3 +77,7 @@ pub use validate::{
     DURATION_TOLERANCE_MS, ProvenanceCheck, ValidationCheck, ValidationReport, ValidationStatus,
     validate, validate_adaptation,
 };
+
+pub mod cancellation;
+pub use adapt::adapt_with_cancellation;
+pub use cancellation::CancellationToken;
