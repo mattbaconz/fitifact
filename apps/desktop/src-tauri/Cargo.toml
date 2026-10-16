@@ -1,0 +1,28 @@
+[package]
+name = "fitifact-desktop"
+version = "0.1.0-rc.6"
+description = "Thin Tauri 2 host for the Fitifact compatibility engine"
+authors = ["Fitifact"]
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/mattbaconz/fitifact"
+
+[lib]
+name = "fitifact_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+fitifact = { path = "../../../crates/fitifact" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

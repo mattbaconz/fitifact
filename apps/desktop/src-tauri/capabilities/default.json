@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Main Fitifact window: dialog for a chosen file, no home-wide writes",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "dialog:default"
+  ]
+}
