@@ -73,6 +73,12 @@ export function checkLabel(field: string): string {
       return "Width";
     case "media.video.height":
       return "Height";
+    case "media.video.pixel_format":
+      return "Picture format";
+    case "media.video.bit_depth":
+      return "Bit depth";
+    case "media.video.hdr":
+      return "Dynamic range";
     default:
       return field;
   }

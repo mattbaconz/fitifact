@@ -1,8 +1,8 @@
 schema: fitifact.profile/v1
 id: discord/file-upload-nitro
 name: Discord Nitro file upload
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
@@ -10,14 +10,11 @@ scope:
   feature: file-upload
   account_tier: nitro
 
-trust:
-  level: documented
-
 constraints:
   - id: bytes
     field: file.bytes
     op: lte
-    value: 500000000
+    value: 1000000000
     source: src-attachments
 
 preferences:
@@ -29,8 +26,8 @@ sources:
   - id: src-attachments
     type: official-doc
     url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
-    observed_at: 2026-08-31
-    note: Nitro upload ceiling is 500 MB. Fitifact never detects Nitro; this profile is the cap you set.
+    observed_at: 2026-10-17
+    note: "\"Nitro offers up to 1GB.\" Integer is 1000000000 as published. Fitifact never detects Nitro; this profile is the cap you set. Discord says it is experimenting with upload limits, so some accounts see larger caps."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

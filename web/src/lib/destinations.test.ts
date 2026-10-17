@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  chipSubtitle,
   discordUsingCopy,
+  familyFromQuery,
   isImageCapableProfile,
   profileForFamily,
   profilePlainSummary,
@@ -31,6 +33,7 @@ describe("destination catalog", () => {
     expect(profileForFamily("gmail", "free", "audio")).toBe("gmail/attachment");
     expect(profileForFamily("slack", "free", "audio")).toBe("slack/file-upload");
     expect(profileForFamily("whatsapp", "free", "audio")).toBe("whatsapp/audio");
+    expect(profileForFamily("x", "free", "audio")).toBeNull();
     expect(profileForFamily("github", "free", "audio")).toBeNull();
     expect(profileForFamily("jpeg", "free", "audio")).toBeNull();
     expect(profileForFamily("generic-video", "free", "audio")).toBeNull();
@@ -61,10 +64,27 @@ describe("destination catalog", () => {
     expect(sameAsLastTimeCopy("discord", "free")).toBe(
       "Same as last time: Discord free (the cap you set).",
     );
-    expect(profilePlainSummary("whatsapp/video", "free")).toBe("WhatsApp video · 16 MB");
-    expect(profilePlainSummary("whatsapp/audio", "free")).toBe("WhatsApp audio · 16 MB");
+    expect(profilePlainSummary("whatsapp/video", "free")).toBe("WhatsApp video · 64 MB");
+    expect(profilePlainSummary("whatsapp/audio", "free")).toBe("WhatsApp audio · 2 GB");
+    expect(profilePlainSummary("discord/image-upload-nitro", "nitro")).toBe(
+      "Discord Nitro image · 20 MB",
+    );
+    expect(profilePlainSummary("discord/file-upload-nitro", "nitro")).toBe(
+      "Discord Nitro file · 1 GB",
+    );
+    expect(chipSubtitle("discord", "nitro")).toBe("1 GB (the cap you set)");
+    expect(chipSubtitle("whatsapp", "free")).toBe("16 MB photo, 64 MB video");
     expect(profilePlainSummary("discord/file-upload", "free")).toBe("Discord free file · 20 MB");
     expect(profilePlainSummary("slack/file-upload", "free")).toBe("Slack file · 1 GB");
     expect(profilePlainSummary("generic/web-image", "free")).toBe("Web image · JPEG PNG WebP · 8 MB");
+  });
+
+  it("reads a ?for= deep link and ignores unknown destinations", () => {
+    expect(familyFromQuery("?for=discord")).toBe("discord");
+    expect(familyFromQuery("?for=WhatsApp")).toBe("whatsapp");
+    expect(familyFromQuery("?for=twitter")).toBe("x");
+    expect(familyFromQuery("?for=web-image")).toBe("jpeg");
+    expect(familyFromQuery("?for=myspace")).toBeNull();
+    expect(familyFromQuery("")).toBeNull();
   });
 });

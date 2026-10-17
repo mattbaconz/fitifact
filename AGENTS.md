@@ -125,6 +125,15 @@ web surface for the still-image matrix, and a thin Tauri 2 host in
 `apps/desktop/` that reuses that UI. The desktop package stays out of the
 workspace lockfile.
 
+Picture format, bit depth, and HDR are profile constraints like any other; only
+a video encode satisfies them, and HDR is tone-mapped to SDR only when the
+FFmpeg build has `zscale` and `tonemap` (otherwise the plan is refused). Each
+profile rule names a typed source (`official-doc`, `official-api`,
+`fitifact-rule`, `user-config`, ...), trust is derived from those types, and
+`web/public/registry.json` is generated from `profiles/` and checked by a
+golden test (`FITIFACT_BLESS=1 cargo test -p fitifact --lib registry`
+regenerates it).
+
 The public documentation site is a separate Next.js/Fumadocs static export in
 `apps/docs`. The Vite application remains at the root URL. `web`'s build merges
 the docs export at `/docs/` (including the configured Pages base path). Shared

@@ -1,48 +1,25 @@
 schema: fitifact.profile/v1
 id: whatsapp/video
 name: WhatsApp video
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: whatsapp
   feature: video
 
-trust:
-  level: documented
-
 constraints:
   - id: container
     field: media.container
     op: in
-    value: [mp4]
-    source: src-video
-  - id: video-codec
-    field: media.video.codec
-    op: in
-    value: [h264]
-    source: src-video
-  - id: audio-codec
-    field: media.audio.codec
-    op: in
-    value: [aac]
-    source: src-video
-  - id: max-width
-    field: media.video.width
-    op: lte
-    value: 1280
-    source: src-video
-  - id: max-height
-    field: media.video.height
-    op: lte
-    value: 1280
-    source: src-video
+    value: [mkv, mov, mp4]
+    source: src-media
   - id: bytes
     field: file.bytes
     op: lte
-    value: 16000000
-    source: src-video
+    value: 64000000
+    source: src-media
 
 preferences:
   preserve:
@@ -50,11 +27,11 @@ preferences:
     audio: high
 
 sources:
-  - id: src-video
+  - id: src-media
     type: official-doc
-    url: https://faq.whatsapp.com/1317564962315842
-    observed_at: 2026-08-31
-    note: Meta documents sending videos as MP4. This profile uses the 16 MB send ceiling and a 1280px edge so in-chat playback stays reliable. WhatsApp may recompress on the wire.
+    url: https://faq.whatsapp.com/453914586839706
+    observed_at: 2026-10-17
+    note: "Video formats 3GP, AVI, FLV, MKV, MOV, and MP4 (Fitifact handles MKV, MOV, and MP4). The default video limit is 100 MB up to 720p on fast connections and 64 MB up to 480p on slow ones; this profile uses 64 MB so the file sends on either. WhatsApp re-encodes video itself, so no codec or resolution rule is applied."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

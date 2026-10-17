@@ -9,6 +9,12 @@ A destination profile compiles to the same constraint contract as custom require
 
 Account tiers and upload surfaces can differ. Set your own Discord cap in Settings and verify that the chosen profile applies to the place you are uploading.
 
+## Where each rule comes from
+
+Every rule in a shipped profile names its source: the destination's official help page or API docs, a Fitifact rule, or a starter value. Fitifact rules are its own conservative choices, such as encoding 8-bit SDR H.264 so a video plays everywhere; they are labeled as Fitifact's, never as the destination's. A profile's trust follows from those sources rather than being declared.
+
+Under the current requirements, **Rules checked** shows when the profile was last verified against its sources and lists each rule with its source and age. A profile not re-checked within 30 days is marked **Stale**; verify its limits before relying on them. The same data is published as `registry.json` at the site root.
+
 ## Hard constraints and preferences
 
 Hard constraints decide whether a file fits: accepted format or codec, maximum bytes, dimensions, and other supported checks. Preservation preferences guide how to reach that target. A preference cannot make a failed hard constraint pass.
@@ -18,6 +24,8 @@ Fitifact ranks supported plans to minimize semantic loss, lossy operations, stre
 ## Size and dimensions
 
 `2 MB` means 2,000,000 bytes. `2 MiB` means 2,097,152 bytes. The size editor accepts either unit or an exact byte count. A number without a unit means bytes. Values that would produce a fraction of a byte are refused instead of rounded.
+
+Some forms require a size window, such as a 20–50 KB photo. Fitifact fits JPEG quality into the window and refuses when no quality lands inside it. It never pads a file to reach a minimum, so a file that is already too small is refused.
 
 An exact dimension differs from a maximum. “At most 600 × 600” can preserve aspect ratio by fitting inside the box. “Exactly 600 × 600” may require a crop. Fitifact asks before discarding edges.
 

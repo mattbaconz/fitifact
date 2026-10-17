@@ -6,6 +6,8 @@ All notable changes to Fitifact are documented here.
 
 ### [fixed]
 
+- Bundled tool lookup accepts only `<tool>` or `<tool>-<target triple>`
+  executables, not any file that starts with the tool name.
 - Native tool diagnostics no longer mistake the app's launch directory for an
   output destination and disable otherwise healthy bundled media tools.
 - Native file selection uses keyboard-accessible buttons. Damaged-file and
@@ -30,7 +32,15 @@ All notable changes to Fitifact are documented here.
   fits; oversized or AAC-required sound encodes to AAC in MP4. Video destinations
   refuse audio-only files.
 - Shipped size-only profiles: `discord/file-upload` (and Nitro caps),
-  `slack/file-upload`, `whatsapp/audio`, `x/audio`.
+  `slack/file-upload`, `whatsapp/audio`.
+- `registry.json` at the site root lists every shipped profile with per-rule
+  source type, URL, and check date. The UI shows when a profile's rules were
+  checked, each rule's source and age, and marks profiles older than 30 days
+  as stale. Profile sources gain the `fitifact-rule` type; trust is derived.
+- `?for=<destination>` links preselect a destination.
+- Byte windows: `file.bytes` accepts `gte`, the requirements parser reads
+  floors and ranges such as "20-50 KB", and JPEG fitting lands inside the
+  window or refuses. Files below a floor are refused, never padded.
 - Visible intelligence in the UI: what was wrong, what Fitifact changes, what
   stays, and whether the result is verified.
 - Desktop app ships `ffmpeg`/`ffprobe` as sidecars so video and audio work
@@ -52,8 +62,17 @@ All notable changes to Fitifact are documented here.
 - FFmpeg missing: per-OS copy buttons instead of a command wall.
 - Work surface is file, destinations, then the verdict and download. Paste override sits below so compatible/no-op is visible without scrolling past the form.
 - Desktop no longer asks consumers to install FFmpeg. The CLI still does.
-- Compatible H.264/AAC MP4 files with missing color tags stay a no-op. HDR,
-  10-bit, and non-yuv420p still get a smallest-change encode.
+- A file that meets every hard constraint is never re-encoded. Picture format,
+  bit depth, and HDR are explicit profile rules (`media.video.pixel_format`,
+  `bit_depth`, `hdr`), and an encode cites the rule that failed. HDR is
+  tone-mapped to SDR with zscale when FFmpeg has it and refused otherwise.
+- Profiles re-verified on 2026-10-17: Discord Nitro uploads up to 1 GB;
+  Discord images stay at 20 MB on every tier because larger images arrive as
+  downloads; WhatsApp video is 64 MB in MKV, MOV, or MP4 with no codec rule;
+  WhatsApp audio uses the 2 GB documents limit; X and GitHub images are GIF,
+  JPEG, or PNG; GitHub video accepts MOV, MP4, or WebM; Slack images keep
+  edges under 25,000 px. `x/audio` is removed because X takes no audio-only
+  uploads. `whatsapp/photo` is shown as stale because its source page moved.
 - `matroska,webm` probes classify as WebM only when the codecs are WebM-legal
   (VP8/VP9/AV1 plus Opus or Vorbis). H.264 in that probe is MKV and can remux.
 

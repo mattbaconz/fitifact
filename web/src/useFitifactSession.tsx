@@ -57,6 +57,7 @@ import {
 import {
   destinationChips,
   familyForProfile,
+  familyFromQuery,
   profileForFamily,
   resolveProfile,
   sameAsLastTimeCopy,
@@ -347,6 +348,7 @@ export function useFitifactSession() {
   if (!clientRef.current) clientRef.current = new ImageWorkerClient();
   const client = clientRef.current;
   const [seed] = useState(sessionFromLastTarget);
+  const [linkedFamily] = useState(() => familyFromQuery(window.location.search));
   const [requirements, setRequirements] = useState(seed.requirements);
   const [parsed, setParsed] = useState<RequirementParse | null>(null);
   const [target, setTarget] = useState<EditableTarget | null>(seed.target);
@@ -787,6 +789,13 @@ export function useFitifactSession() {
       !doctor.healthy
     ) {
       setState("inspected");
+      return;
+    }
+    const linkedProfile = linkedFamily
+      ? profileForFamily(linkedFamily, currentSetup.discordCap, kind)
+      : null;
+    if (linkedProfile) {
+      await applyProfileId(linkedProfile, operation);
       return;
     }
     const setupWins =

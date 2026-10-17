@@ -1,3 +1,4 @@
+import { ProfileProvenance } from "./ProfileProvenance";
 import { SavedTargets } from "../components/SavedTargets";
 import {
   familyForProfile,
@@ -190,9 +191,10 @@ export function RequirementsPanel({
           <p className="target-summary">{summarizeTarget(target)}</p>
           <p className="helper">
             {activeFamily
-              ? "From a documented destination profile. Verify the limits for your account."
+              ? "From a destination profile. Verify the limits for your account."
               : "From the requirements you supplied."}
           </p>
+          {activeFamily ? <ProfileProvenance profileId={activeProfile} /> : null}
           {editingTarget ? (
             <div className="target-form">
               <fieldset
@@ -376,11 +378,14 @@ export function RequirementsPanel({
           ) : null}
         </div>
       ) : desktopTarget ? (
-        <p className="target-summary">
-          {desktopTarget.profile
-            ? profilePlainSummary(desktopTarget.profile, setup.discordCap)
-            : "Custom media constraints"}
-        </p>
+        <>
+          <p className="target-summary">
+            {desktopTarget.profile
+              ? profilePlainSummary(desktopTarget.profile, setup.discordCap)
+              : "Custom media constraints"}
+          </p>
+          <ProfileProvenance profileId={desktopTarget.profile ?? null} />
+        </>
       ) : null}
     </section>
   );

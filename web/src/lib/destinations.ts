@@ -1,3 +1,5 @@
+import { byteCap, byteCapLabel, capLabel } from "./registry";
+
 export type DestinationFamily =
   | "discord"
   | "gmail"
@@ -10,16 +12,19 @@ export type DestinationFamily =
 export type DiscordCap = "free" | "nitro-basic" | "nitro";
 export type FileKind = "image" | "video" | "audio";
 
-export const PROFILE_DOCUMENTED = "2026-08-27";
-export const PROFILE_DOCUMENTED_NEW = "2026-08-31";
+function discordCap(id: string, label: string) {
+  const bytes = byteCap(id) ?? 0;
+  return { bytes, label, short: capLabel(bytes) };
+}
 
+/** Upload caps per tier, read from the shipped Discord file profiles. */
 export const DISCORD_CAPS: Record<
   DiscordCap,
   { bytes: number; label: string; short: string }
 > = {
-  free: { bytes: 20_000_000, label: "Free", short: "20 MB" },
-  "nitro-basic": { bytes: 50_000_000, label: "Nitro Basic", short: "50 MB" },
-  nitro: { bytes: 500_000_000, label: "Nitro", short: "500 MB" },
+  free: discordCap("discord/file-upload", "Free"),
+  "nitro-basic": discordCap("discord/file-upload-nitro-basic", "Nitro Basic"),
+  nitro: discordCap("discord/file-upload-nitro", "Nitro"),
 };
 
 const DISCORD_VIDEO: Record<DiscordCap, string> = {
@@ -106,13 +111,28 @@ export function chipSubtitle(family: DestinationFamily, cap: DiscordCap): string
   if (family === "discord") {
     return `${DISCORD_CAPS[cap].short} (the cap you set)`;
   }
-  if (family === "gmail") return "25 MB attachment";
-  if (family === "github") return "10 MB comment";
-  if (family === "slack") return "1 GB file";
-  if (family === "whatsapp") return "16 MB photo or video";
-  if (family === "x") return "5 MB photo, 512 MB video";
-  if (family === "jpeg") return "JPEG PNG WebP · 8 MB";
-  return "MP4 · 25 MB";
+  if (family === "gmail") return `${byteCapLabel("gmail/attachment")} attachment`;
+  if (family === "github") return `${byteCapLabel("github/comment-image")} comment`;
+  if (family === "slack") return `${byteCapLabel("slack/file-upload")} file`;
+  if (family === "whatsapp") {
+    return `${byteCapLabel("whatsapp/photo")} photo, ${byteCapLabel("whatsapp/video")} video`;
+  }
+  if (family === "x") return `${byteCapLabel("x/image")} photo, ${byteCapLabel("x/video")} video`;
+  if (family === "jpeg") return `JPEG PNG WebP · ${byteCapLabel("generic/web-image")}`;
+  return `MP4 · ${byteCapLabel("generic/video-upload")}`;
+}
+
+const QUERY_ALIASES: Record<string, DestinationFamily> = {
+  twitter: "x",
+  "web-image": "jpeg",
+  "web-video": "generic-video",
+};
+
+/** The destination named by a `?for=` deep link, or null when absent or unknown. */
+export function familyFromQuery(search: string): DestinationFamily | null {
+  const value = new URLSearchParams(search).get("for")?.trim().toLowerCase() ?? "";
+  if ((DESTINATION_FAMILIES as string[]).includes(value)) return value as DestinationFamily;
+  return QUERY_ALIASES[value] ?? null;
 }
 
 export function destinationChips(
@@ -150,7 +170,7 @@ export function profileForFamily(
     case "whatsapp":
       return kind === "image" ? "whatsapp/photo" : kind === "audio" ? "whatsapp/audio" : "whatsapp/video";
     case "x":
-      return kind === "image" ? "x/image" : kind === "audio" ? "x/audio" : "x/video";
+      return kind === "image" ? "x/image" : kind === "video" ? "x/video" : null;
     case "jpeg":
       return kind === "image" ? "generic/web-image" : null;
     case "generic-video":
@@ -176,7 +196,7 @@ export function familyForProfile(id: string): DestinationFamily | null {
   if (id === "github/comment-image" || id === "github/comment-video") return "github";
   if (id === "slack/file-image" || id === "slack/file-video" || id === "slack/file-upload") return "slack";
   if (id === "whatsapp/photo" || id === "whatsapp/video" || id === "whatsapp/audio") return "whatsapp";
-  if (id === "x/image" || id === "x/video" || id === "x/audio") return "x";
+  if (id === "x/image" || id === "x/video") return "x";
   if (id === "jpeg/photo-upload" || id === "generic/web-image") return "jpeg";
   if (id === "generic/video-upload") return "generic-video";
   return null;
@@ -194,29 +214,28 @@ export function isVideoProfile(id: string): boolean {
 export function profilePlainSummary(id: string, cap: DiscordCap): string {
   const family = familyForProfile(id);
   if (!family) return id;
+  const size = byteCapLabel(id);
   if (family === "discord") {
     const name = cap === "free" ? "free" : DISCORD_CAPS[cap].label;
-    if (isVideoProfile(id)) return `Discord ${name} video · ${DISCORD_CAPS[cap].short}`;
-    if (id.includes("file-upload")) return `Discord ${name} file · ${DISCORD_CAPS[cap].short}`;
-    return `Discord ${name} image · ${DISCORD_CAPS[cap].short}`;
+    if (isVideoProfile(id)) return `Discord ${name} video · ${size}`;
+    if (id.includes("file-upload")) return `Discord ${name} file · ${size}`;
+    return `Discord ${name} image · ${size}`;
   }
-  if (family === "gmail") return "Gmail attachment · 25 MB";
-  if (family === "github") return isVideoProfile(id) ? "GitHub comment video · 10 MB" : "GitHub comment image · 10 MB";
+  if (family === "gmail") return `Gmail attachment · ${size}`;
+  if (family === "github") {
+    return `GitHub comment ${isVideoProfile(id) ? "video" : "image"} · ${size}`;
+  }
   if (family === "slack") {
-    if (isVideoProfile(id)) return "Slack file video · 1 GB";
-    if (id.endsWith("file-upload")) return "Slack file · 1 GB";
-    return "Slack file image · 1 GB";
+    if (isVideoProfile(id)) return `Slack file video · ${size}`;
+    if (id.endsWith("file-upload")) return `Slack file · ${size}`;
+    return `Slack file image · ${size}`;
   }
   if (family === "whatsapp") {
-    if (isVideoProfile(id)) return "WhatsApp video · 16 MB";
-    if (id.endsWith("/audio")) return "WhatsApp audio · 16 MB";
-    return "WhatsApp photo · 16 MB JPEG";
+    if (isVideoProfile(id)) return `WhatsApp video · ${size}`;
+    if (id.endsWith("/audio")) return `WhatsApp audio · ${size}`;
+    return `WhatsApp photo · ${size} JPEG`;
   }
-  if (family === "x") {
-    if (isVideoProfile(id)) return "X video · 512 MB";
-    if (id.endsWith("/audio")) return "X audio · 16 MB";
-    return "X image · 5 MB";
-  }
-  if (family === "jpeg") return "Web image · JPEG PNG WebP · 8 MB";
-  return "Web video · MP4 · 25 MB";
+  if (family === "x") return `X ${isVideoProfile(id) ? "video" : "image"} · ${size}`;
+  if (family === "jpeg") return `Web image · JPEG PNG WebP · ${size}`;
+  return `Web video · MP4 · ${size}`;
 }

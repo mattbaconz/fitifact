@@ -1,0 +1,1486 @@
+{
+  "profiles": [
+    {
+      "id": "discord/video-upload",
+      "last_verified": "2026-10-17",
+      "name": "Discord free video upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 20000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "MP4 embeds when the video is H264, HEVC/H265, or AV1. For non-Nitro accounts the maximum upload is 20 MB (20000000 as published; Discord may enforce 20*1024*1024). Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule (D-032): encode H.264 video with AAC audio so every Discord client plays it. Discord's FAQ also lists HEVC/H.265 and AV1 in MP4; allowing them is an open owner decision.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/video-upload-nitro-basic",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro Basic video upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-nitro",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic",
+          "value": 50000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "MP4 embeds when the video is H264, HEVC/H265, or AV1. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-nitro",
+          "note": "Nitro Basic: \"Share larger files up to 50 MB\". Integer is 50000000 as published. Boosted-server caps differ; set your own cap in Settings.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule (D-032): encode H.264 video with AAC audio so every Discord client plays it. Discord's FAQ also lists HEVC/H.265 and AV1 in MP4; allowing them is an open owner decision.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/video-upload-nitro",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro video upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-nitro",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic",
+          "value": 1000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "MP4 embeds when the video is H264, HEVC/H265, or AV1. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-nitro",
+          "note": "Nitro: \"Share larger files up to 1GB\" (the FAQ says \"up to 1GB\" too). Integer is 1000000000 as published. This profile does not resize, so a large 4K file can still upload.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule (D-032): encode H.264 video with AAC audio so every Discord client plays it. Discord's FAQ also lists HEVC/H.265 and AV1 in MP4; allowing them is an open owner decision.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/image-upload",
+      "last_verified": "2026-10-17",
+      "name": "Discord free image upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-image",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 20000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "\"Any image that is larger than 20MB will be shared as a download instead.\" Integer is 20000000 as published. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-fitifact-image",
+          "note": "Fitifact rule: Discord's FAQ lists no still-image formats. Output is limited to JPEG, PNG, and WebP, the still formats Fitifact can produce. Not emoji, sticker, or avatar rules.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/image-upload-nitro-basic",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro Basic image upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-image",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 20000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "\"Any image that is larger than 20MB will be shared as a download instead.\" Integer is 20000000 as published. Nitro raises the file cap, but an image over 20 MB still arrives as a download, so this profile keeps the 20 MB inline ceiling. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-fitifact-image",
+          "note": "Fitifact rule: Discord's FAQ lists no still-image formats. Output is limited to JPEG, PNG, and WebP, the still formats Fitifact can produce. Not emoji, sticker, or avatar rules.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/image-upload-nitro",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro image upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-image",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 20000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "\"Any image that is larger than 20MB will be shared as a download instead.\" Integer is 20000000 as published. Nitro raises the file cap, but an image over 20 MB still arrives as a download, so this profile keeps the 20 MB inline ceiling. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        },
+        {
+          "id": "src-fitifact-image",
+          "note": "Fitifact rule: Discord's FAQ lists no still-image formats. Output is limited to JPEG, PNG, and WebP, the still formats Fitifact can produce. Not emoji, sticker, or avatar rules.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "discord/file-upload",
+      "last_verified": "2026-10-17",
+      "name": "Discord free file upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 20000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "For non-Nitro accounts the maximum upload is 20 MB (20000000 as published). Fitifact never detects Nitro; this profile is the cap you set. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "discord/file-upload-nitro-basic",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro Basic file upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 50000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "\"Nitro Basic offers 50MB.\" Integer is 50000000 as published. Fitifact never detects Nitro; this profile is the cap you set. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "discord/file-upload-nitro",
+      "last_verified": "2026-10-17",
+      "name": "Discord Nitro file upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attachments",
+          "source_type": "official-doc",
+          "source_url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ",
+          "value": 1000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attachments",
+          "note": "\"Nitro offers up to 1GB.\" Integer is 1000000000 as published. Fitifact never detects Nitro; this profile is the cap you set. Discord says it is experimenting with upload limits, so some accounts see larger caps.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "gmail/attachment",
+      "last_verified": "2026-10-17",
+      "name": "Gmail attachment",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-size",
+          "source_type": "official-doc",
+          "source_url": "https://support.google.com/mail/answer/6584",
+          "value": 25000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-size",
+          "note": "\"For personal Gmail accounts, the limit is 25 MB.\" Over the limit, Gmail removes the attachment and adds a Google Drive link instead. Integer is 25000000 as published.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.google.com/mail/answer/6584"
+        },
+        {
+          "id": "src-workspace",
+          "note": "Workspace sending limits (25 MB for Business and Education) apply to message content and attachments before encoding, so base64/MIME growth does not count. Google does not say how personal accounts measure; this profile keeps the raw 25 MB.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://support.google.com/a/answer/166852"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "github/comment-image",
+      "last_verified": "2026-10-17",
+      "name": "GitHub comment image",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-attach",
+          "source_type": "official-doc",
+          "source_url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files",
+          "value": [
+            "gif",
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attach",
+          "source_type": "official-doc",
+          "source_url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files",
+          "value": 10000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attach",
+          "note": "Images and GIFs up to 10 MB in issues, pull requests, and comments. Supported image types are PNG, GIF, JPEG, and SVG; Fitifact cannot produce SVG, and WebP is not listed.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "whatsapp/photo",
+      "last_verified": "2026-08-28",
+      "name": "WhatsApp photo",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-08-28",
+          "op": "in",
+          "source": "src-photo",
+          "source_type": "official-doc",
+          "source_url": "https://faq.whatsapp.com/1317564962315842",
+          "value": [
+            "jpeg"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-08-28",
+          "op": "lte",
+          "source": "src-photo",
+          "source_type": "official-doc",
+          "source_url": "https://faq.whatsapp.com/1317564962315842",
+          "value": 16000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-photo",
+          "note": "Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes. On 2026-10-17 this URL showed an unrelated article, and the current media FAQ states no photo cap, so the 16 MB rule is unverified and shown as stale.",
+          "observed_at": "2026-08-28",
+          "type": "official-doc",
+          "url": "https://faq.whatsapp.com/1317564962315842"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "x/image",
+      "last_verified": "2026-10-17",
+      "name": "X image",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-pictures",
+          "source_type": "official-doc",
+          "source_url": "https://help.x.com/en/using-x/posting-gifs-and-pictures",
+          "value": [
+            "gif",
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-pictures",
+          "source_type": "official-doc",
+          "source_url": "https://help.x.com/en/using-x/posting-gifs-and-pictures",
+          "value": 5000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-pictures",
+          "note": "Photos up to 5 MB; GIFs up to 5 MB on mobile and 15 MB on the web. X accepts GIF, JPEG, and PNG, not BMP, TIFF, or other formats. This profile keeps 5 MB for every image.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://help.x.com/en/using-x/posting-gifs-and-pictures"
+        },
+        {
+          "id": "src-api",
+          "note": "Conflict, recorded not resolved: the X API also accepts WEBP images up to 5 MB. This profile follows the Help Center, which governs posting on x.com.",
+          "observed_at": "2026-10-17",
+          "type": "official-api",
+          "url": "https://docs.x.com/x-api/media/quickstart/best-practices"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "slack/file-image",
+      "last_verified": "2026-10-17",
+      "name": "Slack file image",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-image",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "jpeg",
+            "png",
+            "gif",
+            "webp"
+          ]
+        },
+        {
+          "field": "image.width",
+          "id": "max-width",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-files",
+          "source_type": "official-doc",
+          "source_url": "https://slack.com/help/articles/201330736-Add-files-to-Slack",
+          "value": 24999
+        },
+        {
+          "field": "image.height",
+          "id": "max-height",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-files",
+          "source_type": "official-doc",
+          "source_url": "https://slack.com/help/articles/201330736-Add-files-to-Slack",
+          "value": 24999
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-files",
+          "source_type": "official-doc",
+          "source_url": "https://slack.com/help/articles/201330736-Add-files-to-Slack",
+          "value": 1000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-files",
+          "note": "Files up to 1GB. An image previews inline only if it is smaller than 25,000 pixels on the longest side and less than 45 million pixels in total; Fitifact enforces the edge limit but cannot yet check the pixel total.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
+        },
+        {
+          "id": "src-fitifact-image",
+          "note": "Fitifact rule: Slack lists no image formats. These are common web image formats that browsers preview.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "slack/file-video",
+      "last_verified": "2026-10-17",
+      "name": "Slack file video",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-files",
+          "source_type": "official-doc",
+          "source_url": "https://slack.com/help/articles/201330736-Add-files-to-Slack",
+          "value": 1000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-files",
+          "note": "Files up to 1GB.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule: Slack documents no playback formats. Fitifact produces MP4 with H.264 video and AAC audio, the most widely supported web video format.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "slack/file-upload",
+      "last_verified": "2026-10-17",
+      "name": "Slack file upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-files",
+          "source_type": "official-doc",
+          "source_url": "https://slack.com/help/articles/201330736-Add-files-to-Slack",
+          "value": 1000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-files",
+          "note": "Files up to 1GB. Playback rules are extra and undocumented here.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "jpeg/photo-upload",
+      "last_verified": "2026-10-17",
+      "name": "JPEG photo upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": [
+            "jpeg"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": 8000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-user",
+          "note": "Common form language is a JPEG under 8 MB. This is a local starter, not a claim about a specific site.",
+          "observed_at": "2026-10-17",
+          "type": "user-config",
+          "url": null
+        }
+      ],
+      "trust": "starter"
+    },
+    {
+      "id": "generic/video-upload",
+      "last_verified": "2026-10-17",
+      "name": "Generic H.264 MP4 video upload",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": 25000000
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-user",
+          "note": "Local starter for a typical 25 MB MP4 H.264/AAC upload. Not a claim about a named platform.",
+          "observed_at": "2026-10-17",
+          "type": "user-config",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "starter"
+    },
+    {
+      "id": "generic/web-image",
+      "last_verified": "2026-10-17",
+      "name": "Generic web image",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-user",
+          "source_type": "user-config",
+          "source_url": null,
+          "value": 8000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-user",
+          "note": "Local starter for a typical still-image web upload. Not a claim about a named platform.",
+          "observed_at": "2026-10-17",
+          "type": "user-config",
+          "url": null
+        }
+      ],
+      "trust": "starter"
+    },
+    {
+      "id": "whatsapp/video",
+      "last_verified": "2026-10-17",
+      "name": "WhatsApp video",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-media",
+          "source_type": "official-doc",
+          "source_url": "https://faq.whatsapp.com/453914586839706",
+          "value": [
+            "mkv",
+            "mov",
+            "mp4"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-media",
+          "source_type": "official-doc",
+          "source_url": "https://faq.whatsapp.com/453914586839706",
+          "value": 64000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-media",
+          "note": "Video formats 3GP, AVI, FLV, MKV, MOV, and MP4 (Fitifact handles MKV, MOV, and MP4). The default video limit is 100 MB up to 720p on fast connections and 64 MB up to 480p on slow ones; this profile uses 64 MB so the file sends on either. WhatsApp re-encodes video itself, so no codec or resolution rule is applied.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://faq.whatsapp.com/453914586839706"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "whatsapp/audio",
+      "last_verified": "2026-10-17",
+      "name": "WhatsApp audio",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-media",
+          "source_type": "official-doc",
+          "source_url": "https://faq.whatsapp.com/453914586839706",
+          "value": 2000000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-media",
+          "note": "Documents can be up to 2 GB. The media FAQ states no separate cap for audio files, so this profile uses the documents ceiling. In-chat playback may still refuse some formats.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://faq.whatsapp.com/453914586839706"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "id": "x/video",
+      "last_verified": "2026-10-17",
+      "name": "X video",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "mp4"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-api",
+          "source_type": "official-api",
+          "source_url": "https://docs.x.com/x-api/media/quickstart/best-practices",
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-api",
+          "source_type": "official-api",
+          "source_url": "https://docs.x.com/x-api/media/quickstart/best-practices",
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-api",
+          "source_type": "official-api",
+          "source_url": "https://docs.x.com/x-api/media/quickstart/best-practices",
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "media.video.width",
+          "id": "max-width",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-videos",
+          "source_type": "official-doc",
+          "source_url": "https://help.x.com/en/using-x/x-videos",
+          "value": 1920
+        },
+        {
+          "field": "media.video.height",
+          "id": "max-height",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-videos",
+          "source_type": "official-doc",
+          "source_url": "https://help.x.com/en/using-x/x-videos",
+          "value": 1200
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-videos",
+          "source_type": "official-doc",
+          "source_url": "https://help.x.com/en/using-x/x-videos",
+          "value": 512000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-videos",
+          "note": "Without a subscription, videos up to 140 seconds and 512 MB. Web uploads allow up to 1920 x 1200 (and 1200 x 1900), 40 fps, and 25 Mbps. Fitifact does not clip duration and fits portrait video into the landscape box.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://help.x.com/en/using-x/x-videos"
+        },
+        {
+          "id": "src-api",
+          "note": "Video codec H264 High Profile, audio AAC LC, and \"Only YUV 4:2:0 is supported\". Conflict, recorded not resolved: the API limits dimensions to 1280x1024, while the Help Center allows 1920 x 1200 for web uploads; this profile follows the Help Center.",
+          "observed_at": "2026-10-17",
+          "type": "official-api",
+          "url": "https://docs.x.com/x-api/media/quickstart/best-practices"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule: X's Help Center names no container for web uploads. Fitifact produces MP4, the standard container for H.264/AAC.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    },
+    {
+      "id": "github/comment-video",
+      "last_verified": "2026-10-17",
+      "name": "GitHub comment video",
+      "revision": 2,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-attach",
+          "source_type": "official-doc",
+          "source_url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files",
+          "value": [
+            "mov",
+            "mp4",
+            "webm"
+          ]
+        },
+        {
+          "field": "media.video.codec",
+          "id": "video-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "h264"
+          ]
+        },
+        {
+          "field": "media.audio.codec",
+          "id": "audio-codec",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-codec",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "aac"
+          ]
+        },
+        {
+          "field": "media.video.pixel_format",
+          "id": "pixel-format",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "yuv420p",
+            "yuvj420p"
+          ]
+        },
+        {
+          "field": "media.video.bit_depth",
+          "id": "bit-depth",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": 8
+        },
+        {
+          "field": "media.video.hdr",
+          "id": "sdr",
+          "observed_at": "2026-10-17",
+          "op": "in",
+          "source": "src-fitifact-picture",
+          "source_type": "fitifact-rule",
+          "source_url": null,
+          "value": [
+            "sdr",
+            "unknown"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-17",
+          "op": "lte",
+          "source": "src-attach",
+          "source_type": "official-doc",
+          "source_url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files",
+          "value": 10000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-attach",
+          "note": "Videos up to 10 MB on free plans (100 MB on paid plans) as .mp4, .mov, or .webm. This profile uses the free-plan ceiling.",
+          "observed_at": "2026-10-17",
+          "type": "official-doc",
+          "url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files"
+        },
+        {
+          "id": "src-fitifact-codec",
+          "note": "Fitifact rule: GitHub names containers but no codecs. Fitifact produces H.264 video with AAC audio, the most widely supported browser video format.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        },
+        {
+          "id": "src-fitifact-picture",
+          "note": "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way.",
+          "observed_at": "2026-10-17",
+          "type": "fitifact-rule",
+          "url": null
+        }
+      ],
+      "trust": "documented-with-rules"
+    }
+  ],
+  "schema": "fitifact.registry/v1"
+}
