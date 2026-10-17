@@ -155,15 +155,17 @@ fn reject_malformed_numeric_targets(text: &str, tokens: &[Token]) -> Result<()> 
         let number_index = unit_index - 1;
         let prefix = size_qualifier_before(tokens, number_index);
         let suffix = tokens.get(unit_index + 1).is_some_and(|token| {
-            matches!(token.value.as_str(), "max" | "maximum" | "limit")
-                && !text[tokens[unit_index].end..token.start]
-                    .chars()
-                    .any(requirement_clause_separator)
+            matches!(
+                token.value.as_str(),
+                "max" | "maximum" | "limit" | "min" | "minimum"
+            ) && !text[tokens[unit_index].end..token.start]
+                .chars()
+                .any(requirement_clause_separator)
         });
         if prefix.is_none() && !suffix {
             continue;
         }
-        let start = prefix.unwrap_or(number_index);
+        let start = prefix.map_or(number_index, |(_, index)| index);
         let numeric_tokens: Vec<_> = tokens[start..unit_index]
             .iter()
             .filter(|token| looks_numeric(token))
@@ -448,51 +450,116 @@ fn parse_sizes(
 ) -> Result<()> {
     let mut ordinal = 0_usize;
     for unit_index in 0..tokens.len() {
-        if !matches!(
-            tokens[unit_index].value.as_str(),
-            "kb" | "kib" | "mb" | "mib" | "byte" | "bytes"
-        ) || unit_index == 0
-        {
+        if !size_unit(&tokens[unit_index].value) || unit_index == 0 {
             continue;
         }
         let number_index = unit_index - 1;
         if decimal(&tokens[number_index]).is_none() {
             continue;
         }
-        let prefix = size_qualifier_before(tokens, number_index);
-        let suffix = tokens.get(unit_index + 1).and_then(|token| {
-            (matches!(token.value.as_str(), "max" | "maximum" | "limit")
-                && !text[tokens[unit_index].end..token.start]
-                    .chars()
-                    .any(requirement_clause_separator))
-            .then_some(unit_index + 1)
-        });
-        let Some(start_index) = prefix.or(suffix.is_some().then_some(number_index)) else {
-            continue;
+        let amount = |number: usize, unit: usize| {
+            parse_size_bytes(&format!("{} {}", tokens[number].value, tokens[unit].value))
         };
-        let end_index = suffix.unwrap_or(unit_index);
+        if let Some((low_index, low_unit, start_index)) =
+            size_range_start(text, tokens, number_index)
+        {
+            let start = tokens[start_index].start;
+            let end = tokens[unit_index].end;
+            if overlaps(covered, start, end) {
+                continue;
+            }
+            let low = amount(low_index, low_unit.unwrap_or(unit_index))?;
+            let high = amount(number_index, unit_index)?;
+            let min_id = unique_id("min-bytes", ordinal);
+            let max_id = unique_id("max-bytes", ordinal);
+            constraints.push(numeric_constraint(
+                &min_id,
+                Field::FileBytes,
+                Operator::Gte,
+                low,
+            ));
+            constraints.push(numeric_constraint(
+                &max_id,
+                Field::FileBytes,
+                Operator::Lte,
+                high,
+            ));
+            mark(covered, start, end);
+            spans.push(source_span(text, start, end, &[&min_id, &max_id]));
+            ordinal += 1;
+            continue;
+        }
+        // A qualifier already claimed as the previous phrase's suffix ("20 KB minimum, 50 KB
+        // maximum") is not this number's prefix.
+        let prefix = size_qualifier_before(tokens, number_index)
+            .filter(|&(_, index)| !overlaps(covered, tokens[index].start, tokens[index].end));
+        let suffix = tokens.get(unit_index + 1).and_then(|token| {
+            let op = match token.value.as_str() {
+                "max" | "maximum" | "limit" => Operator::Lte,
+                "min" | "minimum" => Operator::Gte,
+                _ => return None,
+            };
+            (!text[tokens[unit_index].end..token.start]
+                .chars()
+                .any(requirement_clause_separator))
+            .then_some((op, unit_index + 1))
+        });
+        let (op, start_index) = match (prefix, suffix) {
+            (Some(qualifier), _) => qualifier,
+            (None, Some((op, _))) => (op, number_index),
+            (None, None) => continue,
+        };
+        let end_index = suffix.map_or(unit_index, |(_, index)| index);
         let start = tokens[start_index].start;
         let end = tokens[end_index].end;
         if overlaps(covered, start, end) {
             continue;
         }
-        let amount = format!(
-            "{} {}",
-            tokens[number_index].value, tokens[unit_index].value
-        );
-        let value = parse_size_bytes(&amount)?;
-        let id = unique_id("max-bytes", ordinal);
-        constraints.push(numeric_constraint(
-            &id,
-            Field::FileBytes,
-            Operator::Lte,
-            value,
-        ));
+        let value = amount(number_index, unit_index)?;
+        let base = if op == Operator::Gte {
+            "min-bytes"
+        } else {
+            "max-bytes"
+        };
+        let id = unique_id(base, ordinal);
+        constraints.push(numeric_constraint(&id, Field::FileBytes, op, value));
         mark(covered, start, end);
         spans.push(source_span(text, start, end, &[&id]));
         ordinal += 1;
     }
     Ok(())
+}
+
+fn size_unit(value: &str) -> bool {
+    matches!(value, "kb" | "kib" | "mb" | "mib" | "byte" | "bytes")
+}
+
+/// "20-50 KB", "20 KB to 50 KB", "between 20 and 50 KB": the low number, its own unit when
+/// written, and the first token of the phrase that ends at `high`.
+fn size_range_start(
+    text: &str,
+    tokens: &[Token],
+    high: usize,
+) -> Option<(usize, Option<usize>, usize)> {
+    let mut cursor = high.checked_sub(1)?;
+    let connector = tokens[cursor].value.clone();
+    if matches!(connector.as_str(), "to" | "and") {
+        cursor = cursor.checked_sub(1)?;
+    } else if !text[tokens[cursor].end..tokens[high].start].contains(['-', '\u{2013}']) {
+        return None;
+    }
+    let low_unit = size_unit(&tokens[cursor].value).then_some(cursor);
+    if low_unit.is_some() {
+        cursor = cursor.checked_sub(1)?;
+    }
+    decimal(&tokens[cursor])?;
+    let lead = cursor
+        .checked_sub(1)
+        .filter(|&index| matches!(tokens[index].value.as_str(), "between" | "from"));
+    if connector == "and" && lead.is_none() {
+        return None;
+    }
+    Some((cursor, low_unit, lead.unwrap_or(cursor)))
 }
 
 fn qualifier_before(tokens: &[Token], index: usize) -> Option<(Operator, usize)> {
@@ -543,32 +610,32 @@ fn qualifier_after(tokens: &[Token], index: usize) -> Option<(Operator, usize)> 
     }
 }
 
-fn size_qualifier_before(tokens: &[Token], number: usize) -> Option<usize> {
+/// The nearest size qualifier before `number`. Ceiling words reach back five tokens; floor
+/// words must not cross another number, so "min width 600 px, 50 KB max" keeps its ceiling.
+fn size_qualifier_before(tokens: &[Token], number: usize) -> Option<(Operator, usize)> {
     let floor = number.saturating_sub(5);
+    let mut crossed_number = false;
     for index in (floor..number).rev() {
-        if matches!(
-            tokens[index].value.as_str(),
-            "under" | "max" | "maximum" | "limit" | "<="
-        ) {
-            return Some(index);
+        let next = |offset: usize| tokens.get(index + offset).map(|token| token.value.as_str());
+        let floor_word = match tokens[index].value.as_str() {
+            "min" | "minimum" | ">=" => true,
+            "at" => next(1) == Some("least"),
+            "no" => next(1) == Some("less") && next(2) == Some("than"),
+            _ => false,
+        };
+        let ceiling_word = match tokens[index].value.as_str() {
+            "under" | "max" | "maximum" | "limit" | "<=" => true,
+            "at" => next(1) == Some("most"),
+            "no" => next(1) == Some("more") && next(2) == Some("than"),
+            _ => false,
+        };
+        if ceiling_word {
+            return Some((Operator::Lte, index));
         }
-        if tokens[index].value == "at"
-            && tokens
-                .get(index + 1)
-                .is_some_and(|token| token.value == "most")
-        {
-            return Some(index);
+        if floor_word && !crossed_number {
+            return Some((Operator::Gte, index));
         }
-        if tokens[index].value == "no"
-            && tokens
-                .get(index + 1)
-                .is_some_and(|token| token.value == "more")
-            && tokens
-                .get(index + 2)
-                .is_some_and(|token| token.value == "than")
-        {
-            return Some(index);
-        }
+        crossed_number |= decimal(&tokens[index]).is_some();
     }
     None
 }

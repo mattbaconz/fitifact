@@ -22,10 +22,11 @@ function dimensionSummary(target: EditableTarget): string | null {
 
 export function summarizeTarget(target: EditableTarget): string {
   const parts = [target.formats.map(formatName).join(" or ") || "Any format"];
-  if (target.maxBytes.trim()) {
+  for (const [sign, text] of [["≥", target.minBytes], ["≤", target.maxBytes]] as const) {
+    if (!text.trim()) continue;
     try {
-      const bytes = byteLimitFromText(target.maxBytes);
-      if (bytes !== null) parts.push(`≤${formatBytes(bytes)}`);
+      const bytes = byteLimitFromText(text);
+      if (bytes !== null) parts.push(`${sign}${formatBytes(bytes)}`);
     } catch {
       parts.push("Size needs attention");
     }

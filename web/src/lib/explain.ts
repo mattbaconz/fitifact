@@ -120,7 +120,8 @@ export function understoodNote(parse: RequirementParse | null): string | null {
       const raw = Array.isArray(constraint.value) ? constraint.value.join(",") : String(constraint.value);
       parts.push(formatCheckValue("image.format", raw));
     } else if (constraint.field === "file.bytes") {
-      parts.push(`max ${formatCheckValue("file.bytes", String(constraint.value))}`);
+      const bound = constraint.op === "gte" ? "min" : "max";
+      parts.push(`${bound} ${formatCheckValue("file.bytes", String(constraint.value))}`);
     } else if (constraint.field === "image.width" || constraint.field === "image.height") {
       const axis = constraint.field === "image.width" ? "width" : "height";
       if (constraint.op === "eq") parts.push(`${axis} ${constraint.value}`);
@@ -142,7 +143,8 @@ function problemForCheck(check: ConstraintCheck): string | null {
     return `${formatLabel(check.actual)} isn't accepted`;
   }
   if (check.field === "file.bytes") {
-    return `The file is too large (${formatCheckValue("file.bytes", check.actual)} vs ${formatCheckValue("file.bytes", check.required)})`;
+    const size = Number(check.actual) < Number(check.required) ? "small" : "large";
+    return `The file is too ${size} (${formatCheckValue("file.bytes", check.actual)} vs ${formatCheckValue("file.bytes", check.required)})`;
   }
   if (check.field === "image.width" || check.field === "image.height") {
     return "The dimensions don't match";
@@ -265,7 +267,11 @@ export function describeActions(plan: PlanReport, completed = false): string[] {
   }
   const sizeFails = plan.report.checks.some((check) => check.field === "file.bytes" && check.result === "fail");
   if (!completed && sizeFails && plan.plan.target.max_bytes && (plan.plan.target.quality_warnings.length || plan.plan.target.proportional_reduction_allowed)) {
-    actions.push("Reduce quality only as much as required to stay under the size limit");
+    actions.push(
+      plan.plan.target.min_bytes
+        ? "Reduce quality only as much as required to land inside the size range"
+        : "Reduce quality only as much as required to stay under the size limit",
+    );
   }
   if (
     plan.plan.target.metadata === "strip" ||
