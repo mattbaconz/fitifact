@@ -38,7 +38,9 @@
     ],
     "resources": {
       "../../../profiles": "profiles",
-      "../FFMPEG-NOTICE.md": "FFMPEG-NOTICE.md"
+      "../FFMPEG-NOTICE.md": "FFMPEG-NOTICE.md",
+      "binaries/FFMPEG-LICENSE.txt": "FFMPEG-LICENSE.txt",
+      "binaries/FFMPEG-BUILD.txt": "FFMPEG-BUILD.txt"
     },
     "externalBin": [
       "binaries/ffmpeg",

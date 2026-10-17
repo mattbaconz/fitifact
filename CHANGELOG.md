@@ -89,6 +89,9 @@ All notable changes to Fitifact are documented here.
 - FFmpeg missing: per-OS copy buttons instead of a command wall.
 - Work surface is file, destinations, then the verdict and download. Paste override sits below so compatible/no-op is visible without scrolling past the form.
 - Desktop no longer asks consumers to install FFmpeg. The CLI still does.
+- The desktop app ships one pinned FFmpeg build (9.0.2, the gyan.dev essentials
+  build), checked by SHA-256, with its GPLv3 text and build notes installed
+  beside it. The third-party notices name that build and its source.
 - A file that meets every hard constraint is never re-encoded. Picture format,
   bit depth, and HDR are explicit profile rules (`media.video.pixel_format`,
   `bit_depth`, `hdr`), and an encode cites the rule that failed. HDR is
