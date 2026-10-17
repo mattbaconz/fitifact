@@ -57,7 +57,7 @@ export function SavedTargets({
                 {target.name}
               </button>
               <button
-                className="text-button"
+                className="ft-btn ft-btn-text"
                 disabled={disabled}
                 aria-label={`Rename ${target.name}`}
                 onClick={() => {
@@ -68,7 +68,7 @@ export function SavedTargets({
                 Rename
               </button>
               <button
-                className="text-button"
+                className="ft-btn ft-btn-text"
                 disabled={disabled}
                 aria-label={`Remove ${target.name}`}
                 onClick={() => {
@@ -96,7 +96,7 @@ export function SavedTargets({
             {editing ? "Rename target" : "Save current requirements"}
           </label>
           <div className="saved-row">
-            <input
+            <input className="ft-field"
               id="target-name"
               value={name}
               disabled={disabled}
@@ -105,13 +105,13 @@ export function SavedTargets({
               required
               maxLength={80}
             />
-            <button className="secondary" disabled={disabled || !name.trim()}>
+            <button className="ft-btn ft-btn-secondary" disabled={disabled || !name.trim()}>
               Save target
             </button>
           </div>
           {editing ? (
             <button
-              className="text-button"
+              className="ft-btn ft-btn-text"
               type="button"
               onClick={() => {
                 setEditing(null);
@@ -127,7 +127,7 @@ export function SavedTargets({
         {message}{" "}
         {removed ? (
           <button
-            className="text-button"
+            className="ft-btn ft-btn-text"
             disabled={disabled}
             onClick={() => {
               try {

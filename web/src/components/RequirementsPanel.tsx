@@ -126,7 +126,7 @@ export function RequirementsPanel({
           <p className="helper">
             Limits vary by account.{" "}
             <button
-              className="text-button inline-button"
+              className="ft-btn ft-btn-text inline-button"
               onClick={() => setSidebarOpen(true)}
             >
               Set your Discord cap
@@ -149,7 +149,7 @@ export function RequirementsPanel({
           <label htmlFor="requirements">
             Rejection message or requirements
           </label>
-          <textarea
+          <textarea className="ft-field"
             id="requirements"
             rows={4}
             value={requirements}
@@ -159,7 +159,7 @@ export function RequirementsPanel({
             disabled={state === "processing"}
           />
           {understood ? (
-            <div className="notice" role="note">
+            <div className="ft-notice" role="note">
               {understood}
             </div>
           ) : null}
@@ -181,7 +181,7 @@ export function RequirementsPanel({
           <div className="target-heading">
             <h3>Current requirements</h3>
             <button
-              className="text-button"
+              className="ft-btn ft-btn-text"
               onClick={() => setEditingTarget((open) => !open)}
               disabled={state === "processing"}
             >
@@ -226,7 +226,7 @@ export function RequirementsPanel({
               </fieldset>
               <label>
                 Maximum size
-                <input
+                <input className="ft-field"
                   aria-describedby="size-units-help"
                   value={target.maxBytes}
                   disabled={state === "processing"}
@@ -241,7 +241,7 @@ export function RequirementsPanel({
               </label>
               <label>
                 Minimum size
-                <input
+                <input className="ft-field"
                   aria-describedby="size-units-help"
                   value={target.minBytes}
                   disabled={state === "processing"}
@@ -264,7 +264,7 @@ export function RequirementsPanel({
                 <legend>Width</legend>
                 <label>
                   Exact
-                  <input
+                  <input className="ft-field"
                     aria-label="Exact width"
                     inputMode="numeric"
                     value={target.widthExact}
@@ -279,7 +279,7 @@ export function RequirementsPanel({
                 </label>
                 <label>
                   Minimum
-                  <input
+                  <input className="ft-field"
                     aria-label="Minimum width"
                     inputMode="numeric"
                     value={target.widthMin}
@@ -294,7 +294,7 @@ export function RequirementsPanel({
                 </label>
                 <label>
                   Maximum
-                  <input
+                  <input className="ft-field"
                     aria-label="Maximum width"
                     inputMode="numeric"
                     value={target.widthMax}
@@ -315,7 +315,7 @@ export function RequirementsPanel({
                 <legend>Height</legend>
                 <label>
                   Exact
-                  <input
+                  <input className="ft-field"
                     aria-label="Exact height"
                     inputMode="numeric"
                     value={target.heightExact}
@@ -330,7 +330,7 @@ export function RequirementsPanel({
                 </label>
                 <label>
                   Minimum
-                  <input
+                  <input className="ft-field"
                     aria-label="Minimum height"
                     inputMode="numeric"
                     value={target.heightMin}
@@ -345,7 +345,7 @@ export function RequirementsPanel({
                 </label>
                 <label>
                   Maximum
-                  <input
+                  <input className="ft-field"
                     aria-label="Maximum height"
                     inputMode="numeric"
                     value={target.heightMax}
@@ -361,7 +361,7 @@ export function RequirementsPanel({
               </fieldset>
               {targetDirty ? (
                 <button
-                  className="secondary"
+                  className="ft-btn ft-btn-secondary"
                   type="button"
                   onClick={() => void replan()}
                   disabled={state === "processing" || Boolean(targetError)}
@@ -372,7 +372,7 @@ export function RequirementsPanel({
             </div>
           ) : null}
           {targetError ? (
-            <p className="error-copy" role="alert">
+            <p className="ft-notice ft-tone-danger error-copy" role="alert">
               {targetError}
             </p>
           ) : null}

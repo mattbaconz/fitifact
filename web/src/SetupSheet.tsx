@@ -73,11 +73,11 @@ export function SetupSheet({
   }
 
   return (
-    <section className="setup-sheet card" aria-labelledby={titleId}>
+    <section className="setup-sheet" aria-labelledby={titleId}>
       <div className="setup-head">
         <h2 id={titleId}>Setup</h2>
         {onDismiss ? (
-          <button type="button" className="ghost" onClick={onDismiss}>
+          <button type="button" className="ft-btn ft-btn-secondary" onClick={onDismiss}>
             Close
           </button>
         ) : null}
@@ -155,7 +155,7 @@ export function SetupSheet({
         overwritten.
       </p>
 
-      <button type="button" onClick={onConfirm}>
+      <button type="button" className="ft-btn" onClick={onConfirm}>
         {confirmLabel}
       </button>
     </section>

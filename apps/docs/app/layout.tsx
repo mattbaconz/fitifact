@@ -13,9 +13,10 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_DOCS_BASE!;
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" data-theme="system" suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href={`${base}/brand/tokens.css`} />
+        <link rel="stylesheet" href={`${base}/brand/components.css`} />
         <link rel="icon" href={`${base}/brand/mark.svg`} type="image/svg+xml" />
         <script src={`${base}/brand/theme.js`} />
       </head>
@@ -40,7 +41,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 type: "custom",
                 children: (
                   <a
-                    className="fitifact-app-link"
+                    className="ft-btn ft-btn-secondary fitifact-app-link"
                     href={process.env.NEXT_PUBLIC_APP_BASE}
                   >
                     Open Fitifact ↗

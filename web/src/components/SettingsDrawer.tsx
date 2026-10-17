@@ -36,7 +36,7 @@ export function SettingsDrawer({ session }: { session: FitifactSession }) {
       >
         <div className="sidebar-head">
           <h2 id="sidebar-title">Settings</h2>
-          <button className="ghost" onClick={() => setSidebarOpen(false)}>
+          <button className="ft-btn ft-btn-secondary" onClick={() => setSidebarOpen(false)}>
             Close
           </button>
         </div>

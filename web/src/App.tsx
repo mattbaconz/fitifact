@@ -3,7 +3,7 @@ import { FileSummary } from "./components/FileSummary";
 import { ProcessRail } from "./components/ProcessRail";
 import { ProductExamples, ProductIntro } from "./components/ProductIntro";
 import { RequirementsPanel } from "./components/RequirementsPanel";
-import { ResultPanel } from "./components/ResultPanel";
+import { ResultPanel, StatusIcon } from "./components/ResultPanel";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { SetupDialog } from "./components/SetupDialog";
 import { BrandMark, DropIcon, MenuIcon } from "./icons";
@@ -28,6 +28,8 @@ export function App() {
     setNotice,
     dragging,
     state,
+    tone,
+    inspectingName,
     onDropKey,
     setDragging,
     onDrop,
@@ -38,7 +40,6 @@ export function App() {
     accept,
     inspectFile,
     useSampleImage,
-    status,
     statusTitle,
     progress,
     mediaPath,
@@ -116,7 +117,7 @@ export function App() {
         </nav>
         <button
           type="button"
-          className="ghost menu-button"
+          className="ft-btn ft-btn-secondary menu-button"
           aria-label="Settings and navigation"
           aria-expanded={sidebarOpen}
           aria-controls="app-sidebar"
@@ -128,7 +129,11 @@ export function App() {
       {notice ? (
         <div className="global-notice" role="status">
           {notice}
-          <button className="text-button" onClick={() => setNotice("")}>
+          <button
+            type="button"
+            className="ft-btn ft-btn-text"
+            onClick={() => setNotice("")}
+          >
             Dismiss
           </button>
         </div>
@@ -139,15 +144,43 @@ export function App() {
             <section className="landing-workspace">
               <ProductIntro />
               <div className="drop-canvas">
+                {state === "processing" ? (
+                  <div
+                    className="ft-card inspect-card"
+                    role="status"
+                    aria-labelledby="inspect-title"
+                    // A file dropped while inspecting is ignored, never opened by the browser.
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => event.preventDefault()}
+                  >
+                    <span className="inspect-pulse" aria-hidden="true" />
+                    <p className="ft-eyebrow">On this device</p>
+                    <h2 id="inspect-title" className="status-title">
+                      {inspectingName
+                        ? `Inspecting ${inspectingName}`
+                        : "Inspecting your file"}
+                    </h2>
+                    <p>{progress?.stage ?? "Reading the file locally"}</p>
+                    <progress aria-label="Processing file" />
+                    {!mediaPath ? (
+                      <button
+                        type="button"
+                        className="ft-btn ft-btn-secondary"
+                        onClick={() => void cancel()}
+                      >
+                        Cancel processing
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
                 <div
-                  className={`drop-zone drop-zone-hero ${dragging ? "is-dragging" : ""} ${state === "processing" ? "is-disabled" : ""}`}
-                  aria-disabled={state === "processing"}
+                  className={`drop-zone drop-zone-hero ${dragging ? "is-dragging" : ""}`}
                   aria-label="Drop a file"
                   tabIndex={0}
                   onKeyDown={onDropKey}
                   onDragOver={(event) => {
                     event.preventDefault();
-                    if (state !== "processing") setDragging(true);
+                    setDragging(true);
                   }}
                   onDragLeave={() => setDragging(false)}
                   onDrop={onDrop}
@@ -161,15 +194,14 @@ export function App() {
                   </p>
                   {desktop ? (
                     <button
-                      className="button-label"
+                      className="ft-btn button-label"
                       type="button"
-                      disabled={state === "processing"}
                       onClick={() => void chooseDesktopFile()}
                     >
                       {chooseLabel}
                     </button>
                   ) : (
-                    <label className="button-label" htmlFor="image-file">
+                    <label className="ft-btn button-label" htmlFor="image-file">
                       {chooseLabel}
                     </label>
                   )}
@@ -186,12 +218,12 @@ export function App() {
                       if (file) void inspectFile(file);
                       event.currentTarget.value = "";
                     }}
-                    disabled={state === "processing"}
                   />
                 </div>
+                )}
 
                 <button
-                  className="text-button drop-sample"
+                  className="ft-btn ft-btn-text drop-sample"
                   type="button"
                   onClick={() => void useSampleImage()}
                   disabled={state === "processing"}
@@ -210,38 +242,27 @@ export function App() {
                     </>
                   )}
                 </p>
-                <div
-                  className={`idle-status ${status.tone}`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  {state !== "idle" ? (
-                    <h2 className="status-title">{statusTitle}</h2>
-                  ) : null}
-                  {state === "processing" ? (
-                    <>
-                      <p>{progress?.stage ?? "Inspecting your file"}</p>
-                      <progress aria-label="Processing file" />
-                      {!mediaPath ? (
-                        <button
-                          className="text-button"
-                          onClick={() => void cancel()}
-                        >
-                          Cancel processing
-                        </button>
+                <div className="idle-status" role="status" aria-live="polite">
+                  {state !== "idle" && state !== "processing" ? (
+                    <div className={`ft-card idle-result tone-${tone}`}>
+                      <div className="status-head">
+                        <StatusIcon tone={tone} />
+                        <h2 className="status-title">{statusTitle}</h2>
+                      </div>
+                      {lastRejected ? (
+                        <RejectBlock
+                          name={lastRejected.name}
+                          message={lastRejected.message}
+                          offerDesktop={
+                            !desktop && needsDesktopHandoff(lastRejected.message)
+                          }
+                        />
+                      ) : error ? (
+                        <p className="ft-notice ft-tone-danger error-copy">
+                          {error.message}
+                        </p>
                       ) : null}
-                    </>
-                  ) : null}
-                  {lastRejected ? (
-                    <RejectBlock
-                      name={lastRejected.name}
-                      message={lastRejected.message}
-                      offerDesktop={
-                        !desktop && needsDesktopHandoff(lastRejected.message)
-                      }
-                    />
-                  ) : error ? (
-                    <p className="error-copy">{error.message}</p>
+                    </div>
                   ) : null}
                 </div>
               </div>

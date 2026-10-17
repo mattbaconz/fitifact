@@ -28,7 +28,7 @@ export function FfmpegInstall() {
             <code>{item.command}</code>
             <button
               key={item.label}
-              className="secondary"
+              className="ft-btn ft-btn-secondary"
               type="button"
               onClick={() => void copyCommand(item.label, item.command)}
             >

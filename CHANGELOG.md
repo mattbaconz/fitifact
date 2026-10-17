@@ -13,9 +13,28 @@ All notable changes to Fitifact are documented here.
 - Native file selection uses keyboard-accessible buttons. Damaged-file and
   Explorer failure messages describe recovery without promising a missing file exists.
 - Captured media subprocesses no longer flash console windows on Windows.
+- Cancelling a desktop media job on Windows also ends FFmpeg when it runs
+  behind a launcher shim, so Cancel no longer waits for the encode to finish.
+- A damaged image is reported as unreadable instead of as a requirements
+  problem, and engine refusals read as plain sentences with the code under
+  Technical details.
 
 ### [added]
 
+- One design system for the web app, the desktop app, and the docs: shared
+  tokens and `ft-` components in light and dark, following the system theme by
+  default. `DESIGN.md` documents the tokens, components, and every state.
+- **Adapt and download** runs the visible plan, validates the output, and
+  downloads it only if validation passes: a file that needs no consent takes
+  three interactions (drop, destination, Adapt and download).
+- Results compare each requirement's measured value before and after, show the
+  original and the output side by side, and offer Copy and Share where the
+  browser can hand over the exact validated file.
+- Designed inspecting, consent, adapting, warning, refusal, and error states.
+  Refusals offer new requirements instead of Retry.
+- A strict Content Security Policy on the web build (its own origin only), and
+  end-to-end checks for keyboard-only journeys, axe on every state in both
+  themes, and zero cross-origin requests.
 - A shared graphite/chalk interface, local dark/light/system appearance, real
   sample scenarios, and a compact workspace with inspect → plan → adapt → validate states.
 - A static Fumadocs site with local search, task guides, examples, and accurate

@@ -63,10 +63,7 @@ kbd {
   text-decoration: underline;
 }
 .fitifact-app-link {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  font-weight: 550;
+  width: 100%;
 }
 .fitifact-appearance {
   display: flex;
@@ -75,15 +72,6 @@ kbd {
   font-size: 13px;
   color: var(--muted);
   padding: 8px;
-}
-.fitifact-appearance select {
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 8px 12px;
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
 }
 #nd-sidebar a,
 #nd-sidebar button,
@@ -129,19 +117,14 @@ kbd {
   position: relative;
   margin: 24px 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--panel);
 }
-.fitifact-code button {
-  display: block;
+.fitifact-code > .ft-btn {
+  display: flex;
+  width: fit-content;
   margin: 8px 8px 0 auto;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--ink);
   font-size: 13px;
-  cursor: pointer;
 }
 .fitifact-code pre {
   margin: 0;
