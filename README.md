@@ -268,6 +268,9 @@ certificate by [SignPath Foundation](https://signpath.org/).
   installer first downloads and installs it from Microsoft. It changes no
   other system settings. Remove Fitifact from **Settings → Apps → Installed
   apps → Fitifact → Uninstall**, or run `uninstall.exe` in the install folder.
+  Uninstalling keeps your Fitifact settings in
+  `%LOCALAPPDATA%\com.mattbaconz.fitifact`; delete that folder to remove them
+  too.
 
 ## Project status and distribution
 
