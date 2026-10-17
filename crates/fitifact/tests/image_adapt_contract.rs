@@ -787,3 +787,83 @@ fn jpeg_png_or_webp_keeps_jpeg_when_the_source_already_is_jpeg() {
     assert!(plan.noop);
     assert_eq!(plan.target.format, ImageFormat::Jpeg);
 }
+
+fn jpeg_size(image: &DynamicImage, quality: u8) -> u64 {
+    let rgb = image.to_rgb8();
+    let mut output = Vec::new();
+    JpegEncoder::new_with_quality(&mut output, quality)
+        .encode(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            ColorType::Rgb8.into(),
+        )
+        .unwrap();
+    output.len() as u64
+}
+
+#[test]
+fn jpeg_byte_window_between_ladder_steps_is_found_not_skipped() {
+    let input = noisy_jpeg(256, 256, 95);
+    let decoded = image::load_from_memory(&input).unwrap();
+    let (at_80, at_65) = (jpeg_size(&decoded, 80), jpeg_size(&decoded, 65));
+    let third = (at_80 - at_65) / 3;
+    let (floor, ceiling) = (at_65 + third, at_80 - third);
+    let target = constraints(serde_json::json!([
+        {"id":"format","field":"image.format","op":"in","value":["jpeg"]},
+        {"id":"min","field":"file.bytes","op":"gte","value":floor},
+        {"id":"max","field":"file.bytes","op":"lte","value":ceiling}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert_eq!(plan.target.min_bytes, Some(floor));
+    assert_eq!(plan.target.max_bytes, Some(ceiling));
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap();
+    let size = result.output.as_ref().unwrap().len() as u64;
+    assert!(
+        (floor..=ceiling).contains(&size),
+        "{size} outside {floor}..={ceiling}"
+    );
+    let quality = result.stats.jpeg_quality.unwrap();
+    assert!(quality > 65 && quality < 80, "quality {quality}");
+}
+
+#[test]
+fn a_source_below_the_byte_floor_is_refused_not_padded() {
+    let input = noisy_jpeg(64, 64, 80);
+    let target = constraints(serde_json::json!([
+        {"id":"format","field":"image.format","op":"in","value":["jpeg"]},
+        {"id":"min","field":"file.bytes","op":"gte","value":input.len() as u64 + 1}
+    ]));
+    let artifact = artifact_from_bytes(None, &input).unwrap();
+    let error = plan_image_adaptation(&artifact, &target).unwrap_err();
+    assert_eq!(error.code, ErrorCode::NoValidPlan);
+    assert!(error.message.contains("does not pad"));
+}
+
+#[test]
+fn a_floor_the_jpeg_cannot_reach_is_refused_after_encoding() {
+    // The PNG source is above the floor, but even quality 95 JPEG falls below it.
+    let input = noisy_png(96, 96);
+    let target = constraints(serde_json::json!([
+        {"id":"format","field":"image.format","op":"in","value":["jpeg"]},
+        {"id":"min","field":"file.bytes","op":"gte","value":input.len() as u64}
+    ]));
+    let plan = plan_for(&input, &target);
+    let error = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::NoValidPlan);
+    assert!(error.message.contains("does not pad"));
+}

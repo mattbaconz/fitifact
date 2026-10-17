@@ -237,6 +237,21 @@ export function RequirementsPanel({
                   placeholder="No limit, or e.g. 2 MB"
                 />
               </label>
+              <label>
+                Minimum size
+                <input
+                  aria-describedby="size-units-help"
+                  value={target.minBytes}
+                  disabled={state === "processing"}
+                  onChange={(event) =>
+                    editTarget((current) => ({
+                      ...current,
+                      minBytes: event.target.value,
+                    }))
+                  }
+                  placeholder="None, or e.g. 20 KB"
+                />
+              </label>
               <p id="size-units-help" className="helper">
                 MB = 1,000,000 bytes. MiB = 1,048,576 bytes. A number without a unit means bytes.
               </p>

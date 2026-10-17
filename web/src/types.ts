@@ -103,6 +103,7 @@ export interface ImagePlan {
     width: number;
     height: number;
     max_bytes: number | null;
+    min_bytes?: number | null;
     preservation: string[];
     metadata: string;
     crop: {
@@ -146,6 +147,7 @@ export interface AdaptReport {
 export interface EditableTarget {
   formats: OutputFormat[];
   maxBytes: string;
+  minBytes: string;
   widthExact: string;
   widthMin: string;
   widthMax: string;
