@@ -69,6 +69,9 @@ All notable changes to Fitifact are documented here.
   without a PATH install. CLI still uses FFmpeg from PATH. ffmpeg.wasm stays
   forbidden. PDF, ZIP, Office, and SVG are refused in one sentence.
 - Windows desktop CI packages an unsigned NSIS installer (`desktop-windows` artifact). MSI is skipped because `0.1.0-rc.6` is not a valid MSI prerelease.
+- Desktop results offer **Copy file**: the validated output, or the untouched
+  original when it already fits, goes on the Windows clipboard as a file, so it
+  pastes into Discord, an email, or an Explorer folder as a copy.
 
 ### [changed]
 
