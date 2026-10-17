@@ -1074,16 +1074,16 @@ fn instantiate_transcode_video(
     )?;
     let width = even_dimension(fitted.0);
     let height = even_dimension(fitted.1);
-    if let Some(limit) = max_bytes
-        && artifact.byte_length > limit
-        && !crate::media_fit::can_fit_at(
-            width,
-            height,
-            limit,
-            duration_ms,
-            artifact.first_audio().is_some(),
-        )
-    {
+    if max_bytes.is_some_and(|limit| {
+        artifact.byte_length > limit
+            && !crate::media_fit::can_fit_at(
+                width,
+                height,
+                limit,
+                duration_ms,
+                artifact.first_audio().is_some(),
+            )
+    }) {
         return None;
     }
 
@@ -1233,16 +1233,12 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
                 video.color_primaries = Some("bt709".into());
                 video.hdr = HdrStatus::Sdr;
             }
-            if let Some(codec) = &step.target.audio_codec
-                && let Some(audio) = next.first_audio_mut()
-            {
+            if let (Some(codec), Some(audio)) = (&step.target.audio_codec, next.first_audio_mut()) {
                 audio.codec = Some(codec.clone());
             }
         }
         TransformId::TranscodeAudio => {
-            if let Some(codec) = &step.target.audio_codec
-                && let Some(audio) = next.first_audio_mut()
-            {
+            if let (Some(codec), Some(audio)) = (&step.target.audio_codec, next.first_audio_mut()) {
                 audio.codec = Some(codec.clone());
             }
         }
