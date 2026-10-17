@@ -1453,3 +1453,33 @@ progress {
     margin-bottom: 20px;
   }
 }
+
+.provenance {
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+
+.provenance summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.provenance ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.provenance li .helper {
+  display: block;
+}
+
+.stale-badge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--warning, #b45309);
+  border-radius: 999px;
+  color: var(--warning, #b45309);
+  font-size: 0.75rem;
+}

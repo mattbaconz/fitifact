@@ -1,16 +1,13 @@
 schema: fitifact.profile/v1
 id: whatsapp/photo
 name: WhatsApp photo
-revision: 1
+revision: 2
 last_verified: 2026-08-28
 
 scope:
   kind: web-upload
   platform: whatsapp
   feature: photo
-
-trust:
-  level: documented
 
 constraints:
   - id: format
@@ -33,7 +30,7 @@ sources:
     type: official-doc
     url: https://faq.whatsapp.com/1317564962315842
     observed_at: 2026-08-28
-    note: Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes.
+    note: Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes. On 2026-10-17 this URL showed an unrelated article, and the current media FAQ states no photo cap, so the 16 MB rule is unverified and shown as stale.
 
 tests:
   - fixture: image/compatible-jpeg.jpg

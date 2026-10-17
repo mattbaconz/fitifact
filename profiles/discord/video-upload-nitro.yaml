@@ -1,17 +1,14 @@
 schema: fitifact.profile/v1
 id: discord/video-upload-nitro
 name: Discord Nitro video upload
-revision: 1
-last_verified: 2026-08-27
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: discord
   feature: video-upload
   account_tier: nitro
-
-trust:
-  level: documented
 
 constraints:
   - id: container
@@ -23,16 +20,31 @@ constraints:
     field: media.video.codec
     op: in
     value: [h264]
-    source: src-attachments
+    source: src-fitifact-codec
   - id: audio-codec
     field: media.audio.codec
     op: in
     value: [aac]
-    source: src-attachments
+    source: src-fitifact-codec
+  - id: pixel-format
+    field: media.video.pixel_format
+    op: in
+    value: [yuv420p, yuvj420p]
+    source: src-fitifact-picture
+  - id: bit-depth
+    field: media.video.bit_depth
+    op: lte
+    value: 8
+    source: src-fitifact-picture
+  - id: sdr
+    field: media.video.hdr
+    op: in
+    value: [sdr, unknown]
+    source: src-fitifact-picture
   - id: bytes
     field: file.bytes
     op: lte
-    value: 500000000
+    value: 1000000000
     source: src-nitro
 
 preferences:
@@ -44,13 +56,21 @@ sources:
   - id: src-attachments
     type: official-doc
     url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
-    observed_at: 2026-08-27
-    note: Chat attachment formats. This profile stays MP4/H.264/AAC for viewer compatibility. The FAQ also lists HEVC/AV1; those are not in this conservative encode set. Nitro's 500 MB ceiling is why a 4K file can upload; this profile does not resize.
+    observed_at: 2026-10-17
+    note: "MP4 embeds when the video is H264, HEVC/H265, or AV1. Discord says it is experimenting with upload limits, so some accounts see larger caps."
   - id: src-nitro
     type: official-doc
     url: https://support.discord.com/hc/en-us/articles/115000435108-What-are-Nitro-Nitro-Basic
-    observed_at: 2026-08-27
-    note: Nitro "up to 500 MB". Integer is 500000000 as published. Discord may enforce 500*1024*1024. Boosted-server caps are other profile ids; paste a larger or smaller limit for this file if the server differs.
+    observed_at: 2026-10-17
+    note: "Nitro: \"Share larger files up to 1GB\" (the FAQ says \"up to 1GB\" too). Integer is 1000000000 as published. This profile does not resize, so a large 4K file can still upload."
+  - id: src-fitifact-codec
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule (D-032): encode H.264 video with AAC audio so every Discord client plays it. Discord's FAQ also lists HEVC/H.265 and AV1 in MP4; allowing them is an open owner decision."
+  - id: src-fitifact-picture
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

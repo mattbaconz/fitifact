@@ -1,33 +1,45 @@
 schema: fitifact.profile/v1
 id: github/comment-video
 name: GitHub comment video
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: github
   feature: comment-video
 
-trust:
-  level: documented
-
 constraints:
   - id: container
     field: media.container
     op: in
-    value: [mp4]
+    value: [mov, mp4, webm]
     source: src-attach
   - id: video-codec
     field: media.video.codec
     op: in
     value: [h264]
-    source: src-attach
+    source: src-fitifact-codec
   - id: audio-codec
     field: media.audio.codec
     op: in
     value: [aac]
-    source: src-attach
+    source: src-fitifact-codec
+  - id: pixel-format
+    field: media.video.pixel_format
+    op: in
+    value: [yuv420p, yuvj420p]
+    source: src-fitifact-picture
+  - id: bit-depth
+    field: media.video.bit_depth
+    op: lte
+    value: 8
+    source: src-fitifact-picture
+  - id: sdr
+    field: media.video.hdr
+    op: in
+    value: [sdr, unknown]
+    source: src-fitifact-picture
   - id: bytes
     field: file.bytes
     op: lte
@@ -43,8 +55,16 @@ sources:
   - id: src-attach
     type: official-doc
     url: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
-    observed_at: 2026-08-31
-    note: GitHub documents MP4 and MOV video attachments in issues, pull requests, and comments with a 10 MB ceiling on the free plan. This profile produces MP4 H.264/AAC at that ceiling.
+    observed_at: 2026-10-17
+    note: "Videos up to 10 MB on free plans (100 MB on paid plans) as .mp4, .mov, or .webm. This profile uses the free-plan ceiling."
+  - id: src-fitifact-codec
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule: GitHub names containers but no codecs. Fitifact produces H.264 video with AAC audio, the most widely supported browser video format."
+  - id: src-fitifact-picture
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

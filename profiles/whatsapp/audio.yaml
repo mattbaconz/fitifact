@@ -1,22 +1,19 @@
 schema: fitifact.profile/v1
 id: whatsapp/audio
 name: WhatsApp audio
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: whatsapp
   feature: audio
 
-trust:
-  level: documented
-
 constraints:
   - id: bytes
     field: file.bytes
     op: lte
-    value: 16000000
+    value: 2000000000
     source: src-media
 
 preferences:
@@ -27,9 +24,9 @@ preferences:
 sources:
   - id: src-media
     type: official-doc
-    url: https://faq.whatsapp.com/1180414079177245
-    observed_at: 2026-08-31
-    note: WhatsApp media sends are size-capped. In-chat playback may still refuse some formats.
+    url: https://faq.whatsapp.com/453914586839706
+    observed_at: 2026-10-17
+    note: "Documents can be up to 2 GB. The media FAQ states no separate cap for audio files, so this profile uses the documents ceiling. In-chat playback may still refuse some formats."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

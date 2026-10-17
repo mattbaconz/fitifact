@@ -12,6 +12,15 @@ use crate::error::{Error, ErrorCode, Result};
 
 const PROFILE_SCHEMA: &str = "fitifact.profile/v1";
 const MAX_PROFILE_BYTES: usize = 1024 * 1024;
+const SOURCE_TYPES: [&str; 7] = [
+    "official-doc",
+    "official-api",
+    "observed-page",
+    "acceptance-test",
+    "user-config",
+    "community",
+    "fitifact-rule",
+];
 
 #[derive(Debug, Deserialize)]
 struct ProfileDocument {
@@ -36,7 +45,6 @@ struct ProfileConstraint {
     op: Operator,
     value: ConstraintValue,
     #[serde(default)]
-    #[allow(dead_code)]
     source: Option<String>,
 }
 
@@ -63,6 +71,8 @@ struct ProfilePreserve {
 #[derive(Debug, Deserialize)]
 struct ProfileSource {
     id: String,
+    #[serde(default, rename = "type")]
+    kind: Option<String>,
     #[serde(default)]
     url: Option<String>,
     #[serde(default)]
@@ -72,6 +82,39 @@ struct ProfileSource {
 }
 
 pub fn compile_profile_yaml(text: &str) -> Result<ConstraintSet> {
+    let profile = parse_profile(text)?;
+    let hard = profile
+        .constraints
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| Constraint {
+            id: rule_id(item.id.as_deref(), item.field, index),
+            field: item.field,
+            op: item.op,
+            value: item.value,
+        })
+        .collect();
+    let preferences = match profile.preferences.and_then(|prefs| prefs.preserve) {
+        Some(preserve) => Preferences {
+            preserve_audio: preserve.audio.as_deref() != Some("low"),
+            preserve_resolution: preserve.resolution.as_deref() != Some("low"),
+        },
+        None => Preferences::default(),
+    };
+    validate_and_normalize(ConstraintSet {
+        schema: ConstraintsSchema,
+        hard,
+        preferences,
+    })
+}
+
+fn rule_id(id: Option<&str>, field: Field, index: usize) -> String {
+    id.filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{}-{}", field.as_str().replace('.', "-"), index + 1))
+}
+
+fn parse_profile(text: &str) -> Result<ProfileDocument> {
     if text.len() > MAX_PROFILE_BYTES {
         return Err(Error::new(
             ErrorCode::InputInvalid,
@@ -115,7 +158,7 @@ pub fn compile_profile_yaml(text: &str) -> Result<ConstraintSet> {
             "profile must declare a scope",
         ));
     }
-    let _ = profile.scope.and_then(|scope| scope.kind);
+    let _ = profile.scope.as_ref().and_then(|scope| scope.kind.as_ref());
     if profile.constraints.is_empty() {
         return Err(Error::new(
             ErrorCode::InputInvalid,
@@ -159,34 +202,112 @@ pub fn compile_profile_yaml(text: &str) -> Result<ConstraintSet> {
             "constraint source ids must match a declared profile source",
         ));
     }
-    let hard = profile
+    if let Some(kind) = profile
+        .sources
+        .iter()
+        .filter_map(|source| source.kind.as_deref())
+        .find(|kind| !SOURCE_TYPES.contains(kind))
+    {
+        return Err(Error::new(
+            ErrorCode::InputInvalid,
+            format!("profile source type '{kind}' is not recognized"),
+        ));
+    }
+    Ok(profile)
+}
+
+/// Trust follows from where each rule comes from; profiles never declare it.
+fn derived_trust(profile: &ProfileDocument) -> &'static str {
+    let kinds: Vec<&str> = profile
         .constraints
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| Constraint {
-            id: item
-                .id
-                .filter(|id| !id.trim().is_empty())
-                .unwrap_or_else(|| {
-                    format!("{}-{}", item.field.as_str().replace('.', "-"), index + 1)
-                }),
-            field: item.field,
-            op: item.op,
-            value: item.value,
+        .iter()
+        .map(|rule| {
+            profile
+                .sources
+                .iter()
+                .find(|source| rule.source.as_deref() == Some(source.id.as_str()))
+                .and_then(|source| source.kind.as_deref())
+                .unwrap_or("")
         })
         .collect();
-    let preferences = match profile.preferences.and_then(|prefs| prefs.preserve) {
-        Some(preserve) => Preferences {
-            preserve_audio: preserve.audio.as_deref() != Some("low"),
-            preserve_resolution: preserve.resolution.as_deref() != Some("low"),
-        },
-        None => Preferences::default(),
-    };
-    validate_and_normalize(ConstraintSet {
-        schema: ConstraintsSchema,
-        hard,
-        preferences,
-    })
+    let documented = |kind: &&str| matches!(*kind, "official-doc" | "official-api");
+    if kinds.contains(&"user-config") {
+        "starter"
+    } else if kinds.iter().all(documented) {
+        "documented"
+    } else if kinds
+        .iter()
+        .all(|kind| documented(kind) || *kind == "fitifact-rule")
+    {
+        "documented-with-rules"
+    } else {
+        "observed"
+    }
+}
+
+/// Every shipped profile as one JSON document, served as `registry.json` and read by the
+/// web UI for rule provenance and age.
+pub fn shipped_registry_json() -> Result<String> {
+    let mut profiles = Vec::new();
+    for id in shipped_profile_ids() {
+        let text = shipped_profile_yaml(id).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InputInvalid,
+                format!("profile '{id}' is not embedded"),
+            )
+        })?;
+        let profile = parse_profile(text)?;
+        let rules: Vec<_> = profile
+            .constraints
+            .iter()
+            .enumerate()
+            .map(|(index, rule)| {
+                let origin = profile
+                    .sources
+                    .iter()
+                    .find(|source| rule.source.as_deref() == Some(source.id.as_str()));
+                serde_json::json!({
+                    "id": rule_id(rule.id.as_deref(), rule.field, index),
+                    "field": rule.field,
+                    "op": rule.op,
+                    "value": rule.value,
+                    "source": rule.source,
+                    "source_type": origin.and_then(|source| source.kind.as_deref()),
+                    "source_url": origin.and_then(|source| source.url.as_deref()),
+                    "observed_at": origin.and_then(|source| source.observed_at.as_deref()),
+                })
+            })
+            .collect();
+        let sources: Vec<_> = profile
+            .sources
+            .iter()
+            .map(|source| {
+                serde_json::json!({
+                    "id": source.id,
+                    "type": source.kind,
+                    "url": source.url,
+                    "observed_at": source.observed_at,
+                    "note": source.note,
+                })
+            })
+            .collect();
+        profiles.push(serde_json::json!({
+            "id": profile.id,
+            "name": profile.name,
+            "revision": profile.revision,
+            "last_verified": profile.last_verified,
+            "trust": derived_trust(&profile),
+            "rules": rules,
+            "sources": sources,
+        }));
+    }
+    let registry = serde_json::json!({
+        "schema": "fitifact.registry/v1",
+        "profiles": profiles,
+    });
+    serde_json::to_string_pretty(&registry)
+        .map(|text| text + "\n")
+        .map_err(|error| Error::new(ErrorCode::InputInvalid, error.to_string()))
 }
 
 pub fn validate_profile_id(id: &str) -> Result<()> {
@@ -270,7 +391,6 @@ pub fn shipped_profile_ids() -> &'static [&'static str] {
         "whatsapp/video",
         "whatsapp/audio",
         "x/video",
-        "x/audio",
         "github/comment-video",
     ]
 }
@@ -322,7 +442,6 @@ fn shipped_profile_yaml(id: &str) -> Option<&'static str> {
         "whatsapp/video" => Some(include_str!("../../../profiles/whatsapp/video.yaml")),
         "whatsapp/audio" => Some(include_str!("../../../profiles/whatsapp/audio.yaml")),
         "x/video" => Some(include_str!("../../../profiles/x/video.yaml")),
-        "x/audio" => Some(include_str!("../../../profiles/x/audio.yaml")),
         "github/comment-video" => Some(include_str!("../../../profiles/github/comment-video.yaml")),
         _ => None,
     }
@@ -465,7 +584,7 @@ constraints:
             crate::media_fit::file_bytes_limit(
                 &compile_shipped_profile("discord/video-upload-nitro").unwrap()
             ),
-            Some(500_000_000)
+            Some(1_000_000_000)
         );
         let image = compile_shipped_profile("discord/image-upload").unwrap();
         assert!(
@@ -503,7 +622,7 @@ constraints:
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/video").unwrap()),
-            Some(16_000_000)
+            Some(64_000_000)
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/video").unwrap()),
@@ -517,11 +636,13 @@ constraints:
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/audio").unwrap()),
-            Some(16_000_000)
+            Some(2_000_000_000)
         );
         assert_eq!(
-            crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/audio").unwrap()),
-            Some(16_000_000)
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("discord/image-upload-nitro").unwrap()
+            ),
+            Some(20_000_000)
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(
@@ -534,6 +655,56 @@ constraints:
                 &compile_shipped_profile("generic/web-image").unwrap()
             ),
             Some(8_000_000)
+        );
+    }
+
+    #[test]
+    fn every_shipped_rule_names_a_typed_source() {
+        for id in shipped_profile_ids() {
+            let profile = parse_profile(shipped_profile_yaml(id).unwrap()).unwrap();
+            for rule in &profile.constraints {
+                let kind = profile
+                    .sources
+                    .iter()
+                    .find(|source| rule.source.as_deref() == Some(source.id.as_str()))
+                    .and_then(|source| source.kind.as_deref());
+                assert!(
+                    kind.is_some(),
+                    "{id} rule {:?} lacks a typed source",
+                    rule.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_an_unknown_source_type() {
+        let yaml = "schema: fitifact.profile/v1\nid: example/x\nname: Example\nrevision: 1\nlast_verified: 2026-10-17\nscope:\n  kind: web-upload\nconstraints:\n  - field: file.bytes\n    op: lte\n    value: 10\n    source: docs\nsources:\n  - id: docs\n    type: rumor\n    url: https://example.invalid\n    observed_at: 2026-10-17\n";
+        assert!(compile_profile_yaml(yaml).is_err());
+    }
+
+    #[test]
+    fn trust_is_derived_from_rule_sources() {
+        let trust = |id| derived_trust(&parse_profile(shipped_profile_yaml(id).unwrap()).unwrap());
+        assert_eq!(trust("gmail/attachment"), "documented");
+        assert_eq!(trust("discord/video-upload"), "documented-with-rules");
+        assert_eq!(trust("generic/video-upload"), "starter");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn committed_registry_matches_the_shipped_profiles() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/public/registry.json");
+        let generated = shipped_registry_json().unwrap();
+        if std::env::var_os("FITIFACT_BLESS").is_some() {
+            std::fs::write(&path, &generated).unwrap();
+        }
+        let committed = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
+        assert!(
+            committed == generated,
+            "web/public/registry.json is out of date; regenerate it with FITIFACT_BLESS=1 cargo test -p fitifact --lib registry"
         );
     }
 }

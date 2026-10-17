@@ -1,16 +1,13 @@
 schema: fitifact.profile/v1
 id: generic/web-image
 name: Generic web image
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   feature: image-upload
-  note: Documented starter for JPEG, PNG, or WebP stills with an 8 MB ceiling.
-
-trust:
-  level: documented
+  note: Starter for JPEG, PNG, or WebP stills with an 8 MB ceiling.
 
 constraints:
   - id: format
@@ -31,7 +28,7 @@ preferences:
 sources:
   - id: src-user
     type: user-config
-    observed_at: 2026-08-31
+    observed_at: 2026-10-17
     note: Local starter for a typical still-image web upload. Not a claim about a named platform.
 
 tests:

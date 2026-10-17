@@ -1,17 +1,14 @@
 schema: fitifact.profile/v1
 id: discord/video-upload
 name: Discord free video upload
-revision: 1
-last_verified: 2026-08-25
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: discord
   feature: video-upload
   account_tier: free
-
-trust:
-  level: documented
 
 constraints:
   - id: container
@@ -23,12 +20,27 @@ constraints:
     field: media.video.codec
     op: in
     value: [h264]
-    source: src-attachments
+    source: src-fitifact-codec
   - id: audio-codec
     field: media.audio.codec
     op: in
     value: [aac]
-    source: src-attachments
+    source: src-fitifact-codec
+  - id: pixel-format
+    field: media.video.pixel_format
+    op: in
+    value: [yuv420p, yuvj420p]
+    source: src-fitifact-picture
+  - id: bit-depth
+    field: media.video.bit_depth
+    op: lte
+    value: 8
+    source: src-fitifact-picture
+  - id: sdr
+    field: media.video.hdr
+    op: in
+    value: [sdr, unknown]
+    source: src-fitifact-picture
   - id: bytes
     field: file.bytes
     op: lte
@@ -44,8 +56,16 @@ sources:
   - id: src-attachments
     type: official-doc
     url: https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ
-    observed_at: 2026-08-25
-    note: Free-tier upload ceiling is 20 MB. Nitro Basic is 50 MB and Nitro is 500 MB; this profile is the free tier only.
+    observed_at: 2026-10-17
+    note: "MP4 embeds when the video is H264, HEVC/H265, or AV1. For non-Nitro accounts the maximum upload is 20 MB (20000000 as published; Discord may enforce 20*1024*1024). Discord says it is experimenting with upload limits, so some accounts see larger caps."
+  - id: src-fitifact-codec
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule (D-032): encode H.264 video with AAC audio so every Discord client plays it. Discord's FAQ also lists HEVC/H.265 and AV1 in MP4; allowing them is an open owner decision."
+  - id: src-fitifact-picture
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

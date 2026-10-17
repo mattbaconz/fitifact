@@ -1,48 +1,60 @@
 schema: fitifact.profile/v1
 id: x/video
 name: X video
-revision: 1
-last_verified: 2026-08-31
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: x
   feature: video-post
 
-trust:
-  level: documented
-
 constraints:
   - id: container
     field: media.container
     op: in
     value: [mp4]
-    source: src-media
+    source: src-fitifact-codec
   - id: video-codec
     field: media.video.codec
     op: in
     value: [h264]
-    source: src-media
+    source: src-api
   - id: audio-codec
     field: media.audio.codec
     op: in
     value: [aac]
-    source: src-media
+    source: src-api
+  - id: pixel-format
+    field: media.video.pixel_format
+    op: in
+    value: [yuv420p, yuvj420p]
+    source: src-api
+  - id: bit-depth
+    field: media.video.bit_depth
+    op: lte
+    value: 8
+    source: src-fitifact-picture
+  - id: sdr
+    field: media.video.hdr
+    op: in
+    value: [sdr, unknown]
+    source: src-fitifact-picture
   - id: max-width
     field: media.video.width
     op: lte
     value: 1920
-    source: src-media
+    source: src-videos
   - id: max-height
     field: media.video.height
     op: lte
     value: 1200
-    source: src-media
+    source: src-videos
   - id: bytes
     field: file.bytes
     op: lte
     value: 512000000
-    source: src-media
+    source: src-videos
 
 preferences:
   preserve:
@@ -50,11 +62,24 @@ preferences:
     audio: high
 
 sources:
-  - id: src-media
+  - id: src-videos
     type: official-doc
-    url: https://help.x.com/en/using-x/x-media
-    observed_at: 2026-08-31
-    note: X documents MP4 H.264/AAC video posts. This profile uses the 512 MB class and a 1920x1200 edge. Duration limits (140 seconds on some accounts) are not encoded here because the engine does not clip time.
+    url: https://help.x.com/en/using-x/x-videos
+    observed_at: 2026-10-17
+    note: "Without a subscription, videos up to 140 seconds and 512 MB. Web uploads allow up to 1920 x 1200 (and 1200 x 1900), 40 fps, and 25 Mbps. Fitifact does not clip duration and fits portrait video into the landscape box."
+  - id: src-api
+    type: official-api
+    url: https://docs.x.com/x-api/media/quickstart/best-practices
+    observed_at: 2026-10-17
+    note: "Video codec H264 High Profile, audio AAC LC, and \"Only YUV 4:2:0 is supported\". Conflict, recorded not resolved: the API limits dimensions to 1280x1024, while the Help Center allows 1920 x 1200 for web uploads; this profile follows the Help Center."
+  - id: src-fitifact-codec
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule: X's Help Center names no container for web uploads. Fitifact produces MP4, the standard container for H.264/AAC."
+  - id: src-fitifact-picture
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4
