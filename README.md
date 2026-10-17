@@ -6,7 +6,8 @@
 
 [Try Fitifact](https://mattbaconz.github.io/fitifact/) ·
 [Docs](https://mattbaconz.github.io/fitifact/docs/) ·
-[Downloads](https://github.com/mattbaconz/fitifact/releases)
+[Downloads](https://github.com/mattbaconz/fitifact/releases) ·
+[Code signing policy](#code-signing-policy)
 
 Fitifact is a destination-first file adapter. Drop a common photo, video, or
 sound file, pick where it has to work, and it inspects the file, changes only
@@ -17,8 +18,9 @@ The public web app adapts still photos locally in the browser. The desktop
 interface adds video and audio using bundled FFmpeg tools. Published release
 archives currently verified are CLI builds, not desktop installers. See the
 [desktop guide](https://mattbaconz.github.io/fitifact/docs/desktop-guide/) for
-build and download guidance. Locally built desktop installers are unsigned
-unless separately signed. The CLI uses FFmpeg and ffprobe from PATH.
+build and download guidance. Desktop installers are not code-signed yet; see the
+[code signing policy](#code-signing-policy). The CLI uses FFmpeg and ffprobe
+from PATH.
 
 The browser, desktop interface, and static documentation share Fitifact’s
 visual system, local appearance preference, and inspect → plan → adapt → validate
@@ -227,6 +229,45 @@ cargo install --git https://github.com/mattbaconz/fitifact --locked fitifact-cli
 
 This installs the current reviewed source from the public repository; release
 archives remain the reproducible, attested distribution path.
+
+## Code signing policy
+
+Fitifact's Windows releases are not code-signed yet. Fitifact intends to apply
+to SignPath Foundation for a free code signing certificate. Until a release is
+signed, Windows shows an unknown-publisher warning; the checksums,
+attestations, and source remain the way to verify a download.
+
+Signed Windows releases will follow this policy:
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/).
+
+- **What is signed:** only Fitifact's own Windows programs, the desktop app
+  (`fitifact-desktop.exe`) and its installer, built by this repository's GitHub
+  Actions workflows from a reviewed, tagged commit. Nothing built on a personal
+  machine is signed.
+- **What is not signed with this certificate:** the bundled FFmpeg programs
+  (`ffmpeg.exe` and `ffprobe.exe`). They are upstream builds, shipped unchanged
+  inside the signed installer; see
+  [`apps/desktop/FFMPEG-NOTICE.md`](apps/desktop/FFMPEG-NOTICE.md).
+- **Committers and reviewers:** [mattbaconz](https://github.com/mattbaconz).
+  Changes from anyone else arrive as pull requests, and a committer reviews
+  each one before it merges.
+- **Approvers:** [mattbaconz](https://github.com/mattbaconz) approves every
+  signing request by hand after checking that the release was built from the
+  reviewed tag.
+- **Account security:** every team member uses multi-factor authentication for
+  GitHub and SignPath.
+- **Privacy:** This program will not transfer any information to other
+  networked systems unless specifically requested by the user or the person
+  installing or operating it. It has no telemetry, and it runs the bundled
+  FFmpeg programs with only local file access allowed.
+- **Install and uninstall:** the installer adds Fitifact for the current user,
+  with Start menu and desktop shortcuts and an Installed apps entry. If the
+  Microsoft Edge WebView2 Runtime is missing (it ships with Windows 11), the
+  installer first downloads and installs it from Microsoft. It changes no
+  other system settings. Remove Fitifact from **Settings → Apps → Installed
+  apps → Fitifact → Uninstall**, or run `uninstall.exe` in the install folder.
 
 ## Project status and distribution
 

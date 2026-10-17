@@ -72,6 +72,8 @@ All notable changes to Fitifact are documented here.
 - Desktop results offer **Copy file**: the validated output, or the untouched
   original when it already fits, goes on the Windows clipboard as a file, so it
   pastes into Discord, an email, or an Explorer folder as a copy.
+- A code signing policy in the README that meets SignPath Foundation's
+  conditions. Windows releases stay unsigned until the project is accepted.
 
 ### [changed]
 
