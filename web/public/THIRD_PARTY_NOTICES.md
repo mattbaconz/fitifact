@@ -23,8 +23,16 @@ this lazy decoder unless `FITIFACT_HEIC_APPROVED=false`.
 Fitifact does not load this decoder unless HEIC magic is present, and never fetches it from a CDN.
 A decoder-free build can set `FITIFACT_HEIC_APPROVED=false` to omit the chunk.
 
-## Desktop FFmpeg sidecar
+## Desktop FFmpeg sidecars
 
-Desktop builds may include `ffmpeg` and `ffprobe` as sidecar processes. Fitifact
-does not link those binaries. See `apps/desktop/FFMPEG-NOTICE.md` and
-https://ffmpeg.org for license terms. The public web app does not ship FFmpeg.
+The Windows desktop app ships `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 9.0.2,
+the gyan.dev essentials build, licensed under the GNU General Public License
+version 3. Fitifact runs them as separate processes and does not link them.
+The installer puts three files next to them: `FFMPEG-NOTICE.md` (the exact
+build, its source, and its license), `FFMPEG-LICENSE.txt` (the GPLv3 text), and
+`FFMPEG-BUILD.txt` (its configuration and library versions).
+
+- FFmpeg source for this build: https://github.com/FFmpeg/FFmpeg/commit/946fcce07b
+- Build provider: https://www.gyan.dev/ffmpeg/builds/
+
+The public web app does not ship FFmpeg.

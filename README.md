@@ -96,9 +96,9 @@ is accepted without an age warning and is not rejected solely for age. Desktop
 doctor reports shipped tools as ready instead of asking you to install FFmpeg.
 
 Fitifact has no telemetry and performs no network activity. Building the
-desktop app (not running it) may download FFmpeg once into a local sidecar
-folder. FFmpeg stays
-a separate process with its own license.
+desktop app (not running it) downloads one pinned, hash-checked FFmpeg build
+into a local sidecar folder. FFmpeg stays a separate process with its own
+license, and Fitifact allows it to open local files only.
 
 For the CLI, install FFmpeg from its official project or an operating-system
 package source:

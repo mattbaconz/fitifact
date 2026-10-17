@@ -13,9 +13,11 @@ Cargo workspace member. Build it from this directory.
 - Rust toolchain
 - Tauri 2 CLI (this package pins `@tauri-apps/cli`)
 
-`npm run sidecar` copies or downloads FFmpeg into `src-tauri/binaries/` before
-dev and package. Those binaries are gitignored. CI (`desktop.yml`) packages an
-unsigned Windows installer and uploads the `desktop-windows` artifact.
+`npm run sidecar` downloads the pinned FFmpeg build named in
+[`FFMPEG-NOTICE.md`](FFMPEG-NOTICE.md) into `src-tauri/binaries/`, checks its
+SHA-256, and extracts its license and build notes beside the programs. Those
+files are gitignored. CI (`desktop.yml`) packages an unsigned Windows installer
+and uploads the `desktop-windows` artifact.
 
 ## Run
 
@@ -40,8 +42,9 @@ npm run build
 ```
 
 The UI build writes `web/dist`. Tauri bundles that, the YAML profiles under
-`profiles/`, and the FFmpeg sidecars. Unsigned Windows and macOS binaries will
-show OS warnings; checksums and source remain the trust path for v0.1.
+`profiles/`, and the FFmpeg sidecars with their notices. Unsigned Windows and
+macOS binaries will show OS warnings; see the
+[code signing policy](../../README.md#code-signing-policy).
 This RC packages NSIS only (`0.1.0-rc.6` is not a valid MSI prerelease).
 FFmpeg is a separate process with its own license; see
 [`FFMPEG-NOTICE.md`](FFMPEG-NOTICE.md).
