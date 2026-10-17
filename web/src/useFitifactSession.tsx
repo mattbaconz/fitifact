@@ -348,7 +348,8 @@ export function useFitifactSession() {
   if (!clientRef.current) clientRef.current = new ImageWorkerClient();
   const client = clientRef.current;
   const [seed] = useState(sessionFromLastTarget);
-  const [linkedFamily] = useState(() => familyFromQuery(window.location.search));
+  // A ?for= link picks the destination for the first matching file only; later choices win.
+  const linkedFamilyRef = useRef(familyFromQuery(window.location.search));
   const [requirements, setRequirements] = useState(seed.requirements);
   const [parsed, setParsed] = useState<RequirementParse | null>(null);
   const [target, setTarget] = useState<EditableTarget | null>(seed.target);
@@ -791,10 +792,12 @@ export function useFitifactSession() {
       setState("inspected");
       return;
     }
-    const linkedProfile = linkedFamily
-      ? profileForFamily(linkedFamily, currentSetup.discordCap, kind)
+    const linked = linkedFamilyRef.current;
+    const linkedProfile = linked
+      ? profileForFamily(linked, currentSetup.discordCap, kind)
       : null;
     if (linkedProfile) {
+      linkedFamilyRef.current = null;
       await applyProfileId(linkedProfile, operation);
       return;
     }

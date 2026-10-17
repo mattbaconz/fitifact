@@ -322,6 +322,20 @@ fn a_dimension_minimum_does_not_turn_a_byte_ceiling_into_a_floor() {
 }
 
 #[test]
+fn a_dimension_before_a_dash_is_not_a_byte_range() {
+    let parsed = parse_image_requirements("1200x630 \u{2013} 2 MB max").unwrap();
+    let constraints = parsed.constraints.unwrap();
+    let bytes: Vec<_> = constraints
+        .hard
+        .iter()
+        .filter(|constraint| constraint.field == Field::FileBytes)
+        .collect();
+    assert_eq!(bytes.len(), 1);
+    assert_eq!(bytes[0].op, Operator::Lte);
+    assert_eq!(bytes[0].value, ConstraintValue::Integer(2_000_000));
+}
+
+#[test]
 fn an_inverted_byte_window_is_rejected() {
     assert!(parse_image_requirements("JPEG 50-20 KB").is_err());
 }
