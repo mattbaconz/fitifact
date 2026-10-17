@@ -19,6 +19,9 @@ const ALLOWED_PROTOCOLS: &str = "file";
 /// Linearize, map BT.2020 primaries to BT.709, compress highlights (Hable), and re-encode
 /// for limited-range BT.709 SDR. Needs the zscale filter (libzimg).
 const TONE_MAP_TO_SDR: &str = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
+/// FFmpeg ignores `-color_trc`/`-color_primaries` for frames that carry no color
+/// tags, so tag the frames themselves; validation would otherwise see no transfer.
+const TAG_BT709: &str = "setparams=color_primaries=bt709:color_trc=bt709";
 
 /// True when this FFmpeg build has both filters the HDR to SDR chain needs.
 pub fn ffmpeg_can_tone_map<S: ProcessSpawner>(spawner: &S, ffmpeg_program: &str) -> bool {
@@ -407,9 +410,8 @@ fn ffmpeg_args_with_bitrate(
             if let Some((width, height)) = scale_from_step(step) {
                 filters.push(format!("scale={width}:{height}:flags=lanczos"));
             }
-            if !filters.is_empty() {
-                args.extend(["-vf".into(), filters.join(",")]);
-            }
+            filters.push(TAG_BT709.to_string());
+            args.extend(["-vf".into(), filters.join(",")]);
             args.extend([
                 "-pix_fmt".into(),
                 "yuv420p".into(),
@@ -754,6 +756,7 @@ mod tests {
         ] {
             assert!(args.windows(2).any(|w| w == [flag, value]));
         }
+        assert!(args.windows(2).any(|w| w == ["-vf", TAG_BT709]));
         assert!(
             args.windows(2)
                 .any(|w| w == ["-protocol_whitelist", "file"])
@@ -782,10 +785,8 @@ mod tests {
         step.target.width = Some(1280);
         step.target.height = Some(720);
         let args = ffmpeg_args(&step, Path::new("in.mp4"), Path::new("out.mp4")).unwrap();
-        assert!(
-            args.windows(2)
-                .any(|w| w == ["-vf", "scale=1280:720:flags=lanczos"])
-        );
+        let filters = format!("scale=1280:720:flags=lanczos,{TAG_BT709}");
+        assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
     }
 
     #[test]
@@ -795,7 +796,7 @@ mod tests {
         step.target.width = Some(1280);
         step.target.height = Some(720);
         let args = ffmpeg_args(&step, Path::new("in.mp4"), Path::new("out.mp4")).unwrap();
-        let filters = format!("{TONE_MAP_TO_SDR},scale=1280:720:flags=lanczos");
+        let filters = format!("{TONE_MAP_TO_SDR},scale=1280:720:flags=lanczos,{TAG_BT709}");
         assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
     }
 

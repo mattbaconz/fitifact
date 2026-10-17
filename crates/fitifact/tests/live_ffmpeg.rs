@@ -236,6 +236,56 @@ fn live_hevc_transcodes_video_only() {
 
 #[test]
 #[ignore]
+fn live_untagged_source_transcodes_to_tagged_sdr() {
+    require_tools();
+    assert!(
+        encoder_ok("libx265") && encoder_ok("libx264"),
+        "need libx265 and libx264"
+    );
+    let dir = std::env::temp_dir().join(format!("fitifact-live-untagged-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // Screen recordings and generated clips often carry no transfer or primaries tags.
+    let input = generate(
+        &dir,
+        "untagged-hevc.mp4",
+        &[
+            "-c:v", "libx265", "-pix_fmt", "yuv420p", "-tag:v", "hvc1", "-c:a", "aac", "-b:a",
+            "64k",
+        ],
+    );
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let inspector = FfprobeInspector::new(&spawner);
+    let source = inspector.inspect(&input).unwrap();
+    assert_eq!(source.first_video().unwrap().color_transfer, None);
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints: media_h264_mp4_aac(),
+        output: Some(dir.join("untagged-hevc.adapted.mp4")),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&FfmpegProvider::new(&spawner)),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        result.status,
+        AdaptationStatus::Adapted,
+        "{:?}",
+        result.error
+    );
+    let video = result.validation.expect("validation").artifact;
+    let video = video.first_video().unwrap();
+    assert_eq!(video.color_transfer.as_deref(), Some("bt709"));
+    assert_eq!(video.color_primaries.as_deref(), Some("bt709"));
+    assert_eq!(video.hdr, HdrStatus::Sdr);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
 fn live_h264_mp4_is_noop_without_ffmpeg() {
     require_tools();
     assert!(encoder_ok("libx264"), "need libx264");

@@ -18,6 +18,9 @@ All notable changes to Fitifact are documented here.
 - A damaged image is reported as unreadable instead of as a requirements
   problem, and engine refusals read as plain sentences with the code under
   Technical details.
+- Video re-encoded from a source with no color tags (common for screen
+  recordings and generated clips) is now tagged BT.709, so it passes validation
+  instead of failing every Discord fit.
 
 ### [added]
 
