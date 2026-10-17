@@ -114,35 +114,28 @@ fn tauri_src_binaries(exe_dir: &Path) -> Option<PathBuf> {
     Some(target.parent()?.join("binaries"))
 }
 
+/// Only `<name>` or the Tauri sidecar name `<name>-<target triple>`, as a real executable.
 fn find_tool_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
-    if !dir.is_dir() {
-        return None;
-    }
-    let exact = if cfg!(windows) {
-        dir.join(format!("{name}.exe"))
-    } else {
-        dir.join(name)
-    };
-    if exact.is_file() {
-        return Some(exact);
-    }
-    let prefix = format!("{name}-");
-    let mut matches: Vec<PathBuf> = std::fs::read_dir(dir)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file())
-        .filter(|path| {
-            let file_name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("");
-            let stem = file_name.strip_suffix(".exe").unwrap_or(file_name);
-            stem == name || stem.starts_with(&prefix)
-        })
-        .collect();
-    matches.sort();
-    matches.into_iter().next()
+    let suffix = std::env::consts::EXE_SUFFIX;
+    [
+        format!("{name}{suffix}"),
+        format!("{name}-{}{suffix}", env!("FITIFACT_TARGET_TRIPLE")),
+    ]
+    .into_iter()
+    .map(|file_name| dir.join(file_name))
+    .find(|path| is_executable_file(path))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn is_explicit_path(path: &Path) -> bool {
@@ -171,10 +164,9 @@ mod tests {
         assert!(!tools.ffprobe_is_bundled());
     }
 
-    #[test]
-    fn finds_tauri_triple_named_sidecar() {
+    fn scratch_dir(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
-            "fitifact-media-tools-{}-{}",
+            "fitifact-media-tools-{label}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -182,12 +174,53 @@ mod tests {
                 .unwrap_or_default()
         ));
         std::fs::create_dir_all(&root).unwrap();
-        let sidecar = root.join("ffmpeg-x86_64-pc-windows-msvc.exe");
-        std::fs::write(&sidecar, b"not-a-real-binary").unwrap();
+        root
+    }
+
+    fn write_executable(path: &Path) {
+        std::fs::write(path, b"not-a-real-binary").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    #[test]
+    fn finds_tauri_triple_named_sidecar() {
+        let root = scratch_dir("triple");
+        let sidecar = root.join(format!(
+            "ffmpeg-{}{}",
+            env!("FITIFACT_TARGET_TRIPLE"),
+            std::env::consts::EXE_SUFFIX
+        ));
+        write_executable(&sidecar);
         assert_eq!(
             find_tool_in_dir(&root, "ffmpeg").as_deref(),
             Some(sidecar.as_path())
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ignores_lookalike_files_and_other_triples() {
+        let root = scratch_dir("lookalike");
+        for name in [
+            "ffmpeg-notes.txt".to_string(),
+            "ffmpeg-readme".to_string(),
+            format!("ffmpeg-not-this-triple{}", std::env::consts::EXE_SUFFIX),
+        ] {
+            write_executable(&root.join(name));
+        }
+        std::fs::create_dir_all(root.join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX)))
+            .unwrap();
+        assert_eq!(find_tool_in_dir(&root, "ffmpeg"), None);
+        #[cfg(unix)]
+        {
+            let plain = root.join(format!("ffmpeg-{}", env!("FITIFACT_TARGET_TRIPLE")));
+            std::fs::write(&plain, b"no execute bit").unwrap();
+            assert_eq!(find_tool_in_dir(&root, "ffmpeg"), None);
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 

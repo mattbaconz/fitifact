@@ -11,7 +11,8 @@ use crate::constraints::{ConstraintSet, ConstraintValue, Field};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 use crate::image_adapt::ImageAdaptStepTarget;
 use crate::media_fit::{
-    can_fit_media_with_limits, dimension_limit, even_dimension, file_bytes_limit, fit_output_size,
+    can_fit_media_with_limits, dimension_limit, even_dimension, file_bytes_floor, file_bytes_limit,
+    fit_output_size,
 };
 
 pub const PLANNER_VERSION: &str = "0.1.0";
@@ -37,6 +38,9 @@ pub struct StepTarget {
     pub width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
+    /// The source signals HDR (PQ/HLG); the encode must tone-map it to SDR.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tone_map_hdr: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,6 +146,7 @@ pub enum BlockingCode {
     UnsupportedImageFormat,
     UnsupportedImageTarget,
     AnimationUnsupported,
+    BelowMinimumSize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,6 +207,14 @@ impl PlanOutcome {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Limits {
+    max_bytes: Option<u64>,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+    hdr_tone_mapping: bool,
+}
+
 #[derive(Clone)]
 struct Candidate {
     artifact: Artifact,
@@ -247,22 +260,34 @@ pub fn plan(
     if let Some(reason) = check_only_blocker(&initial) {
         return cannot(vec![reason]);
     }
-    let max_width = dimension_limit(constraints, Field::MediaVideoWidth);
-    let max_height = dimension_limit(constraints, Field::MediaVideoHeight);
-    if initial.all_pass() && !needs_playback_normalize(artifact) {
+    let limits = Limits {
+        max_bytes: file_bytes_limit(constraints),
+        max_width: dimension_limit(constraints, Field::MediaVideoWidth),
+        max_height: dimension_limit(constraints, Field::MediaVideoHeight),
+        hdr_tone_mapping: catalog.hdr_tone_mapping,
+    };
+    if initial.all_pass() {
         return PlanOutcome::Compatible {
             schema: PlanSchema,
             planner_version: PLANNER_VERSION.into(),
             warnings: Vec::new(),
         };
     }
+    if let Some(reason) = byte_floor_blocker(artifact, constraints) {
+        return cannot(vec![reason]);
+    }
     if let Some(reason) = mutation_blocker(artifact, &initial) {
         return cannot(vec![reason]);
     }
-    match file_bytes_limit(constraints) {
+    match limits.max_bytes {
         Some(limit)
             if artifact.byte_length > limit
-                && !can_fit_media_with_limits(artifact, limit, max_width, max_height) =>
+                && !can_fit_media_with_limits(
+                    artifact,
+                    limit,
+                    limits.max_width,
+                    limits.max_height,
+                ) =>
         {
             return cannot(vec![blocking(
                 BlockingCode::SizeFittingUnsupported,
@@ -297,6 +322,7 @@ pub fn plan(
                 &current.artifact,
                 &report,
                 current.steps.len(),
+                &limits,
             ) else {
                 continue;
             };
@@ -349,12 +375,66 @@ pub fn plan(
                 },
             }
         }
+        None if !catalog.hdr_tone_mapping
+            && artifact
+                .first_video()
+                .is_some_and(|video| video.hdr == HdrStatus::Hdr)
+            && plan(
+                artifact,
+                constraints,
+                &catalog.clone().with_hdr_tone_mapping(true),
+            )
+            .plan()
+            .is_some() =>
+        {
+            cannot(vec![blocking(
+                BlockingCode::HdrConversionUnsupported,
+                initial.blocking_ids(),
+                "this HDR video needs tone mapping to SDR, and this FFmpeg build cannot do it (it lacks the zscale filter)",
+            )])
+        }
         None => cannot(vec![blocking(
             BlockingCode::NoProvenPlan,
             initial.blocking_ids(),
             "the bounded v0.1 capability catalog has no proven plan",
         )]),
     }
+}
+
+/// Refuse rather than pad: nothing in the catalog may grow a file to reach a floor.
+fn byte_floor_blocker(artifact: &Artifact, constraints: &ConstraintSet) -> Option<BlockingReason> {
+    let floor = file_bytes_floor(constraints)?;
+    if artifact.byte_length >= floor {
+        return None;
+    }
+    Some(blocking(
+        BlockingCode::BelowMinimumSize,
+        constraints
+            .hard
+            .iter()
+            .filter(|constraint| {
+                constraint.field == Field::FileBytes
+                    && constraint.op == crate::constraints::Operator::Gte
+            })
+            .map(|constraint| constraint.id.clone())
+            .collect(),
+        "the file is smaller than this destination's minimum size, and Fitifact does not pad files",
+    ))
+}
+
+const PICTURE_FIELDS: [Field; 3] = [
+    Field::MediaVideoPixelFormat,
+    Field::MediaVideoBitDepth,
+    Field::MediaVideoHdr,
+];
+
+/// Picture rules a stream copy cannot fix; only a video encode can satisfy them.
+fn picture_failures(report: &CompatibilityReport) -> Vec<&crate::check::ConstraintCheck> {
+    report
+        .checks
+        .iter()
+        .filter(|check| PICTURE_FIELDS.contains(&check.field) && check.result != CheckResult::Pass)
+        .collect()
 }
 
 fn topology_blocker(artifact: &Artifact) -> Option<BlockingReason> {
@@ -720,23 +800,6 @@ fn approved_bit_depth(video: &crate::artifact::VideoStream) -> bool {
     video.bit_depth == Some(8)
 }
 
-fn known_unplayable_picture(video: &crate::artifact::VideoStream) -> bool {
-    video.hdr == HdrStatus::Hdr
-        || video.bit_depth.is_some_and(|depth| depth != 8)
-        || video
-            .pixel_format
-            .as_deref()
-            .is_some_and(|format| format != "yuv420p")
-}
-
-fn needs_playback_normalize(artifact: &Artifact) -> bool {
-    artifact.first_video().is_some_and(|video| {
-        transcodable_codec(video.codec.as_ref())
-            && supported_source_container(artifact.container.as_ref())
-            && known_unplayable_picture(video)
-    })
-}
-
 fn image_mutation_blocker(
     artifact: &Artifact,
     report: &CompatibilityReport,
@@ -789,11 +852,12 @@ fn instantiate(
     artifact: &Artifact,
     report: &CompatibilityReport,
     index: usize,
+    limits: &Limits,
 ) -> Option<PlanStep> {
     match operation {
         TransformId::Remux => instantiate_remux(artifact, report, index),
-        TransformId::TranscodeVideo => instantiate_transcode_video(artifact, report, index),
-        TransformId::TranscodeAudio => instantiate_transcode_audio(artifact, report, index),
+        TransformId::TranscodeVideo => instantiate_transcode_video(artifact, report, index, limits),
+        TransformId::TranscodeAudio => instantiate_transcode_audio(artifact, report, index, limits),
         TransformId::EncodeJpeg => {
             let format = report.failing_or_unknown(Field::ImageFormat)?;
             let image = artifact.image.as_ref()?;
@@ -832,9 +896,6 @@ fn instantiate_remux(
     if !remux_source_container(artifact.container.as_ref())
         || video.codec != Some(VideoCodec::H264)
         || !copyable_audio(artifact)
-        || !approved_pixel_format(video)
-        || !approved_bit_depth(video)
-        || video.hdr == HdrStatus::Hdr
         || video.width.is_none()
         || video.height.is_none()
         || artifact.duration_ms.is_none()
@@ -843,7 +904,7 @@ fn instantiate_remux(
         || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
         || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
         || report.failing_or_unknown(Field::MediaAudioCodec).is_some()
-        || needs_playback_normalize(artifact)
+        || !picture_failures(report).is_empty()
     {
         return None;
     }
@@ -871,6 +932,7 @@ fn instantiate_transcode_audio_only(
     artifact: &Artifact,
     report: &CompatibilityReport,
     index: usize,
+    limits: &Limits,
 ) -> Option<PlanStep> {
     let audio = artifact.first_audio()?;
     if !audio
@@ -887,7 +949,7 @@ fn instantiate_transcode_audio_only(
     if audio_fail.is_none() && container_fail.is_none() && bytes_fail.is_none() {
         return None;
     }
-    let max_bytes = bytes_fail.and_then(|_| file_bytes_from_report(report));
+    let max_bytes = bytes_fail.and(limits.max_bytes);
     if bytes_fail.is_some() {
         let duration = artifact.duration_ms?;
         let limit = max_bytes?;
@@ -947,9 +1009,10 @@ fn instantiate_transcode_audio(
     artifact: &Artifact,
     report: &CompatibilityReport,
     index: usize,
+    limits: &Limits,
 ) -> Option<PlanStep> {
     if artifact.is_audio_only() {
-        return instantiate_transcode_audio_only(artifact, report, index);
+        return instantiate_transcode_audio_only(artifact, report, index, limits);
     }
     let video = artifact.first_video()?;
     let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec)?;
@@ -963,7 +1026,7 @@ fn instantiate_transcode_audio(
         || report.failing_or_unknown(Field::FileBytes).is_some()
         || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
         || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
-        || needs_playback_normalize(artifact)
+        || !picture_failures(report).is_empty()
         || !matches!(
             artifact.container,
             Some(Container::Mp4)
@@ -1022,6 +1085,7 @@ fn instantiate_transcode_video(
     artifact: &Artifact,
     report: &CompatibilityReport,
     index: usize,
+    limits: &Limits,
 ) -> Option<PlanStep> {
     let input_video = artifact.first_video()?;
     let source_width = input_video.width?;
@@ -1039,27 +1103,26 @@ fn instantiate_transcode_video(
     let height_fail = report.failing_or_unknown(Field::MediaVideoHeight);
     let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec);
     let container_fail = report.failing_or_unknown(Field::MediaContainer);
-    let max_bytes = file_bytes_from_report(report);
-    let max_width = report
-        .checks
-        .iter()
-        .filter(|check| check.field == Field::MediaVideoWidth)
-        .filter_map(|check| check.required.parse().ok())
-        .min();
-    let max_height = report
-        .checks
-        .iter()
-        .filter(|check| check.field == Field::MediaVideoHeight)
-        .filter_map(|check| check.required.parse().ok())
-        .min();
+    let picture_fail = picture_failures(report);
+    let Limits {
+        max_bytes,
+        max_width,
+        max_height,
+        hdr_tone_mapping,
+    } = *limits;
 
     let need_video_encode = codec_fail.is_some()
         || bytes_fail.is_some()
         || width_fail.is_some()
         || height_fail.is_some()
-        || needs_playback_normalize(artifact)
+        || !picture_fail.is_empty()
         || (container_fail.is_some() && !can_remux_instead(artifact, report));
     if !need_video_encode {
+        return None;
+    }
+    // H.264 output is always 8-bit SDR, so an HDR source is tone-mapped or not encoded at all.
+    let tone_map_hdr = input_video.hdr == HdrStatus::Hdr;
+    if tone_map_hdr && !hdr_tone_mapping {
         return None;
     }
 
@@ -1124,10 +1187,19 @@ fn instantiate_transcode_video(
             message: "The target has a maximum height.".into(),
         });
     }
-    if reasons.is_empty() && needs_playback_normalize(artifact) {
+    for check in picture_fail {
         reasons.push(PlanReason {
-            constraint_id: "playback-normalize".into(),
-            message: "This file needs a compatible 8-bit H.264 picture.".into(),
+            constraint_id: check.constraint_id.clone(),
+            message: match check.field {
+                Field::MediaVideoPixelFormat => format!(
+                    "The target accepts only these picture formats: {}.",
+                    check.required
+                ),
+                Field::MediaVideoBitDepth => {
+                    format!("The target accepts at most {}-bit color.", check.required)
+                }
+                _ => "The target does not accept HDR video.".into(),
+            },
         });
     }
     if reasons.is_empty() {
@@ -1151,17 +1223,18 @@ fn instantiate_transcode_video(
     }
 
     let mut warnings = Vec::new();
-    if input_video.hdr != HdrStatus::Sdr {
-        warnings.push("HDR was converted to SDR. Colors may look different.".into());
+    if tone_map_hdr {
+        warnings.push(
+            "HDR was tone-mapped to SDR. Bright highlights and colors will look different.".into(),
+        );
+    } else if !approved_sdr_color(input_video) {
+        warnings.push("Color metadata was converted to BT.709.".into());
     }
     if !approved_bit_depth(input_video) {
         warnings.push("Bit depth was converted to 8-bit.".into());
     }
     if !approved_pixel_format(input_video) {
         warnings.push("The picture format was converted to yuv420p.".into());
-    }
-    if !approved_sdr_color(input_video) && input_video.hdr == HdrStatus::Sdr {
-        warnings.push("Color metadata was converted to BT.709.".into());
     }
     if resized {
         warnings.push(format!("Resized to {width}x{height} so the file can fit."));
@@ -1182,6 +1255,7 @@ fn instantiate_transcode_video(
             duration_ms: max_bytes.map(|_| duration_ms),
             width: Some(width),
             height: Some(height),
+            tone_map_hdr,
             ..StepTarget::default()
         },
         reasons,
@@ -1197,7 +1271,7 @@ fn can_remux_instead(artifact: &Artifact, report: &CompatibilityReport) -> bool 
             .first_video()
             .is_some_and(|video| video.codec == Some(VideoCodec::H264))
         && copyable_audio(artifact)
-        && !needs_playback_normalize(artifact)
+        && picture_failures(report).is_empty()
         && report.failing_or_unknown(Field::MediaVideoCodec).is_none()
         && report.failing_or_unknown(Field::FileBytes).is_none()
         && report.failing_or_unknown(Field::MediaVideoWidth).is_none()
@@ -1252,14 +1326,6 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
         TransformId::Remux | TransformId::ImageAdapt => {}
     }
     next
-}
-
-fn file_bytes_from_report(report: &CompatibilityReport) -> Option<u64> {
-    report
-        .checks
-        .iter()
-        .find(|check| check.field == Field::FileBytes)
-        .and_then(|check| check.required.parse().ok())
 }
 
 fn transcode_expected_facts(width: u32, height: u32, has_audio: bool) -> Vec<ExpectedFact> {

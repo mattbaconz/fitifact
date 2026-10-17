@@ -211,3 +211,37 @@ fn json_compiler_returns_the_stable_conflict_error() {
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::RequirementsConflict);
 }
+
+#[test]
+fn file_bytes_accept_a_floor_window_and_reject_an_empty_one() {
+    let window = compile_from_yaml(&yaml(
+        "  - id: min\n    field: file.bytes\n    op: gte\n    value: 20000\n  - id: max\n    field: file.bytes\n    op: lte\n    value: 50000\n",
+    ))
+    .unwrap();
+    assert_eq!(window.hard.len(), 2);
+    let error = compile_from_yaml(&yaml(
+        "  - id: min\n    field: file.bytes\n    op: gte\n    value: 60000\n  - id: max\n    field: file.bytes\n    op: lte\n    value: 50000\n",
+    ))
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::RequirementsConflict);
+    input_error(&yaml(
+        "  - id: zero\n    field: file.bytes\n    op: gte\n    value: 0\n",
+    ));
+}
+
+#[test]
+fn picture_constraints_accept_only_closed_vocabularies() {
+    let picture = compile_from_yaml(&yaml(
+        "  - id: format\n    field: media.video.pixel_format\n    op: in\n    value: [yuv420p, yuvj420p]\n  - id: depth\n    field: media.video.bit_depth\n    op: lte\n    value: 8\n  - id: sdr\n    field: media.video.hdr\n    op: in\n    value: [sdr, unknown]\n",
+    ))
+    .unwrap();
+    assert_eq!(picture.hard.len(), 3);
+    for hard in [
+        "  - id: hdr\n    field: media.video.hdr\n    op: in\n    value: [dolby]\n",
+        "  - id: depth\n    field: media.video.bit_depth\n    op: lte\n    value: 0\n",
+        "  - id: depth\n    field: media.video.bit_depth\n    op: gte\n    value: 8\n",
+        "  - id: format\n    field: media.video.pixel_format\n    op: in\n    value: [\"yuv420p; rm\"]\n",
+    ] {
+        input_error(&yaml(hard));
+    }
+}

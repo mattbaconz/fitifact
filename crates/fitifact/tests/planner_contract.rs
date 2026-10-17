@@ -159,24 +159,52 @@ fn refuses_additional_or_non_av_stream_topologies() {
 }
 
 #[test]
-fn converts_hdr_and_unknown_hdr_to_sdr_h264() {
-    for hdr in [HdrStatus::Hdr, HdrStatus::Unknown] {
-        let mut artifact = Artifact::media(
-            Container::Mp4,
-            VideoCodec::Hevc,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        artifact.first_video_mut().unwrap().hdr = hdr;
-        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
-        assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
-        assert!(
-            outcome.steps()[0]
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("HDR") || warning.contains("SDR"))
-        );
-    }
+fn tone_maps_hdr_only_when_ffmpeg_can_and_refuses_otherwise() {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().hdr = HdrStatus::Hdr;
+    assert_eq!(
+        blocking(&artifact, &media_h264_mp4_aac()),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
+
+    let outcome = plan(
+        &artifact,
+        &media_h264_mp4_aac(),
+        &default_catalog().with_hdr_tone_mapping(true),
+    );
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(step.target.tone_map_hdr);
+    assert!(
+        step.warnings
+            .iter()
+            .any(|warning| warning.contains("tone-mapped"))
+    );
+    assert!(
+        !step
+            .preservation
+            .contains(&PreservationClaim::VideoColorMetadata)
+    );
+}
+
+#[test]
+fn unknown_hdr_converts_without_tone_mapping() {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().hdr = HdrStatus::Unknown;
+    let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(!step.target.tone_map_hdr);
 }
 
 #[test]
@@ -380,16 +408,112 @@ fn already_compatible_h264_without_color_tags_is_noop() {
 }
 
 #[test]
-fn hdr_h264_is_normalized_instead_of_a_noop() {
+fn hdr_h264_that_meets_every_hard_constraint_is_a_noop() {
+    // This target has no picture rules, so nothing justifies a re-encode.
     let mut artifact = Artifact::media(
         Container::Mp4,
         VideoCodec::H264,
         Some(AudioCodec::Aac),
         1000,
     );
-    artifact.first_video_mut().unwrap().hdr = HdrStatus::Hdr;
-    let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    let video = artifact.first_video_mut().unwrap();
+    video.hdr = HdrStatus::Hdr;
+    video.bit_depth = Some(10);
+    video.pixel_format = Some("yuv420p10le".into());
+    assert!(
+        plan(
+            &artifact,
+            &media_h264_mp4_aac(),
+            &default_catalog().with_hdr_tone_mapping(true)
+        )
+        .is_compatible()
+    );
+}
+
+const MP4_H264_AAC: &str = "  - id: container\n    field: media.container\n    op: in\n    value: [mp4]\n  - id: video\n    field: media.video.codec\n    op: in\n    value: [h264]\n  - id: audio\n    field: media.audio.codec\n    op: in\n    value: [aac]\n";
+const PICTURE_RULES: &str = "  - id: picture-format\n    field: media.video.pixel_format\n    op: in\n    value: [yuv420p, yuvj420p]\n  - id: picture-bit-depth\n    field: media.video.bit_depth\n    op: lte\n    value: 8\n  - id: picture-sdr\n    field: media.video.hdr\n    op: in\n    value: [sdr, unknown]\n";
+
+#[test]
+fn picture_rules_force_one_encode_that_cites_each_rule() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = artifact.first_video_mut().unwrap();
+    video.hdr = HdrStatus::Hdr;
+    video.bit_depth = Some(10);
+    video.pixel_format = Some("yuv420p10le".into());
+    assert_eq!(
+        blocking(&artifact, &target),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
+
+    let outcome = plan(
+        &artifact,
+        &target,
+        &default_catalog().with_hdr_tone_mapping(true),
+    );
+    assert_eq!(outcome.steps().len(), 1);
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(step.target.tone_map_hdr);
+    let cited: Vec<&str> = step
+        .reasons
+        .iter()
+        .map(|reason| reason.constraint_id.as_str())
+        .collect();
+    for id in ["picture-format", "picture-bit-depth", "picture-sdr"] {
+        assert!(cited.contains(&id), "missing reason for {id}: {cited:?}");
+    }
+}
+
+#[test]
+fn picture_rules_leave_8bit_sdr_or_untagged_h264_untouched() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    for hdr in [HdrStatus::Sdr, HdrStatus::Unknown] {
+        let mut artifact = Artifact::media(
+            Container::Mp4,
+            VideoCodec::H264,
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        artifact.first_video_mut().unwrap().hdr = hdr;
+        assert!(plan(&artifact, &target, &default_catalog()).is_compatible());
+    }
+}
+
+#[test]
+fn picture_rules_turn_a_remux_into_an_encode() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    let mut artifact = Artifact::media(
+        Container::Mkv,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().pixel_format = Some("yuv444p".into());
+    let outcome = plan(&artifact, &target, &default_catalog());
+    assert_eq!(outcome.steps().len(), 1);
     assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+}
+
+#[test]
+fn refuses_to_pad_a_file_below_the_byte_floor() {
+    let artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_permutations_block(
+        &artifact,
+        "  - id: min-size\n    field: file.bytes\n    op: gte\n    value: 5000\n",
+        "  - id: max-size\n    field: file.bytes\n    op: lte\n    value: 9000\n",
+        BlockingCode::BelowMinimumSize,
+    );
 }
 
 #[test]

@@ -54,6 +54,15 @@ pub struct Capability {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CapabilityCatalog {
     pub capabilities: Vec<Capability>,
+    /// The media provider can tone-map HDR (PQ/HLG) to SDR. Off unless a provider proves it.
+    pub hdr_tone_mapping: bool,
+}
+
+impl CapabilityCatalog {
+    pub fn with_hdr_tone_mapping(mut self, available: bool) -> Self {
+        self.hdr_tone_mapping = available;
+        self
+    }
 }
 
 pub fn default_catalog() -> CapabilityCatalog {
@@ -91,6 +100,9 @@ pub fn default_catalog() -> CapabilityCatalog {
                     Field::MediaAudioCodec,
                     Field::MediaVideoWidth,
                     Field::MediaVideoHeight,
+                    Field::MediaVideoPixelFormat,
+                    Field::MediaVideoBitDepth,
+                    Field::MediaVideoHdr,
                     Field::FileBytes,
                 ],
                 loss: LossClass::Low,
@@ -111,6 +123,7 @@ pub fn default_catalog() -> CapabilityCatalog {
                 requires_video_codec_change: false,
             },
         ],
+        hdr_tone_mapping: false,
     }
 }
 

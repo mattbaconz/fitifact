@@ -352,17 +352,54 @@ fn canonical_extra_stream_fixture_is_refused() {
 
 #[test]
 #[ignore]
-fn canonical_hdr10_fixture_plans_an_sdr_transcode() {
+fn canonical_hdr10_fixture_tone_maps_to_validated_sdr() {
     require_tools();
+    let input = canonical_fixture("refusal-hdr10-hevc-aac.mp4");
     let inspector = FfprobeInspector::default();
-    let artifact = inspector
-        .inspect(&canonical_fixture("refusal-hdr10-hevc-aac.mp4"))
-        .unwrap();
+    let artifact = inspector.inspect(&input).unwrap();
     let video = artifact.first_video().unwrap();
     assert_eq!(video.bit_depth, Some(10));
     assert_eq!(video.hdr, HdrStatus::Hdr);
-    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
-    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+    assert_eq!(
+        create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog()).blocking_codes(),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
+    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
+    assert!(
+        catalog.hdr_tone_mapping,
+        "this FFmpeg build lacks the zscale/tonemap filters"
+    );
+
+    let dir = std::env::temp_dir().join(format!("fitifact-live-hdr-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let output = dir.join("sdr.mp4");
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let provider = FfmpegProvider::new(&spawner);
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints: media_h264_mp4_aac(),
+        output: Some(output.clone()),
+        catalog: Some(&catalog),
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(120),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    assert!(result.plan.expect("plan").steps[0].target.tone_map_hdr);
+
+    let produced = inspector.inspect(&output).unwrap();
+    let video = produced.first_video().unwrap();
+    assert_eq!(video.codec, Some(VideoCodec::H264));
+    assert_eq!(video.pixel_format.as_deref(), Some("yuv420p"));
+    assert_eq!(video.bit_depth, Some(8));
+    assert_eq!(video.hdr, HdrStatus::Sdr);
+    assert_eq!(video.color_transfer.as_deref(), Some("bt709"));
+    assert_eq!(video.color_primaries.as_deref(), Some("bt709"));
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
