@@ -354,7 +354,14 @@ export function useFitifactSession() {
   const [seed] = useState(sessionFromLastTarget);
   // A ?for= link picks the destination for the first matching file only; later choices win.
   const linkedFamilyRef = useRef(familyFromQuery(window.location.search));
-  const [requirements, setRequirements] = useState(seed.requirements);
+  const [requirements, setRequirementsState] = useState(seed.requirements);
+  // The text behind the target being confirmed. Plans persist it, not the
+  // requirements their render captured, so remembered text matches its target.
+  const targetTextRef = useRef(seed.requirements);
+  function setRequirements(value: string) {
+    targetTextRef.current = value;
+    setRequirementsState(value);
+  }
   const [parsed, setParsed] = useState<RequirementParse | null>(null);
   const [target, setTarget] = useState<EditableTarget | null>(seed.target);
   const [confirmedConstraintsJson, setConfirmedConstraintsJson] = useState<
@@ -718,11 +725,12 @@ export function useFitifactSession() {
 
   function persistConfirmed(
     constraintsJson: string,
-    text = requirements,
+    text = targetTextRef.current,
     profile?: string | null,
   ) {
     const nextProfile =
       profile === undefined ? activeProfileRef.current : profile;
+    targetTextRef.current = text;
     setConfirmedConstraintsJson(constraintsJson);
     setActiveProfile(nextProfile);
     activeProfileRef.current = nextProfile;
@@ -1241,7 +1249,7 @@ export function useFitifactSession() {
       setMediaChecks(report);
       persistConfirmed(
         JSON.stringify(compiled),
-        requirements,
+        targetTextRef.current,
         targetSpec.profile ?? activeProfileRef.current,
       );
       setState(mediaPlanState(outcome));
@@ -1315,7 +1323,11 @@ export function useFitifactSession() {
         );
       if (operation !== operationRef.current) return;
       setPlan(report);
-      persistConfirmed(constraintsSnapshot ?? draft, requirements, null);
+      persistConfirmed(
+        constraintsSnapshot ?? draft,
+        targetTextRef.current,
+        null,
+      );
       setTargetDirty(false);
       setEditingTarget(false);
       if (preview) setPreviewBuffer(preview);

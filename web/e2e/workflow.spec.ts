@@ -381,6 +381,20 @@ test("last-used target is applied after a new drop", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
 });
 
+test("remembered requirement text is the text behind the remembered target", async ({ page }) => {
+  await page.goto("/");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await pasteRequirements(page, "PNG, max 2 MB");
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  await pasteRequirements(page, "JPEG, max 2 MB");
+  await expect(page.getByRole("link", { name: "Use original" })).toBeVisible();
+  await page.reload();
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.getByRole("link", { name: "Use original" })).toBeVisible();
+  await page.getByRole("button", { name: "Change requirements", exact: true }).click();
+  await expect(page.getByLabel("Rejection message or requirements")).toHaveValue("JPEG, max 2 MB");
+});
+
 test("inspect without a target shows the file and keeps Adapt and download disabled", async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
