@@ -48,11 +48,11 @@ jobs:
       - name: Install locked desktop CLI
         working-directory: apps/desktop
         run: npm ci
-      - name: Desktop host tests
-        run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib
-      - name: Fetch FFmpeg sidecars
+      - name: Fetch FFmpeg sidecars (tauri-build needs them before tests)
         working-directory: apps/desktop
         run: npm run sidecar
+      - name: Desktop host tests
+        run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib
       - name: Package unsigned Windows app
         working-directory: apps/desktop
         run: npm run build
