@@ -313,3 +313,6 @@ export function desktopCancel(operationId: string) {
 export function desktopReveal(path: string) {
   return invokeJson("reveal", { path });
 }
+export function desktopCopyFile(path: string) {
+  return invokeJson("copy_file", { path });
+}

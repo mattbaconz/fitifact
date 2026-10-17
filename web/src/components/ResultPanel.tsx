@@ -13,6 +13,7 @@ import {
 } from "../icons";
 import { cropAxis } from "../lib/crop";
 import { fileNameFromPath } from "../lib/desktop";
+import { desktopCopyFile } from "../lib/desktop-engine";
 import type { MeasuredRow } from "../lib/explain";
 import { copyFile, fileActions, shareFile } from "../lib/share";
 import type { FitifactSession, Tone } from "../useFitifactSession";
@@ -151,6 +152,48 @@ function FileActions({ blob, name }: { blob: Blob | null; name: string }) {
         {feedback}
       </p>
     </div>
+  );
+}
+
+/** A desktop result is already a file on disk: copy it as a file, or show it. */
+function SavedFileActions({
+  path,
+  reveal,
+}: {
+  path: string | null;
+  reveal: () => Promise<void>;
+}) {
+  const [feedback, setFeedback] = useState("");
+  return (
+    <>
+      {path ? (
+        <button
+          type="button"
+          className="ft-btn ft-btn-block"
+          onClick={async () => {
+            try {
+              await desktopCopyFile(path);
+              setFeedback("Copied. Paste it where it needs to go.");
+            } catch {
+              setFeedback("Copy didn’t work. Use Show in folder instead.");
+            }
+          }}
+        >
+          <CopyIcon />
+          Copy file
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="ft-btn ft-btn-secondary ft-btn-block"
+        onClick={() => void reveal()}
+      >
+        Show in folder
+      </button>
+      <p className="helper file-actions-status" role="status">
+        {feedback}
+      </p>
+    </>
   );
 }
 
@@ -400,13 +443,10 @@ export function ResultPanel({
                   ? `Saved as ${fileNameFromPath(mediaAdapt.output)}`
                   : "The original file is ready to use."}
               </p>
-              <button
-                type="button"
-                className="ft-btn ft-btn-secondary ft-btn-block"
-                onClick={() => void revealOutput()}
-              >
-                Show in folder
-              </button>
+              <SavedFileActions
+                path={mediaAdapt?.output ?? mediaPath}
+                reveal={revealOutput}
+              />
             </>
           ) : null}
           <button

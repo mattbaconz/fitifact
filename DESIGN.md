@@ -90,8 +90,10 @@ Results show:
 - each requirement with the measured value before and after;
 - the original and the output side by side;
 - what changed, why, and what was kept, in plain words;
-- Download everywhere, plus Copy and Share where the browser can hand over the
-  exact validated file.
+- Download, plus Copy and Share where the browser can hand over the exact
+  validated file. Desktop video and audio results are already saved beside the
+  original, so they offer **Copy file** (the file itself on the clipboard) and
+  Show in folder instead.
 
 ## Accessibility and motion
 

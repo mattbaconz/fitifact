@@ -1,3 +1,4 @@
+mod clipboard;
 mod engine;
 
 use engine::{
@@ -133,9 +134,13 @@ fn cancel(app: tauri::AppHandle, operation_id: String) -> Result<bool, CommandEr
         .is_some_and(|token| token.cancel()))
 }
 
-#[tauri::command]
-fn reveal(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
-    let path = open_user_file(&path)?;
+/// A file the user chose or Fitifact produced in this session.
+fn known_file(
+    app: &tauri::AppHandle,
+    path: &str,
+    action: &str,
+) -> Result<std::path::PathBuf, CommandError> {
+    let path = open_user_file(path)?;
     if !app
         .state::<Jobs>()
         .revealable
@@ -145,11 +150,24 @@ fn reveal(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
     {
         return Err(CommandError::new(
             "INPUT_INVALID",
-            "Select or produce this file before revealing it.",
+            format!("Select or produce this file before {action} it."),
         ));
     }
+    Ok(path)
+}
+
+#[tauri::command]
+fn reveal(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
+    let path = known_file(&app, &path, "revealing")?;
     app.opener()
         .reveal_item_in_dir(path)
+        .map_err(|error| CommandError::new("EXECUTION_FAILED", error.to_string()))
+}
+
+#[tauri::command]
+fn copy_file(app: tauri::AppHandle, path: String) -> Result<(), CommandError> {
+    let path = known_file(&app, &path, "copying")?;
+    clipboard::copy_file(&path)
         .map_err(|error| CommandError::new("EXECUTION_FAILED", error.to_string()))
 }
 
@@ -206,6 +224,7 @@ pub fn run() {
             adapt,
             cancel,
             reveal,
+            copy_file,
             doctor,
             compile_target,
             read_header,
