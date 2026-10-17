@@ -20,6 +20,18 @@ pub fn file_bytes_limit(constraints: &ConstraintSet) -> Option<u64> {
         .min()
 }
 
+pub fn file_bytes_floor(constraints: &ConstraintSet) -> Option<u64> {
+    constraints
+        .hard
+        .iter()
+        .filter(|constraint| constraint.field == Field::FileBytes && constraint.op == Operator::Gte)
+        .filter_map(|constraint| match constraint.value {
+            ConstraintValue::Integer(value) => Some(value),
+            _ => None,
+        })
+        .max()
+}
+
 pub fn dimension_limit(constraints: &ConstraintSet, field: Field) -> Option<u32> {
     constraints
         .hard
@@ -257,8 +269,9 @@ mod tests {
     fn fit_output_size_scales_when_the_current_frame_cannot_hold_the_budget() {
         let fitted = fit_output_size(1920, 1080, None, None, Some(40_000), Some(1_000), true);
         let (width, height) = fitted.expect("40 KB / 1s should fit after scaling");
-        assert!(width < 1920 || height < 1080);
-        assert!(can_fit_at(width, height, 400_000, 1_000, true));
+        assert!(!can_fit_at(1920, 1080, 40_000, 1_000, true));
+        assert_eq!((width, height), (1440, 810));
+        assert!(can_fit_at(width, height, 40_000, 1_000, true));
     }
 
     #[test]

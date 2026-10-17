@@ -120,7 +120,11 @@ pub fn check_path(
 pub fn plan_path(path: &Path, spec: &TargetSpec) -> Result<PlanOutcome, CommandError> {
     let constraints = load_target(spec)?;
     let artifact = inspect_path(path)?;
-    Ok(plan(&artifact, &constraints, &fitifact::default_catalog()))
+    Ok(plan(
+        &artifact,
+        &constraints,
+        &fitifact::ffmpeg::catalog_for(&artifact),
+    ))
 }
 
 #[cfg(test)]
@@ -138,7 +142,8 @@ pub fn adapt_path_cancellable(
     let inspector =
         DefaultInspector::new(fitifact::runtime::CancellableSystemSpawner(token.clone()));
     let artifact = inspect(path, &inspector).map_err(CommandError::from)?;
-    let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
+    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
+    let outcome = plan(&artifact, &constraints, &catalog);
     let image;
     let ffmpeg;
     let provider: Option<&dyn TransformProvider> = match outcome
@@ -162,7 +167,7 @@ pub fn adapt_path_cancellable(
             input: path,
             constraints,
             output: None,
-            catalog: None,
+            catalog: Some(&catalog),
             inspector: &inspector,
             provider,
             execution: ExecutionContext {

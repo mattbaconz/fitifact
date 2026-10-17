@@ -232,7 +232,11 @@ fn plan_cmd(
     let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
     let report = check(&artifact, &constraints);
-    let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
+    let outcome = plan(
+        &artifact,
+        &constraints,
+        &fitifact::ffmpeg::catalog_for(&artifact),
+    );
     if json {
         println!(
             "{}",
@@ -265,7 +269,8 @@ fn adapt_cmd(
     let constraints = load_constraints(&target)?;
     let inspector = DefaultInspector::default();
     let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
-    let outcome = plan(&artifact, &constraints, &fitifact::default_catalog());
+    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
+    let outcome = plan(&artifact, &constraints, &catalog);
     let ffmpeg;
     let image;
     let provider: Option<&dyn TransformProvider> = match outcome
@@ -287,7 +292,7 @@ fn adapt_cmd(
         input: file,
         constraints,
         output,
-        catalog: None,
+        catalog: Some(&catalog),
         inspector: &inspector,
         provider,
         execution: ExecutionContext {

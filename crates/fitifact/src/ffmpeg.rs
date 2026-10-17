@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::artifact::{Artifact, Container, StreamType, VideoCodec};
-use crate::capability::TransformId;
+use crate::artifact::{Artifact, Container, HdrStatus, StreamType, VideoCodec};
+use crate::capability::{CapabilityCatalog, TransformId, default_catalog};
 use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
 use crate::media_fit::{
@@ -16,6 +16,40 @@ use crate::runtime::{
 };
 
 const ALLOWED_PROTOCOLS: &str = "file";
+/// Linearize, map BT.2020 primaries to BT.709, compress highlights (Hable), and re-encode
+/// for limited-range BT.709 SDR. Needs the zscale filter (libzimg).
+const TONE_MAP_TO_SDR: &str = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
+
+/// True when this FFmpeg build has both filters the HDR to SDR chain needs.
+pub fn ffmpeg_can_tone_map<S: ProcessSpawner>(spawner: &S, ffmpeg_program: &str) -> bool {
+    spawner
+        .spawn(
+            ffmpeg_program,
+            &["-hide_banner".into(), "-filters".into()],
+            Duration::from_secs(15),
+        )
+        .ok()
+        .filter(SpawnOutput::success)
+        .is_some_and(|output| {
+            let listing = output.stdout_str();
+            ["zscale", "tonemap"].iter().all(|name| {
+                listing
+                    .lines()
+                    .any(|line| line.split_whitespace().nth(1) == Some(name))
+            })
+        })
+}
+
+/// The planner catalog for this artifact. Probes FFmpeg only for HDR sources, so the
+/// common path spawns nothing extra.
+pub fn catalog_for(artifact: &Artifact) -> CapabilityCatalog {
+    let hdr = artifact
+        .first_video()
+        .is_some_and(|video| video.hdr == HdrStatus::Hdr);
+    default_catalog().with_hdr_tone_mapping(
+        hdr && ffmpeg_can_tone_map(&SystemSpawner, &resolve_media_tools().ffmpeg_program()),
+    )
+}
 
 #[derive(Debug, Clone)]
 pub struct FfmpegProvider<S = SystemSpawner> {
@@ -366,11 +400,15 @@ fn ffmpeg_args_with_bitrate(
                 "-c:v".into(),
                 encoder.into(),
             ]);
+            let mut filters = Vec::new();
+            if step.target.tone_map_hdr {
+                filters.push(TONE_MAP_TO_SDR.to_string());
+            }
             if let Some((width, height)) = scale_from_step(step) {
-                args.extend([
-                    "-vf".into(),
-                    format!("scale={width}:{height}:flags=lanczos"),
-                ]);
+                filters.push(format!("scale={width}:{height}:flags=lanczos"));
+            }
+            if !filters.is_empty() {
+                args.extend(["-vf".into(), filters.join(",")]);
             }
             args.extend([
                 "-pix_fmt".into(),
@@ -748,6 +786,51 @@ mod tests {
             args.windows(2)
                 .any(|w| w == ["-vf", "scale=1280:720:flags=lanczos"])
         );
+    }
+
+    #[test]
+    fn transcode_args_tone_map_hdr_before_scaling() {
+        let mut step = transcode_step();
+        step.target.tone_map_hdr = true;
+        step.target.width = Some(1280);
+        step.target.height = Some(720);
+        let args = ffmpeg_args(&step, Path::new("in.mp4"), Path::new("out.mp4")).unwrap();
+        let filters = format!("{TONE_MAP_TO_SDR},scale=1280:720:flags=lanczos");
+        assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
+    }
+
+    struct FiltersSpawner(&'static str);
+
+    impl ProcessSpawner for FiltersSpawner {
+        fn spawn(
+            &self,
+            _program: &str,
+            args: &[String],
+            _timeout: Duration,
+        ) -> Result<SpawnOutput> {
+            assert_eq!(args.join(" "), "-hide_banner -filters");
+            Ok(SpawnOutput {
+                status: 0,
+                stdout: self.0.as_bytes().to_vec(),
+                stderr: Vec::new(),
+                stdout_truncated: false,
+                stderr_truncated: false,
+            })
+        }
+    }
+
+    #[test]
+    fn tone_mapping_needs_both_zscale_and_tonemap_filters() {
+        let both = " T.. zscale            V->V       Apply resizing.\n ... tonemap           V->V       Conversion.\n";
+        assert!(ffmpeg_can_tone_map(&FiltersSpawner(both), "ffmpeg"));
+        let tonemap_only = " ... tonemap           V->V       Conversion.\n";
+        assert!(!ffmpeg_can_tone_map(
+            &FiltersSpawner(tonemap_only),
+            "ffmpeg"
+        ));
+        let lookalikes =
+            " ... tonemap_opencl    V->V       x\n ... zscale_cuda       V->V       x\n";
+        assert!(!ffmpeg_can_tone_map(&FiltersSpawner(lookalikes), "ffmpeg"));
     }
 
     #[test]
