@@ -460,14 +460,14 @@ fn parse_sizes(
         let amount = |number: usize, unit: usize| {
             parse_size_bytes(&format!("{} {}", tokens[number].value, tokens[unit].value))
         };
+        // A low number already claimed by another rule ("1200x630 – 2 MB max") is not a range.
         if let Some((low_index, low_unit, start_index)) =
-            size_range_start(text, tokens, number_index)
+            size_range_start(text, tokens, number_index).filter(|&(_, _, start_index)| {
+                !overlaps(covered, tokens[start_index].start, tokens[unit_index].end)
+            })
         {
             let start = tokens[start_index].start;
             let end = tokens[unit_index].end;
-            if overlaps(covered, start, end) {
-                continue;
-            }
             let low = amount(low_index, low_unit.unwrap_or(unit_index))?;
             let high = amount(number_index, unit_index)?;
             let min_id = unique_id("min-bytes", ordinal);

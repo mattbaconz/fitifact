@@ -509,6 +509,21 @@ test("last-used profile restores after a new drop", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Already compatible. Nothing changed.|Minimum changes ready/ })).toBeVisible();
 });
 
+test("a ?for= link picks the destination for the first file only", async ({ page }) => {
+  await page.goto("/?for=gmail");
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.getByText("Using Gmail attachment.")).toBeAttached({ timeout: 30_000 });
+  await expect(page.locator(".target-summary")).toContainText(/25(\.00)?\s*MB/i);
+  const summary = page.locator(".requirements-disclosure > summary");
+  if (await summary.isVisible() && await page.locator(".requirements-disclosure").getAttribute("open") === null) await summary.click();
+  await page.locator(".destination-chips").getByRole("button", { name: /Discord/ }).click();
+  await expect(page.locator(".target-summary")).toContainText(/20(\.00)?\s*MB/i, { timeout: 30_000 });
+  await dropImage(page, "compatible-jpeg.jpg");
+  await expect(page.getByRole("heading", { name: /Already compatible. Nothing changed.|Minimum changes ready/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".target-summary")).toContainText(/20(\.00)?\s*MB/i);
+  await expect(page.getByText("Using Gmail attachment.")).toHaveCount(0);
+});
+
 test("sample scenarios replace remembered requirements and require crop approval", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Try an unchanged file/ }).click();
