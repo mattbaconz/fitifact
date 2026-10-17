@@ -561,6 +561,8 @@ fn spawn_system(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| map_spawn_error(program, err))?;
+    #[cfg(windows)]
+    let tree = ProcessTree::adopt(&child);
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -576,13 +578,9 @@ fn spawn_system(
     });
 
     let start = Instant::now();
-    loop {
+    let failure = loop {
         if let Some(error) = cancellation.and_then(|token| token.check().err()) {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = out_handle.join();
-            let _ = err_handle.join();
-            return Err(error);
+            break error;
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -598,27 +596,78 @@ fn spawn_system(
                 });
             }
             Ok(None) if start.elapsed() >= timeout => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = out_handle.join();
-                let _ = err_handle.join();
-                return Err(Error::new(
+                break Error::new(
                     ErrorCode::ExecutionLimit,
                     "external media tool exceeded its configured timeout",
-                ));
+                );
             }
             Ok(None) => thread::sleep(Duration::from_millis(20)),
             Err(err) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = out_handle.join();
-                let _ = err_handle.join();
-                return Err(Error::new(
+                break Error::new(
                     ErrorCode::ExecutionFailed,
                     format!("external media tool could not be monitored: {}", err.kind()),
-                ));
+                );
             }
         }
+    };
+    // Ending the tree first matters: a package-manager shim (Chocolatey) runs
+    // the real tool as its own child, which would keep our pipes open.
+    #[cfg(windows)]
+    drop(tree);
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = out_handle.join();
+    let _ = err_handle.join();
+    Err(failure)
+}
+
+/// Job object that terminates the child and every process it started when
+/// dropped.
+#[cfg(windows)]
+struct ProcessTree(windows_sys::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+impl ProcessTree {
+    // ponytail: the child is assigned right after spawn, so a grandchild it
+    // starts within those microseconds escapes the job; spawning suspended
+    // and resuming after assignment closes that window if it ever matters.
+    fn adopt(child: &std::process::Child) -> Option<Self> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        };
+
+        // SAFETY: null attributes and name request an unnamed job with default
+        // security; the returned handle is owned by `ProcessTree` below.
+        let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if job.is_null() {
+            return None;
+        }
+        let tree = Self(job);
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // SAFETY: `job` is live, `limits` is the exact structure named by the
+        // information class, and `child` owns a live process handle.
+        let adopted = unsafe {
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                (&raw const limits).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ) != 0
+                && AssignProcessToJobObject(job, child.as_raw_handle()) != 0
+        };
+        adopted.then_some(tree)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ProcessTree {
+    fn drop(&mut self) {
+        // SAFETY: the handle came from CreateJobObjectW and is closed exactly once.
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
     }
 }
 

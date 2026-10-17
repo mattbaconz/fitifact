@@ -34,30 +34,42 @@ fn require_tools() {
 #[test]
 #[ignore]
 fn cancellation_reaps_a_live_ffmpeg_process() {
+    assert_cancel_reaps("ffmpeg", &[]);
+}
+
+/// Chocolatey's shim runs the real FFmpeg as its own child, as `cmd /c` does.
+#[cfg(windows)]
+#[test]
+#[ignore]
+fn cancellation_reaps_ffmpeg_behind_a_shim() {
+    assert_cancel_reaps("cmd", &["/c", "ffmpeg"]);
+}
+
+fn assert_cancel_reaps(program: &'static str, prefix: &[&str]) {
     use fitifact::runtime::{CancellableSystemSpawner, ProcessSpawner};
     require_tools();
+    let args: Vec<String> = prefix
+        .iter()
+        .chain(&[
+            "-nostdin",
+            "-re",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=64x64:rate=10",
+            "-t",
+            "60",
+            "-f",
+            "null",
+            "-",
+        ])
+        .map(|arg| arg.to_string())
+        .collect();
     let token = fitifact::CancellationToken::default();
     let worker = token.clone();
     let start = std::time::Instant::now();
     let job = std::thread::spawn(move || {
-        CancellableSystemSpawner(worker).spawn(
-            "ffmpeg",
-            &[
-                "-nostdin",
-                "-re",
-                "-f",
-                "lavfi",
-                "-i",
-                "testsrc=size=64x64:rate=10",
-                "-t",
-                "60",
-                "-f",
-                "null",
-                "-",
-            ]
-            .map(String::from),
-            Duration::from_secs(90),
-        )
+        CancellableSystemSpawner(worker).spawn(program, &args, Duration::from_secs(90))
     });
     std::thread::sleep(Duration::from_millis(400));
     assert!(token.cancel());
