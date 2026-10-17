@@ -8,6 +8,7 @@ export function CopyableCode(props: ComponentProps<"pre">) {
     <div className="fitifact-code">
       <button
         type="button"
+        className="ft-btn ft-btn-secondary"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(ref.current?.textContent ?? "");

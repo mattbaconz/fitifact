@@ -76,8 +76,10 @@ import {
   describeVerified,
   inspectLine,
   leftoverNote,
+  measuredRows,
   understoodNote,
 } from "./lib/explain";
+import { isStale, registryProfile } from "./lib/registry";
 import { type SavedTarget } from "./lib/saved-targets";
 import {
   clearLastTarget,
@@ -132,7 +134,9 @@ export const CHIP_ICONS: Record<DestinationFamily, typeof ChatIcon> = {
   "generic-video": VideoIcon,
 } as const;
 
-const STATE_COPY: Record<ProductState, { title: string; tone: string }> = {
+export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "refusal";
+
+const STATE_COPY: Record<ProductState, { title: string; tone: Tone }> = {
   idle: { title: "Drop a file", tone: "neutral" },
   inspected: { title: "Choose a destination", tone: "neutral" },
   requirements_ready: { title: "Ready", tone: "neutral" },
@@ -142,15 +146,15 @@ const STATE_COPY: Record<ProductState, { title: string; tone: string }> = {
     title: "Already compatible. Nothing changed.",
     tone: "success",
   },
-  crop_approval_required: { title: "Crop approval required", tone: "warning" },
+  crop_approval_required: { title: "Crop approval required", tone: "info" },
   adapted: { title: "Adapted and verified", tone: "success" },
   cannot_satisfy: {
     title: "Cannot satisfy these requirements",
-    tone: "danger",
+    tone: "refusal",
   },
   validation_failure: { title: "Validation failed", tone: "danger" },
   resource_limit: { title: "Resource limit reached", tone: "danger" },
-  cancelled: { title: "Processing cancelled", tone: "warning" },
+  cancelled: { title: "Processing cancelled", tone: "neutral" },
   unsupported_heic: {
     title: "This is a phone photo this build cannot decode yet",
     tone: "warning",
@@ -316,9 +320,9 @@ export function RejectBlock({
   return (
     <div className="reject-card" role="status">
       <strong>{name}</strong>
-      <p className="error-copy">{message}</p>
+      <p className="ft-notice reject-message">{message}</p>
       {offerDesktop ? (
-        <a className="download-button" href={desktopGuideHref()}>
+        <a className="ft-btn download-button" href={desktopGuideHref()}>
           Get the desktop app
         </a>
       ) : null}
@@ -420,6 +424,9 @@ export function useFitifactSession() {
   const [activeProfile, setActiveProfile] = useState<string | null>(
     seed.profile,
   );
+  const [inspectingName, setInspectingName] = useState<string | null>(null);
+  // The "Adapt and download" operation; only its own validated output downloads.
+  const downloadAfterAdaptRef = useRef<number | null>(null);
   const [appliedFromLastUsed, setAppliedFromLastUsed] = useState(false);
   const confirmedRef = useRef<string | null>(null);
   const targetDirtyRef = useRef(false);
@@ -619,7 +626,20 @@ export function useFitifactSession() {
         : null,
     [state, outputBuffer, sourceFile, download, inspection],
   );
-  const downloadUrl = useObjectUrl(outputBlob ?? originalBlob);
+  const downloadBlob = outputBlob ?? originalBlob;
+  const downloadUrl = useObjectUrl(downloadBlob);
+  useEffect(() => {
+    if (downloadAfterAdaptRef.current !== operationRef.current) return;
+    if (!downloadUrl || !download) return;
+    if (state !== "adapted" && state !== "compatible") return;
+    downloadAfterAdaptRef.current = null;
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = download.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }, [downloadUrl, download, state]);
 
   const crop = useMemo(() => {
     if (!plan?.plan.target.crop.required) return null;
@@ -1026,6 +1046,7 @@ export function useFitifactSession() {
     const hadValidSource = Boolean(inspection || mediaArtifact);
     processingRef.current = true;
     setState("processing");
+    setInspectingName(fileNameFromPath(path));
     try {
       const artifact = await desktopInspect(path);
       if (operation !== operationRef.current) return;
@@ -1061,6 +1082,7 @@ export function useFitifactSession() {
     } finally {
       if (operation === operationRef.current) {
         setProgress(null);
+        setInspectingName(null);
         processingRef.current = false;
       }
     }
@@ -1136,6 +1158,7 @@ export function useFitifactSession() {
     setError(null);
     processingRef.current = true;
     setState("processing");
+    setInspectingName(file.name);
     try {
       const { report, preview } = await client.inspect<InspectReport>(
         file,
@@ -1187,6 +1210,7 @@ export function useFitifactSession() {
     } finally {
       if (operation === operationRef.current) {
         setProgress(null);
+        setInspectingName(null);
         processingRef.current = false;
       }
     }
@@ -1310,7 +1334,8 @@ export function useFitifactSession() {
     }
   }
 
-  async function adaptImage() {
+  async function adaptImage(downloadAfter = false) {
+    downloadAfterAdaptRef.current = null;
     if (mediaPathRef.current && desktopTarget) {
       if (state === "processing") return;
       const operation = beginOperation();
@@ -1327,8 +1352,6 @@ export function useFitifactSession() {
         );
         if (operation !== operationRef.current) return;
         setMediaAdapt(result);
-        if (result.validation?.checks ?? result.report)
-          setMediaChecks(result.validation?.checks ?? result.report ?? null);
         if (result.status === "compatible") setState("compatible");
         else if (
           result.status === "adapted" &&
@@ -1391,6 +1414,7 @@ export function useFitifactSession() {
     setState("processing");
     setError(null);
     try {
+      downloadAfterAdaptRef.current = downloadAfter ? operation : null;
       const { report, output } = await client.adapt<AdaptReport>(
         confirmedConstraintsJson,
         plan.plan.target.crop.required ? crop : null,
@@ -1398,10 +1422,12 @@ export function useFitifactSession() {
         onProgress(operation),
       );
       if (operation !== operationRef.current) return;
+      if (!report.report.compatible) downloadAfterAdaptRef.current = null;
       setAdapted(report);
       setOutputBuffer(output ?? null);
       setState(report.status === "compatible" ? "compatible" : "adapted");
     } catch (caught) {
+      downloadAfterAdaptRef.current = null;
       handleFailure(caught, operation);
     } finally {
       if (operation === operationRef.current) {
@@ -1428,6 +1454,8 @@ export function useFitifactSession() {
     ++operationRef.current;
     client.cancel();
     processingRef.current = false;
+    downloadAfterAdaptRef.current = null;
+    setInspectingName(null);
     setState("cancelled");
     setError({
       schema: "fitifact.error/v1",
@@ -1603,8 +1631,14 @@ export function useFitifactSession() {
     plan?.report.checks ??
     [];
   const status = STATE_COPY[state];
+  const showWork = Boolean(inspection || mediaArtifact);
+  const refusedInput = Boolean(lastRejected && !showWork && state !== "processing");
   const statusTitle =
-    state === "crop_approval_required" ? approvalTitle(plan) : status.title;
+    state === "crop_approval_required"
+      ? approvalTitle(plan)
+      : refusedInput
+        ? "Fitifact can't adapt this file"
+        : status.title;
   const problems = plan
     ? describeProblems(plan)
     : mediaChecks
@@ -1633,7 +1667,6 @@ export function useFitifactSession() {
           inspection.artifact.byte_length,
         )
       : null;
-  const showWork = Boolean(inspection || mediaArtifact);
   const needsApproval = Boolean(
     (plan?.plan.target.crop.required && !cropConsent) ||
       (plan?.plan.target.first_frame?.required && !firstFrameConsent),
@@ -1698,6 +1731,20 @@ export function useFitifactSession() {
     ]),
   ];
   const resultReady = state === "adapted" || state === "compatible";
+  const staleRules = (() => {
+    const profile = registryProfile(activeProfile);
+    return Boolean(profile && isStale(profile));
+  })();
+  // Warning: a result exists but rests on something the user should re-check.
+  const tone: Tone =
+    resultReady && (leftover || staleRules) ? "warning" : refusedInput ? "refusal" : status.tone;
+  const measured = measuredRows(
+    plan?.report.checks ?? mediaChecks?.checks ?? [],
+    state === "adapted"
+      ? (mediaAdapt?.validation?.checks.checks ?? adapted?.report.checks ?? null)
+      : null,
+  );
+  const adaptLabel = mediaPath ? "Adapt and save" : "Adapt and download";
   const outputFacts = mediaAdapt?.validation?.artifact
     ? inspectMediaLine(
         mediaAdapt.validation.artifact,
@@ -1722,6 +1769,12 @@ export function useFitifactSession() {
   }
   return {
     showWork,
+    inspectingName,
+    downloadBlob,
+    tone,
+    staleRules,
+    measured,
+    adaptLabel,
     sidebarOpen,
     setSidebarOpen,
     notice,

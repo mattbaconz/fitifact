@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkLabel, describeActions, describeKept, describeMediaActions, describeProblems, describeProblemsFromChecks, describeVerified, formatCheckValue, formatLabel, inspectLine, leftoverNote, understoodNote } from "./explain";
+import { checkLabel, describeActions, describeKept, describeMediaActions, describeProblems, describeProblemsFromChecks, describeVerified, formatCheckValue, formatLabel, inspectLine, leftoverNote, measuredRows, understoodNote } from "./explain";
 import type { PlanReport } from "../types";
 
 function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["checks"] }): PlanReport {
@@ -126,3 +126,35 @@ describe("human plan copy", () => {
     })).toMatch(/already matches/);
   });
 });
+
+describe("measuredRows", () => {
+  const before = [
+    { constraint_id: "format", field: "image.format", actual: "png", required: "jpeg", result: "fail" as const },
+    { constraint_id: "bytes", field: "file.bytes", actual: "4096", required: "<= 2000000", result: "pass" as const },
+  ];
+
+  it("pairs each requirement with the measured source before any output exists", () => {
+    expect(measuredRows(before)).toEqual([
+      { id: "format", label: "Format", needs: "JPEG", before: "PNG", beforeResult: "fail", after: null, result: "fail" },
+      { id: "bytes", label: "File size", needs: "≤2.00 MB", before: "4.1 KB", beforeResult: "pass", after: null, result: "pass" },
+    ]);
+  });
+
+  it("reports the output's measurement and result once adapted", () => {
+    const after = [
+      { constraint_id: "format", field: "image.format", actual: "jpeg", required: "jpeg", result: "pass" as const },
+      { constraint_id: "bytes", field: "file.bytes", actual: "18000", required: "<= 2000000", result: "pass" as const },
+    ];
+    const rows = measuredRows(before, after);
+    expect(rows.map((row) => [row.before, row.beforeResult, row.after, row.result])).toEqual([
+      ["PNG", "fail", "JPEG", "pass"],
+      ["4.1 KB", "pass", "18.0 KB", "pass"],
+    ]);
+  });
+
+  it("keeps an output-only requirement and marks a missing measurement as unknown", () => {
+    const rows = measuredRows([], [{ constraint_id: "width", field: "image.width", actual: null, required: "600", result: "unknown" }]);
+    expect(rows).toEqual([{ id: "width", label: "Width", needs: "600", before: "Unknown", beforeResult: "unknown", after: "Unknown", result: "unknown" }]);
+  });
+});
+

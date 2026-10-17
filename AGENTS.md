@@ -137,8 +137,9 @@ regenerates it).
 The public documentation site is a separate Next.js/Fumadocs static export in
 `apps/docs`. The Vite application remains at the root URL. `web`'s build merges
 the docs export at `/docs/` (including the configured Pages base path). Shared
-brand tokens, self-hosted fonts, and the local `fitifact.theme` preference keep
-both surfaces coherent. Documentation search is browser-local.
+brand tokens and `ft-` components (see `DESIGN.md`), self-hosted fonts, and the
+local `fitifact.theme` preference keep both surfaces coherent. Documentation
+search is browser-local.
 
 Native adaptation requests carry operation identifiers. Cancellation uses an
 optional core token and cancellable process spawner; publication and cancellation

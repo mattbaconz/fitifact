@@ -3,12 +3,12 @@ import { readStored, writeStored } from "../lib/storage";
 
 export function ThemeControl() {
   const [theme, setTheme] = useState(
-    () => readStored("fitifact.theme") ?? "dark",
+    () => readStored("fitifact.theme") ?? "system",
   );
   return (
     <label className="theme-control">
       Appearance
-      <select
+      <select className="ft-field"
         value={theme}
         onChange={(event) => {
           const value = event.target.value;

@@ -19,14 +19,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 export function Appearance() {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("system");
   useEffect(() => {
-    setTheme(document.documentElement.dataset.theme || "dark");
+    setTheme(document.documentElement.dataset.theme || "system");
   }, []);
   return (
     <label className="fitifact-appearance">
       Appearance
       <select
+        className="ft-field"
         value={theme}
         onChange={(event) => {
           const value = event.target.value;
@@ -39,9 +40,9 @@ export function Appearance() {
           }
         }}
       >
-        <option value="dark">Dark</option>
-        <option value="light">Light</option>
         <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
       </select>
     </label>
   );

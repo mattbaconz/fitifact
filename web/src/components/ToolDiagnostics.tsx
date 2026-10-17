@@ -52,7 +52,7 @@ export function ToolDiagnostics({
       ) : null}
       {onRecheck ? (
         <button
-          className="secondary"
+          className="ft-btn ft-btn-secondary"
           disabled={checking}
           onClick={async () => {
             setChecking(true);

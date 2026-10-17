@@ -1,47 +1,14 @@
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
-const fixtures = path.resolve("../fixtures/image");
-
-async function dropImage(page: Page, name: string) {
-  await page.locator("input[type=file]").setInputFiles(path.join(fixtures, name));
-  await expect(page.locator(".target-tabs button").filter({ hasText: /^Custom$/ })).toBeEnabled({ timeout: 30_000 });
-  await expect(page.locator(".file-row")).toContainText(/JPEG|PNG|WebP|HEIC|TIFF|BMP|GIF/);
-}
-
-async function pasteRequirements(page: Page, requirement: string) {
-  const summary = page.locator(".requirements-disclosure > summary");
-  if (await summary.isVisible() && !(await page.locator(".requirements-disclosure").getAttribute("open") !== null)) await summary.click();
-  await page.getByRole("button", { name: "Custom", exact: true }).click();
-  await page.getByLabel("Rejection message or requirements").fill(requirement);
-  await expect(page.getByText(/Understood:/)).toBeAttached();
-  await expect(page.locator(".target-summary")).not.toHaveText("", { timeout: 15_000 });
-}
+import { dropImage, expectRealDownload, fixtures, JPEG, pasteRequirements, PNG } from "./support";
 
 async function openEditor(page: Page) {
   const summary = page.locator(".requirements-disclosure > summary");
   if (await summary.isVisible() && await page.locator(".requirements-disclosure").getAttribute("open") === null) await summary.click();
   const edit = page.getByRole("button", { name: "Edit requirements", exact: true });
   if (await edit.count()) await edit.click();
-}
-
-async function expectRealDownload(
-  page: Page,
-  link: Locator,
-  mime: "image/jpeg" | "image/png",
-  signature: number[],
-  original?: Buffer,
-) {
-  const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
-  expect(download.suggestedFilename()).toMatch(mime === "image/jpeg" ? /\.jpg$/ : /\.png$/);
-  const savedPath = await download.path();
-  expect(savedPath).not.toBeNull();
-  const saved = await readFile(savedPath!);
-  expect(Array.from(saved.subarray(0, signature.length))).toEqual(signature);
-  expect(saved.byteLength).toBeGreaterThan(signature.length);
-  if (original) expect(saved.equals(original)).toBe(true);
 }
 
 test("drop zone is visible on first paint without a requirements placeholder", async ({ page }) => {
@@ -59,13 +26,13 @@ test("drop zone is visible on first paint without a requirements placeholder", a
   await expect(page.getByLabel("Rejection message or requirements")).toHaveCount(0);
 });
 
-test("happy path drops first, auto-parses, and exposes a validated download", async ({ page }) => {
+test("happy path drops first, auto-parses, and downloads only the validated file", async ({ page }) => {
   await page.goto("/");
   await dropImage(page, "mismatch-png.png");
   await expect(page.locator(".file-row")).toContainText("PNG");
   await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", [0xff, 0xd8, 0xff]);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
   await expect(page.getByText("extra undocumented rules", { exact: false })).toBeVisible();
   await expect(page.locator(".file-thumb")).toBeVisible();
@@ -73,13 +40,23 @@ test("happy path drops first, auto-parses, and exposes a validated download", as
   await expect(page.locator(".before-after figcaption", { hasText: "After" })).toBeVisible();
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "mismatch-png.fitifact.jpg");
-  await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
+  await expect(page.locator(".checklist tbody tr.fail, .checklist tbody tr.unknown")).toHaveCount(0);
   await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
   await openEditor(page);
   await page.getByLabel("Maximum size").fill("1999999");
   await expect(download).toHaveCount(0);
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Adapt file" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
+});
+
+test("a file that needs no consent reaches a validated download in three interactions", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("input[type=file]").setInputFiles(path.join(fixtures, "still-bmp.bmp"));
+  await page.locator(".destination-chips").getByRole("button", { name: /Web image/ }).click();
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", [0xff, 0xd8, 0xff]);
+  await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
+  await expect(page.locator(".checklist tbody tr.fail, .checklist tbody tr.unknown")).toHaveCount(0);
 });
 
 test("already-compatible path preserves the original", async ({ page }) => {
@@ -132,13 +109,13 @@ test("crop approval is keyboard operable and required before adaptation", async 
   await position.focus();
   await page.keyboard.press("Home");
   await expect(position).toHaveValue("0");
-  const adapt = page.getByRole("button", { name: "Adapt file" });
+  const adapt = page.getByRole("button", { name: "Adapt and download" });
   await expect(adapt).toBeDisabled();
   const consent = page.getByLabel(/I approve removing/);
   await consent.focus();
   await page.keyboard.press("Space");
   await expect(consent).toBeChecked();
-  await adapt.click();
+  await expectRealDownload(page, adapt, "image/png", PNG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
 });
 
@@ -147,7 +124,7 @@ test("active worker processing can be cancelled", async ({ page }) => {
   await dropImage(page, "mismatch-png.png");
   await pasteRequirements(page, "JPEG, exactly 4000 x 4000");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await page.getByRole("button", { name: "Adapt and download" }).click();
   const cancel = page.getByRole("button", { name: "Cancel processing" });
   await expect(page.locator("input[type=file]")).toBeDisabled();
   await expect(page.locator(".drop-zone")).toHaveAttribute("aria-disabled", "true");
@@ -174,12 +151,12 @@ test("complete range and format alternatives survive compile, plan, and adaptati
   await expect(page.locator(".plan-summary li", { hasText: "Convert to" })).toHaveCount(0);
   await page.getByLabel("Maximum size").fill("1999999");
   await expect(page.locator(".checklist")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Adapt file" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
   await page.getByRole("button", { name: "Review target changes" }).click();
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/png", PNG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
-  await expect(page.locator(".checklist li")).toHaveCount(6);
-  await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
+  await expect(page.locator(".checklist tbody tr")).toHaveCount(6);
+  await expect(page.locator(".checklist tbody tr.fail, .checklist tbody tr.unknown")).toHaveCount(0);
   const download = page.getByRole("link", { name: "Download PNG" });
   await expect(download).toHaveAttribute("download", "transparent-png.fitifact.png");
   await expectRealDownload(page, download, "image/png", [0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]);
@@ -199,6 +176,7 @@ test("requirements and target edits immediately invalidate stale contracts", asy
 
 test("oversized File is refused before main-thread arrayBuffer allocation", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("#image-file")).toBeAttached();
   await page.evaluate(() => {
     File.prototype.arrayBuffer = () => Promise.reject(new Error("main-thread arrayBuffer must not run"));
     const bytes = new Uint8Array(32 * 1024 * 1024 + 1);
@@ -230,9 +208,9 @@ test("approved HEIC fixture decodes and validates through the real worker", asyn
   await dropImage(page, "synthetic-single.heic");
   await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", JPEG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
-  await expect(page.locator(".checklist li.fail, .checklist li.unknown")).toHaveCount(0);
+  await expect(page.locator(".checklist tbody tr.fail, .checklist tbody tr.unknown")).toHaveCount(0);
   const download = page.getByRole("link", { name: "Download JPG" });
   await expect(download).toHaveAttribute("download", "synthetic-single.fitifact.jpg");
   await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
@@ -243,7 +221,7 @@ test("still WebP adapts to JPEG", async ({ page }) => {
   await dropImage(page, "still-webp.webp");
   await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", JPEG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
   const download = page.getByRole("link", { name: "Download JPG" });
   await expectRealDownload(page, download, "image/jpeg", [0xff, 0xd8, 0xff]);
@@ -260,7 +238,7 @@ test("TIFF BMP and still GIF adapt to JPEG", async ({ page }) => {
     await expect(page.locator(".file-row")).toContainText(label);
     await pasteRequirements(page, "JPEG, max 2 MB");
     await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
-    await page.getByRole("button", { name: "Adapt file" }).click();
+    await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", JPEG);
     await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
     await expectRealDownload(page, page.getByRole("link", { name: "Download JPG" }), "image/jpeg", [0xff, 0xd8, 0xff]);
   }
@@ -272,21 +250,21 @@ test("animated GIF requires first-frame consent", async ({ page }) => {
   await dropImage(page, "animated-gif.gif");
   await pasteRequirements(page, "JPEG, max 2 MB");
   await expect(page.getByRole("heading", { name: "First-frame approval required" })).toBeVisible();
-  const adapt = page.getByRole("button", { name: "Adapt file" });
+  const adapt = page.getByRole("button", { name: "Adapt and download" });
   await expect(adapt).toBeDisabled();
   await page.getByLabel(/I approve keeping only the first frame/).check();
-  await adapt.click();
+  await expectRealDownload(page, adapt, "image/jpeg", JPEG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
   await dropImage(page, "animated-gif.gif");
   await expect(page.getByLabel(/I approve keeping only the first frame/)).not.toBeChecked();
-  await expect(page.getByRole("button", { name: "Adapt file" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Adapt and download" })).toBeDisabled();
 });
 
 test("result exports contain actual report and constraint schemas", async ({ page }) => {
   await page.goto("/");
   await dropImage(page, "mismatch-png.png");
   await pasteRequirements(page, "JPEG, max 2 MB");
-  await page.getByRole("button", { name: "Adapt file" }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download" }), "image/jpeg", JPEG);
   await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
   for (const [label, schema] of [["Download report JSON", "fitifact.check/v1"], ["Download constraints JSON", "fitifact.constraints/v1"]]) {
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: label, exact: true }).click()]);
@@ -403,7 +381,7 @@ test("last-used target is applied after a new drop", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
 });
 
-test("inspect without a target shows the file and keeps Adapt file disabled", async ({ page }) => {
+test("inspect without a target shows the file and keeps Adapt and download disabled", async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await dropImage(page, "compatible-jpeg.jpg");
@@ -411,7 +389,7 @@ test("inspect without a target shows the file and keeps Adapt file disabled", as
   await expect(page.getByRole("heading", { name: "Your file is inspected." })).toBeVisible();
   await page.getByRole("button", { name: "Custom", exact: true }).click();
   await expect(page.getByPlaceholder("Or paste the exact rejection (size, format, dimensions).")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Adapt file" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Adapt and download" })).toBeDisabled();
 });
 
 test("idle drop offers a sample image without destination tiles", async ({ page }) => {
@@ -530,16 +508,16 @@ test("sample scenarios replace remembered requirements and require crop approval
   await expect(page.locator(".download-button")).toHaveText("Use original");
   await page.getByRole("link", { name: "Fitifact home", exact: true }).click();
   await page.getByRole("button", { name: /Try a format change/ }).click();
-  await expect(page.getByRole("button", { name: "Adapt file", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Adapt and download", exact: true })).toBeEnabled();
   await expect(page.locator(".target-summary")).toContainText("JPG");
   await expect(page.locator(".download-button")).toHaveCount(0);
   await page.getByRole("link", { name: "Fitifact home", exact: true }).click();
   await page.getByRole("button", { name: /Try a crop/ }).click();
   const consent = page.getByRole("checkbox", { name: /I approve removing/ });
   await expect(consent).not.toBeChecked();
-  await expect(page.getByRole("button", { name: "Adapt file", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Adapt and download", exact: true })).toBeDisabled();
   await consent.check();
-  await page.getByRole("button", { name: "Adapt file", exact: true }).click();
+  await expectRealDownload(page, page.getByRole("button", { name: "Adapt and download", exact: true }), "image/jpeg", JPEG);
   await expect(page.locator(".download-button")).toHaveText("Download JPG");
   await expect(page.locator(".output-facts")).toContainText("480×480");
   await expect(page.getByRole("heading", { name: "Adapted and verified", exact: true })).toBeFocused();

@@ -59,7 +59,7 @@ export function FileSummary({ session }: { session: FitifactSession }) {
       >
         {desktop ? (
           <button
-            className="button-label"
+            className="ft-btn ft-btn-secondary button-label"
             type="button"
             disabled={state === "processing"}
             onClick={() => void chooseDesktopFile()}
@@ -67,7 +67,7 @@ export function FileSummary({ session }: { session: FitifactSession }) {
             Choose another file
           </button>
         ) : (
-          <label className="button-label" htmlFor="image-file-replace">
+          <label className="ft-btn ft-btn-secondary button-label" htmlFor="image-file-replace">
             Choose another file
           </label>
         )}

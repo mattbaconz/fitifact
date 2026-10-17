@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="description" content="Drop a file, pick where it has to work, and Fitifact makes only the changes needed. Nothing is uploaded." />
-    <meta name="theme-color" content="#080a0a" />
+    <meta name="theme-color" content="#f6f7f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0e0e" media="(prefers-color-scheme: dark)" />
     <link rel="canonical" href="https://mattbaconz.github.io/fitifact/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Fitifact - make your file work there" />
@@ -24,6 +25,7 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%ft-mark.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
     <link rel="stylesheet" href="%BASE_URL%brand/tokens.css" />
+    <link rel="stylesheet" href="%BASE_URL%brand/components.css" />
     <script src="%BASE_URL%brand/theme.js"></script>
     <link rel="preload" href="%BASE_URL%brand/geist.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="%BASE_URL%boot.css" />

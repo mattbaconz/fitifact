@@ -1,0 +1,168 @@
+/*
+ * Fitifact components shared by the app (web and desktop) and the docs.
+ * Built only from tokens.css. Class names carry the ft- prefix so they never
+ * collide with the documentation framework. See DESIGN.md.
+ */
+
+/* Buttons: primary by default; secondary and text variants. */
+.ft-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 10px var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast),
+    transform var(--duration-fast);
+}
+.ft-btn:hover {
+  background: color-mix(in srgb, var(--accent) 86%, var(--bg));
+}
+.ft-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.ft-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ft-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.ft-btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.ft-btn-secondary:hover {
+  background: var(--raised);
+}
+.ft-btn-text {
+  justify-content: flex-start;
+  padding: var(--space-2) 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ft-btn-text:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.ft-btn-block {
+  width: 100%;
+}
+.ft-btn:focus-visible,
+.ft-field:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Surfaces */
+.ft-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+/* Tones set --tone and --tone-surface for notices, badges, and icons. */
+.ft-tone-success {
+  --tone: var(--success);
+  --tone-surface: var(--success-surface);
+}
+.ft-tone-warning {
+  --tone: var(--warning);
+  --tone-surface: var(--warning-surface);
+}
+.ft-tone-danger {
+  --tone: var(--danger);
+  --tone-surface: var(--danger-surface);
+}
+.ft-tone-info {
+  --tone: var(--info);
+  --tone-surface: var(--info-surface);
+}
+
+/* Notice: a bordered callout. Tone colors the edge and the surface; text stays ink. */
+.ft-notice {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tone, var(--line-strong));
+  border-radius: var(--radius);
+  background: var(--tone-surface, var(--raised));
+  color: var(--ink);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+}
+.ft-notice > :first-child {
+  margin-top: 0;
+}
+.ft-notice > :last-child {
+  margin-bottom: 0;
+}
+
+/* Badge: a short status label. Never color alone: always carries text. */
+.ft-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--tone, var(--line-strong));
+  border-radius: var(--radius-pill);
+  color: var(--tone, var(--muted));
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Fields: text inputs, selects, and text areas. */
+.ft-field {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+.ft-field::placeholder {
+  color: var(--subtle);
+  opacity: 1;
+}
+
+/* Type helpers */
+.ft-eyebrow {
+  margin: 0 0 var(--space-3);
+  color: var(--subtle);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.ft-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

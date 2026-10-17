@@ -335,3 +335,35 @@ export function describeVerified(opts: {
   if (opts.adapted) return "Verified: the new file matches the destination rules.";
   return null;
 }
+
+export interface MeasuredRow {
+  id: string;
+  label: string;
+  needs: string;
+  before: string;
+  beforeResult: ConstraintCheck["result"];
+  /** Present only once an output exists. */
+  after: string | null;
+  result: ConstraintCheck["result"];
+}
+
+/** Pairs each requirement with what was measured before and, after adapting, on the output. */
+export function measuredRows(before: ConstraintCheck[], after: ConstraintCheck[] | null = null): MeasuredRow[] {
+  const output = new Map((after ?? []).map((check) => [check.constraint_id, check]));
+  const ids = [...new Set([...before.map((check) => check.constraint_id), ...output.keys()])];
+  return ids.map((id) => {
+    const source = before.find((check) => check.constraint_id === id);
+    const result = output.get(id);
+    const check = (result ?? source)!;
+    return {
+      id,
+      label: checkLabel(check.field),
+      needs: formatCheckValue(check.field, check.required),
+      before: source ? formatCheckValue(source.field, source.actual) : "Unknown",
+      beforeResult: source?.result ?? "unknown",
+      after: after ? formatCheckValue(check.field, result?.actual) : null,
+      result: check.result,
+    };
+  });
+}
+
