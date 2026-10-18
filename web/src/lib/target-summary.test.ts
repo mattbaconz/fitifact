@@ -22,5 +22,11 @@ describe("target summary", () => {
       formats: ["jpeg", "png", "webp"],
       maxBytes: "2000000",
     })).toBe("JPG or PNG or WebP · ≤2.00 MB");
+    expect(summarizeTarget({
+      ...EMPTY_TARGET,
+      formats: ["jpeg"],
+      minBytes: "20 KB",
+      maxBytes: "50 KB",
+    })).toBe("JPG · ≥20.0 KB · ≤50.0 KB");
   });
 });

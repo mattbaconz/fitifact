@@ -5,7 +5,7 @@ const DEFAULT_FORMATS: OutputFormat[] = ["jpeg", "png"];
 const KNOWN_FORMATS = new Set(["jpeg", "png", "webp", "gif", "tiff", "bmp", "heif", "heic"]);
 
 export const EMPTY_TARGET: EditableTarget = {
-  formats: [...DEFAULT_FORMATS], maxBytes: "",
+  formats: [...DEFAULT_FORMATS], maxBytes: "", minBytes: "",
   widthExact: "", widthMin: "", widthMax: "",
   heightExact: "", heightMin: "", heightMax: "",
 };
@@ -25,6 +25,7 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
   let allowed = new Set<OutputFormat>(PRODUCIBLE_FORMATS);
   let sawFormat = false;
   let maxBytes: number | null = null;
+  let minBytes: number | null = null;
   const dimensions = {
     width: { exact: null as number | null, min: null as number | null, max: null as number | null },
     height: { exact: null as number | null, min: null as number | null, max: null as number | null },
@@ -46,9 +47,15 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
       );
       allowed = new Set([...allowed].filter((format) => next.has(format)));
     } else if (constraint.field === "file.bytes") {
-      if (constraint.op !== "lte") throw new Error("Only a strict byte ceiling can be edited safely.");
-      const value = numberValue(constraint, "Maximum bytes");
-      maxBytes = maxBytes === null ? value : Math.min(maxBytes, value);
+      if (constraint.op === "gte") {
+        const value = numberValue(constraint, "Minimum bytes");
+        minBytes = minBytes === null ? value : Math.max(minBytes, value);
+      } else if (constraint.op === "lte") {
+        const value = numberValue(constraint, "Maximum bytes");
+        maxBytes = maxBytes === null ? value : Math.min(maxBytes, value);
+      } else {
+        throw new Error("Only a byte floor or ceiling can be edited safely.");
+      }
     } else if (constraint.field === "image.width" || constraint.field === "image.height") {
       if (!(["eq", "gte", "lte"] as const).includes(constraint.op as "eq" | "gte" | "lte")) {
         throw new Error(`The ${constraint.field} operator cannot be edited safely.`);
@@ -71,6 +78,9 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
   }
 
   if (sawFormat && allowed.size === 0) throw new Error("The normalized image-format intersection is empty.");
+  if (minBytes !== null && maxBytes !== null && minBytes > maxBytes) {
+    throw new Error("The normalized byte range is inconsistent.");
+  }
   for (const [label, axis] of Object.entries(dimensions)) {
     if (axis.min !== null && axis.max !== null && axis.min > axis.max) {
       throw new Error(`The normalized image ${label} intersection is inconsistent.`);
@@ -88,6 +98,7 @@ export function editableTargetFromConstraints(constraints: ConstraintSet): Edita
     : [...DEFAULT_FORMATS];
   return {
     formats: [...formats], maxBytes: maxBytes === null ? "" : String(maxBytes),
+    minBytes: minBytes === null ? "" : String(minBytes),
     widthExact: dimensions.width.exact === null ? "" : String(dimensions.width.exact),
     widthMin: dimensions.width.min === null ? "" : String(dimensions.width.min),
     widthMax: dimensions.width.max === null ? "" : String(dimensions.width.max),
@@ -103,6 +114,20 @@ function positiveInteger(value: string, label: string): number | null {
     throw new Error(`${label} must be a positive whole number.`);
   }
   return Number(value);
+}
+
+export function byteLimitFromText(value: string): number | null {
+  const text = value.trim();
+  if (!text) return null;
+  const match = /^(\d{1,16})(?:\.(\d{1,12}))?\s*(B|KB|MB|GB|KiB|MiB|GiB)?$/i.exec(text);
+  if (!match) throw new Error("Enter a size such as 2 MB, 1.5 MiB, or a whole number of bytes.");
+  const scales: Record<string, bigint> = { b: 1n, kb: 1000n, mb: 1000000n, gb: 1000000000n, kib: 1024n, mib: 1048576n, gib: 1073741824n };
+  const fraction = match[2] ?? "";
+  const denominator = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(match[1] + fraction) * scales[(match[3] ?? "b").toLowerCase()];
+  if (numerator % denominator !== 0n || numerator <= 0n || numerator / denominator > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error("The size must resolve to a positive, exact whole number of bytes.");
+  return Number(numerator / denominator);
 }
 
 function addDimension(
@@ -128,7 +153,12 @@ export function constraintSetFromEditable(target: EditableTarget): ConstraintSet
   const formats = PRODUCIBLE_FORMATS.filter((format) => target.formats.includes(format));
   if (formats.length === 0) throw new Error("Select at least one allowed image format.");
   const hard: Constraint[] = [{ id: "image-format", field: "image.format", op: "in", value: formats }];
-  const maxBytes = positiveInteger(target.maxBytes, "Maximum bytes");
+  const minBytes = byteLimitFromText(target.minBytes);
+  const maxBytes = byteLimitFromText(target.maxBytes);
+  if (minBytes !== null && maxBytes !== null && minBytes > maxBytes) {
+    throw new Error("Minimum size exceeds maximum size.");
+  }
+  if (minBytes !== null) hard.push({ id: "min-bytes", field: "file.bytes", op: "gte", value: minBytes });
   if (maxBytes !== null) hard.push({ id: "max-bytes", field: "file.bytes", op: "lte", value: maxBytes });
   addDimension(hard, "image.width", "width", target.widthExact, target.widthMin, target.widthMax);
   addDimension(hard, "image.height", "height", target.heightExact, target.heightMin, target.heightMax);

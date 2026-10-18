@@ -159,24 +159,56 @@ fn refuses_additional_or_non_av_stream_topologies() {
 }
 
 #[test]
-fn refuses_hdr_or_unknown_hdr_video_transcoding() {
-    for hdr in [HdrStatus::Hdr, HdrStatus::Unknown] {
-        let mut artifact = Artifact::media(
-            Container::Mp4,
-            VideoCodec::Hevc,
-            Some(AudioCodec::Aac),
-            1000,
-        );
-        artifact.first_video_mut().unwrap().hdr = hdr;
-        assert_eq!(
-            blocking(&artifact, &media_h264_mp4_aac()),
-            vec![BlockingCode::HdrConversionUnsupported]
-        );
-    }
+fn tone_maps_hdr_only_when_ffmpeg_can_and_refuses_otherwise() {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().hdr = HdrStatus::Hdr;
+    assert_eq!(
+        blocking(&artifact, &media_h264_mp4_aac()),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
+
+    let outcome = plan(
+        &artifact,
+        &media_h264_mp4_aac(),
+        &default_catalog().with_hdr_tone_mapping(true),
+    );
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(step.target.tone_map_hdr);
+    assert!(
+        step.warnings
+            .iter()
+            .any(|warning| warning.contains("tone-mapped"))
+    );
+    assert!(
+        !step
+            .preservation
+            .contains(&PreservationClaim::VideoColorMetadata)
+    );
 }
 
 #[test]
-fn refuses_high_or_unknown_bit_depth_video_transcoding() {
+fn unknown_hdr_converts_without_tone_mapping() {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().hdr = HdrStatus::Unknown;
+    let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(!step.target.tone_map_hdr);
+}
+
+#[test]
+fn converts_high_or_unknown_bit_depth_instead_of_refusing() {
     for bit_depth in [Some(10), Some(6), None] {
         let mut artifact = Artifact::media(
             Container::Mp4,
@@ -185,9 +217,12 @@ fn refuses_high_or_unknown_bit_depth_video_transcoding() {
             1000,
         );
         artifact.first_video_mut().unwrap().bit_depth = bit_depth;
-        assert_eq!(
-            blocking(&artifact, &media_h264_mp4_aac()),
-            vec![BlockingCode::BitDepthConversionUnsupported]
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+        assert!(
+            !outcome.steps()[0]
+                .preservation
+                .contains(&PreservationClaim::VideoPixelFormat)
         );
     }
 }
@@ -210,7 +245,8 @@ fn refuses_non_mp4_targets_and_audio_transcoding() {
     assert!(blocking(&artifact, &mov_target).contains(&BlockingCode::NonMp4Target));
 
     let mp4_target = media_h264_mp4_aac();
-    assert!(blocking(&artifact, &mp4_target).contains(&BlockingCode::AudioTranscodeUnsupported));
+    let outcome = plan(&artifact, &mp4_target, &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeAudio);
 }
 
 #[test]
@@ -227,8 +263,14 @@ fn refuses_resize_and_size_fitting() {
     })
     .unwrap();
     assert_eq!(
-        blocking(&artifact, &dimensions),
-        vec![BlockingCode::ResizeUnsupported]
+        plan(&artifact, &dimensions, &default_catalog()).steps()[0].operation,
+        TransformId::TranscodeVideo
+    );
+    assert_eq!(
+        plan(&artifact, &dimensions, &default_catalog()).steps()[0]
+            .target
+            .width,
+        Some(1000)
     );
 
     let size = compile(ConstraintInput {
@@ -243,18 +285,23 @@ fn refuses_resize_and_size_fitting() {
 }
 
 #[test]
-fn refuses_unsupported_or_unknown_video_codecs() {
-    for codec in [
-        VideoCodec::Vp9,
-        VideoCodec::Av1,
-        VideoCodec::Unknown("x".into()),
-    ] {
+fn transcodes_vp9_and_av1_sources() {
+    for codec in [VideoCodec::Vp9, VideoCodec::Av1, VideoCodec::Vp8] {
         let artifact = Artifact::media(Container::Mp4, codec, Some(AudioCodec::Aac), 1000);
-        assert_eq!(
-            blocking(&artifact, &media_h264_mp4_aac()),
-            vec![BlockingCode::UnsupportedVideoCodec]
-        );
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
     }
+
+    let unknown = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Unknown("x".into()),
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_eq!(
+        blocking(&unknown, &media_h264_mp4_aac()),
+        vec![BlockingCode::UnsupportedVideoCodec]
+    );
 }
 
 #[test]
@@ -291,26 +338,39 @@ fn refuses_ambiguous_mov_family_containers_instead_of_no_op() {
 }
 
 #[test]
-fn refuses_every_source_outside_the_exact_v01_operation_matrix() {
-    for container in [
-        Container::Webm,
+fn remuxes_mkv_and_transcodes_webm() {
+    let mkv = Artifact::media(
         Container::Mkv,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_eq!(
+        plan(&mkv, &media_h264_mp4_aac(), &default_catalog()).steps()[0].operation,
+        TransformId::Remux
+    );
+
+    let webm = Artifact::media(
+        Container::Webm,
+        VideoCodec::Vp9,
+        Some(AudioCodec::Opus),
+        1000,
+    );
+    assert_eq!(
+        plan(&webm, &media_h264_mp4_aac(), &default_catalog()).steps()[0].operation,
+        TransformId::TranscodeVideo
+    );
+
+    let unknown = Artifact::media(
         Container::Unknown("ambiguous".into()),
-    ] {
-        for codec in [VideoCodec::H264, VideoCodec::Hevc] {
-            let artifact = Artifact::media(
-                container.clone(),
-                codec.clone(),
-                Some(AudioCodec::Aac),
-                1000,
-            );
-            assert_eq!(
-                blocking(&artifact, &media_h264_mp4_aac()),
-                vec![BlockingCode::UnsupportedContainer],
-                "source {container:?} with {codec:?} must refuse"
-            );
-        }
-    }
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_eq!(
+        blocking(&unknown, &media_h264_mp4_aac()),
+        vec![BlockingCode::UnsupportedContainer]
+    );
 
     let mov_hevc = Artifact::media(
         Container::Mov,
@@ -325,6 +385,153 @@ fn refuses_every_source_outside_the_exact_v01_operation_matrix() {
         planned.steps()[0].target.video_codec,
         Some(VideoCodec::H264)
     );
+}
+
+#[test]
+fn already_compatible_h264_without_color_tags_is_noop() {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = artifact.first_video_mut().unwrap();
+    video.color_range = None;
+    video.color_space = None;
+    video.color_transfer = None;
+    video.color_primaries = None;
+    video.hdr = HdrStatus::Unknown;
+    assert!(
+        plan(&artifact, &media_h264_mp4_aac(), &default_catalog()).is_compatible(),
+        "missing color tags must not force a transcode when the destination already matches"
+    );
+}
+
+#[test]
+fn hdr_h264_that_meets_every_hard_constraint_is_a_noop() {
+    // This target has no picture rules, so nothing justifies a re-encode.
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = artifact.first_video_mut().unwrap();
+    video.hdr = HdrStatus::Hdr;
+    video.bit_depth = Some(10);
+    video.pixel_format = Some("yuv420p10le".into());
+    assert!(
+        plan(
+            &artifact,
+            &media_h264_mp4_aac(),
+            &default_catalog().with_hdr_tone_mapping(true)
+        )
+        .is_compatible()
+    );
+}
+
+const MP4_H264_AAC: &str = "  - id: container\n    field: media.container\n    op: in\n    value: [mp4]\n  - id: video\n    field: media.video.codec\n    op: in\n    value: [h264]\n  - id: audio\n    field: media.audio.codec\n    op: in\n    value: [aac]\n";
+const PICTURE_RULES: &str = "  - id: picture-format\n    field: media.video.pixel_format\n    op: in\n    value: [yuv420p, yuvj420p]\n  - id: picture-bit-depth\n    field: media.video.bit_depth\n    op: lte\n    value: 8\n  - id: picture-sdr\n    field: media.video.hdr\n    op: in\n    value: [sdr, unknown]\n";
+
+#[test]
+fn picture_rules_force_one_encode_that_cites_each_rule() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = artifact.first_video_mut().unwrap();
+    video.hdr = HdrStatus::Hdr;
+    video.bit_depth = Some(10);
+    video.pixel_format = Some("yuv420p10le".into());
+    assert_eq!(
+        blocking(&artifact, &target),
+        vec![BlockingCode::HdrConversionUnsupported]
+    );
+
+    let outcome = plan(
+        &artifact,
+        &target,
+        &default_catalog().with_hdr_tone_mapping(true),
+    );
+    assert_eq!(outcome.steps().len(), 1);
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert!(step.target.tone_map_hdr);
+    let cited: Vec<&str> = step
+        .reasons
+        .iter()
+        .map(|reason| reason.constraint_id.as_str())
+        .collect();
+    for id in ["picture-format", "picture-bit-depth", "picture-sdr"] {
+        assert!(cited.contains(&id), "missing reason for {id}: {cited:?}");
+    }
+}
+
+#[test]
+fn picture_rules_leave_8bit_sdr_or_untagged_h264_untouched() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    for hdr in [HdrStatus::Sdr, HdrStatus::Unknown] {
+        let mut artifact = Artifact::media(
+            Container::Mp4,
+            VideoCodec::H264,
+            Some(AudioCodec::Aac),
+            1000,
+        );
+        artifact.first_video_mut().unwrap().hdr = hdr;
+        assert!(plan(&artifact, &target, &default_catalog()).is_compatible());
+    }
+}
+
+#[test]
+fn picture_rules_turn_a_remux_into_an_encode() {
+    let target = overlapping_target(MP4_H264_AAC, PICTURE_RULES);
+    let mut artifact = Artifact::media(
+        Container::Mkv,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    artifact.first_video_mut().unwrap().pixel_format = Some("yuv444p".into());
+    let outcome = plan(&artifact, &target, &default_catalog());
+    assert_eq!(outcome.steps().len(), 1);
+    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+}
+
+#[test]
+fn refuses_to_pad_a_file_below_the_byte_floor() {
+    let artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    assert_permutations_block(
+        &artifact,
+        "  - id: min-size\n    field: file.bytes\n    op: gte\n    value: 5000\n",
+        "  - id: max-size\n    field: file.bytes\n    op: lte\n    value: 9000\n",
+        BlockingCode::BelowMinimumSize,
+    );
+}
+
+#[test]
+fn remuxes_h264_mkv_even_when_color_tags_are_missing() {
+    let mut artifact = Artifact::media(
+        Container::Mkv,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = artifact.first_video_mut().unwrap();
+    video.color_range = None;
+    video.color_space = None;
+    video.color_transfer = None;
+    video.color_primaries = None;
+    video.hdr = HdrStatus::Unknown;
+    let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::Remux);
 }
 
 #[test]
@@ -439,7 +646,7 @@ fn intersected_supported_target_remains_valid_in_both_orders() {
 }
 
 #[test]
-fn refuses_unknown_or_non_yuv420p_pixel_format_for_transcode() {
+fn converts_non_yuv420p_pixel_format_instead_of_refusing() {
     for pixel_format in [None, Some("yuv444p".into()), Some("yuv422p".into())] {
         let mut artifact = Artifact::media(
             Container::Mp4,
@@ -448,15 +655,18 @@ fn refuses_unknown_or_non_yuv420p_pixel_format_for_transcode() {
             1000,
         );
         artifact.first_video_mut().unwrap().pixel_format = pixel_format;
-        assert_eq!(
-            blocking(&artifact, &media_h264_mp4_aac()),
-            vec![BlockingCode::PixelFormatConversionUnsupported]
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+        assert!(
+            !outcome.steps()[0]
+                .preservation
+                .contains(&PreservationClaim::VideoPixelFormat)
         );
     }
 }
 
 #[test]
-fn refuses_unknown_or_unapproved_color_facts_for_transcode() {
+fn converts_unknown_or_unapproved_color_facts_instead_of_refusing() {
     let mut variants = Vec::new();
     for field in 0..4 {
         let mut artifact = Artifact::media(
@@ -484,9 +694,12 @@ fn refuses_unknown_or_unapproved_color_facts_for_transcode() {
     variants.push(bt2020);
 
     for artifact in variants {
-        assert_eq!(
-            blocking(&artifact, &media_h264_mp4_aac()),
-            vec![BlockingCode::ColorConversionUnsupported]
+        let outcome = plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+        assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+        assert!(
+            !outcome.steps()[0]
+                .preservation
+                .contains(&PreservationClaim::VideoColorMetadata)
         );
     }
 }
@@ -614,6 +827,63 @@ fn mov_hevc_with_a_byte_ceiling_stays_one_encode() {
     assert_eq!(steps.len(), 1);
     assert_eq!(steps[0].operation, TransformId::TranscodeVideo);
     assert_eq!(steps[0].target.max_bytes, Some(2_000_000));
+}
+
+#[test]
+fn audio_only_under_a_byte_ceiling_is_a_noop() {
+    let artifact = Artifact::audio(
+        Container::Wav,
+        AudioCodec::Unknown("pcm_s16le".into()),
+        80_000,
+    );
+    let target = compile(ConstraintInput {
+        max_bytes: Some(25_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    assert!(plan(&artifact, &target, &default_catalog()).is_compatible());
+}
+
+#[test]
+fn audio_only_over_a_byte_ceiling_transcodes_to_aac() {
+    let mut artifact = Artifact::audio(
+        Container::Wav,
+        AudioCodec::Unknown("pcm_s16le".into()),
+        80_000,
+    );
+    artifact.byte_length = 5_000_000;
+    let target = compile(ConstraintInput {
+        max_bytes: Some(40_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeAudio);
+    assert_eq!(outcome.steps()[0].target.audio_codec, Some(AudioCodec::Aac));
+    assert_eq!(outcome.steps()[0].target.container, Some(Container::Mp4));
+    assert!(outcome.steps()[0].preservation.is_empty());
+}
+
+#[test]
+fn audio_only_cannot_satisfy_a_video_target() {
+    let artifact = Artifact::audio(Container::Mp3, AudioCodec::Mp3, 80_000);
+    assert_eq!(
+        blocking(&artifact, &media_h264_mp4_aac()),
+        vec![BlockingCode::UnsupportedVideoTarget]
+    );
+}
+
+#[test]
+fn audio_only_mp3_becomes_aac_when_the_target_requires_it() {
+    let artifact = Artifact::audio(Container::Mp3, AudioCodec::Mp3, 80_000);
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeAudio);
 }
 
 #[test]

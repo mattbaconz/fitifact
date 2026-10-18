@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@theme inline {
+  --font-sans: "Geist", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+  --color-fd-background: var(--bg);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--raised);
+  --color-fd-muted-foreground: var(--muted);
+  --color-fd-popover: var(--panel);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--panel);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--line);
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: var(--accent-ink);
+  --color-fd-secondary: var(--raised);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: var(--raised);
+  --color-fd-accent-foreground: var(--ink);
+  --color-fd-ring: var(--focus);
+}
+body {
+  font-family: "Geist", sans-serif;
+  font-size: 16px;
+}
+code,
+pre,
+kbd {
+  font-family: "Geist Mono", monospace;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.fitifact-mark {
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: -2px;
+  margin-right: 6px;
+}
+.fitifact-docs-label {
+  color: var(--muted);
+  font-weight: 400;
+}
+.fitifact-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.fitifact-breadcrumb a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.fitifact-breadcrumb a:hover {
+  text-decoration: underline;
+}
+.fitifact-app-link {
+  width: 100%;
+}
+.fitifact-appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px;
+}
+#nd-sidebar a,
+#nd-sidebar button,
+#nd-subnav button {
+  min-height: 44px;
+}
+/* Fumadocs fades the collapsed controls, but opacity alone leaves them in
+   the keyboard and accessibility trees underneath the expanded sidebar. */
+[data-sidebar-panel]:has([data-collapsed="false"]) {
+  visibility: hidden;
+}
+.fitifact-skip {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.fitifact-skip:focus {
+  top: 8px;
+}
+#nd-page h1 {
+  font-size: clamp(32px, 4vw, 44px);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+#nd-page {
+  --fd-layout-width: 1200px;
+}
+.prose {
+  line-height: 1.75;
+}
+.prose h2 {
+  letter-spacing: -0.02em;
+  margin-top: 2.4em;
+}
+.prose table {
+  font-size: 14px;
+}
+.fitifact-code {
+  position: relative;
+  margin: 24px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.fitifact-code > .ft-btn {
+  display: flex;
+  width: fit-content;
+  margin: 8px 8px 0 auto;
+  font-size: 13px;
+}
+.fitifact-code pre {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  font-size: 13px;
+}
+.fitifact-code code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+}
+/* Shiki's default dark selector uses a class. Our shared appearance contract
+   uses data-theme, including an explicit system preference. */
+:root[data-theme="dark"] .shiki,
+:root[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .shiki,
+  :root[data-theme="system"] .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+.fitifact-code [role="status"]:not(:empty) {
+  display: block;
+  padding: 0 16px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

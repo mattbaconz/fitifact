@@ -292,12 +292,19 @@ fn looks_like_zip(bytes: &[u8]) -> bool {
     bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06")
 }
 
+fn looks_like_office(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xd0, 0xcf, 0x11, 0xe0]) || bytes.starts_with(b"{\\rtf")
+}
+
 fn looks_like_video(bytes: &[u8]) -> bool {
     if bytes.len() >= 4 && bytes.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
         return true;
     }
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
         let brand = &bytes[8..12];
+        if matches!(brand, b"M4A " | b"M4B " | b"M4P " | b"mp4a") {
+            return false;
+        }
         return !matches!(
             brand,
             b"heic" | b"heix" | b"hevc" | b"hevx" | b"mif1" | b"msf1" | b"heif" | b"avif" | b"avis"
@@ -306,23 +313,54 @@ fn looks_like_video(bytes: &[u8]) -> bool {
     false
 }
 
+fn looks_like_audio(bytes: &[u8]) -> bool {
+    if bytes.len() >= 3 && bytes.starts_with(b"ID3") {
+        return true;
+    }
+    if bytes.len() >= 4 && (bytes.starts_with(b"fLaC") || bytes.starts_with(b"OggS")) {
+        return true;
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WAVE" {
+        return true;
+    }
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        let brand = &bytes[8..12];
+        if matches!(brand, b"M4A " | b"M4B " | b"M4P " | b"mp4a") {
+            return true;
+        }
+    }
+    bytes.len() >= 2 && bytes[0] == 0xff && bytes[1] & 0xe0 == 0xe0 && bytes[1] != 0xd8
+}
+
 pub fn unrecognized_input(bytes: &[u8]) -> Error {
+    if looks_like_audio(bytes) {
+        return Error::new(
+            ErrorCode::InspectionUnsupported,
+            "This is audio. The web app adapts photos. Open it in the Fitifact desktop app.",
+        );
+    }
     if looks_like_video(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is a video. The web app adapts images. Use the desktop app or CLI after ffmpeg is on PATH.",
+            "This is a video. The web app adapts photos. Open it in the Fitifact desktop app.",
         );
     }
     if looks_like_pdf(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is a PDF. The web app adapts images and does not convert documents.",
+            "This is a PDF. Fitifact adapts photos, video, and sound files, not documents.",
+        );
+    }
+    if looks_like_office(bytes) {
+        return Error::new(
+            ErrorCode::InspectionUnsupported,
+            "This is an Office document. Fitifact adapts photos, video, and sound files, not documents.",
         );
     }
     if looks_like_zip(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is an archive. Fitifact does not unpack or convert ZIP files.",
+            "This is an archive or Office file. Fitifact adapts photos, video, and sound, not ZIP or documents.",
         );
     }
     Error::new(
@@ -643,10 +681,19 @@ mod tests {
         assert!(unrecognized_input(&video).message.contains("video"));
         assert!(unrecognized_input(b"%PDF-1.7").message.contains("PDF"));
         assert!(
+            unrecognized_input(&[0xd0, 0xcf, 0x11, 0xe0])
+                .message
+                .contains("Office")
+        );
+        assert!(
             unrecognized_input(b"PK\x03\x04rest")
                 .message
                 .contains("archive")
         );
+        assert!(unrecognized_input(b"ID3\x04rest").message.contains("audio"));
+        let mut wav = b"RIFF....WAVE".to_vec();
+        wav[4..8].copy_from_slice(b"size");
+        assert!(unrecognized_input(&wav).message.contains("audio"));
     }
 
     #[test]

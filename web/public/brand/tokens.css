@@ -1,0 +1,141 @@
+/*
+ * Fitifact design tokens: the single source for the web app, the desktop app
+ * (which loads the same build), and the documentation site (which copies this
+ * folder). Components live in components.css. See DESIGN.md.
+ *
+ * Theme: <html data-theme="dark|light|system">. No attribute, or "system",
+ * follows the operating system.
+ */
+@font-face {
+  font-family: Geist;
+  src: url("./geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Type */
+  --font-sans: Geist, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 25px;
+  --text-2xl: 30px;
+  --text-display: clamp(38px, 4.5vw, 60px);
+  --leading-tight: 1.2;
+  --leading: 1.6;
+  --weight-regular: 400;
+  --weight-medium: 550;
+  --weight-bold: 650;
+  --tracking-tight: -0.035em;
+  --tracking-display: -0.055em;
+  --tracking-caps: 0.07em;
+
+  /* Space (4 px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Shape, layout, motion, layers */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --tap: 44px;
+  --page-max: 1200px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration: 180ms;
+  --z-overlay: 20;
+  --z-dialog: 30;
+  --z-skip: 100;
+
+  /* Dark palette (default) */
+  color-scheme: dark;
+  --bg: #0c0e0e;
+  --panel: #131616;
+  --raised: #1b1f1e;
+  --ink: #f0f2ed;
+  --muted: #a9b1ac;
+  --subtle: #8c9690;
+  --line: #303633;
+  --line-strong: #66726b;
+  --accent: #edf2e7;
+  --accent-ink: #14201a;
+  --success: #94d7b1;
+  --warning: #edc27b;
+  --danger: #f3a39a;
+  --info: #9cc7e8;
+  --focus: #b6e8d1;
+  --scrim: rgb(0 0 0 / 60%);
+  --shadow-overlay: 0 24px 64px rgb(0 0 0 / 45%);
+
+  /* Tone surfaces derive from the palette in both themes */
+  --success-surface: color-mix(in srgb, var(--success) 10%, var(--panel));
+  --warning-surface: color-mix(in srgb, var(--warning) 10%, var(--panel));
+  --danger-surface: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  --info-surface: color-mix(in srgb, var(--info) 10%, var(--panel));
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f3;
+  --panel: #ffffff;
+  --raised: #eef1eb;
+  --ink: #202a24;
+  --muted: #515f56;
+  --subtle: #5c6b61;
+  --line: #d3dbd1;
+  --line-strong: #7a8b79;
+  --accent: #23382b;
+  --accent-ink: #ffffff;
+  --success: #216b43;
+  --warning: #875810;
+  --danger: #a3332a;
+  --info: #22587f;
+  --focus: #276946;
+  --scrim: rgb(20 28 23 / 45%);
+  --shadow-overlay: 0 24px 64px rgb(32 42 36 / 18%);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f6f7f3;
+    --panel: #ffffff;
+    --raised: #eef1eb;
+    --ink: #202a24;
+    --muted: #515f56;
+    --subtle: #5c6b61;
+    --line: #d3dbd1;
+    --line-strong: #7a8b79;
+    --accent: #23382b;
+    --accent-ink: #ffffff;
+    --success: #216b43;
+    --warning: #875810;
+    --danger: #a3332a;
+    --info: #22587f;
+    --focus: #276946;
+    --scrim: rgb(20 28 23 / 45%);
+    --shadow-overlay: 0 24px 64px rgb(32 42 36 / 18%);
+  }
+}

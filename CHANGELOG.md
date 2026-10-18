@@ -4,7 +4,107 @@ All notable changes to Fitifact are documented here.
 
 ## [Unreleased] - after `0.1.0-rc.6`
 
-No changes yet.
+### [fixed]
+
+- Bundled tool lookup accepts only `<tool>` or `<tool>-<target triple>`
+  executables, not any file that starts with the tool name.
+- Native tool diagnostics no longer mistake the app's launch directory for an
+  output destination and disable otherwise healthy bundled media tools.
+- Native file selection uses keyboard-accessible buttons. Damaged-file and
+  Explorer failure messages describe recovery without promising a missing file exists.
+- Captured media subprocesses no longer flash console windows on Windows.
+- Cancelling a desktop media job on Windows also ends FFmpeg when it runs
+  behind a launcher shim, so Cancel no longer waits for the encode to finish.
+- A damaged image is reported as unreadable instead of as a requirements
+  problem, and engine refusals read as plain sentences with the code under
+  Technical details.
+- Video re-encoded from a source with no color tags (common for screen
+  recordings and generated clips) is now tagged BT.709, so it passes validation
+  instead of failing every Discord fit.
+
+### [added]
+
+- One design system for the web app, the desktop app, and the docs: shared
+  tokens and `ft-` components in light and dark, following the system theme by
+  default. `DESIGN.md` documents the tokens, components, and every state.
+- **Adapt and download** runs the visible plan, validates the output, and
+  downloads it only if validation passes: a file that needs no consent takes
+  three interactions (drop, destination, Adapt and download).
+- Results compare each requirement's measured value before and after, show the
+  original and the output side by side, and offer Copy and Share where the
+  browser can hand over the exact validated file.
+- Designed inspecting, consent, adapting, warning, refusal, and error states.
+  Refusals offer new requirements instead of Retry.
+- A strict Content Security Policy on the web build (its own origin only), and
+  end-to-end checks for keyboard-only journeys, axe on every state in both
+  themes, and zero cross-origin requests.
+- A shared graphite/chalk interface, local dark/light/system appearance, real
+  sample scenarios, and a compact workspace with inspect → plan → adapt → validate states.
+- A static Fumadocs site with local search, task guides, examples, and accurate
+  browser, desktop, and CLI download guidance, included in the application build.
+- Named saved targets with rename and undo, report/constraint exports, and
+  recovery actions that retain valid source files after rejected replacements.
+- Native operation identifiers, cancellable subprocess execution, an atomic
+  cancellation/publication boundary, and recoverable Show in folder actions.
+
+- Desktop and CLI video: WebM/MKV sources, AAC audio encode, scale-to-fit, and
+  VP8/VP9/AV1 transcode to H.264 when the destination needs it.
+- Desktop and CLI: audio-only inspect/adapt/verify. Size-only destinations
+  (Gmail, Discord file upload, Slack, WhatsApp, X) no-op when the file already
+  fits; oversized or AAC-required sound encodes to AAC in MP4. Video destinations
+  refuse audio-only files.
+- Shipped size-only profiles: `discord/file-upload` (and Nitro caps),
+  `slack/file-upload`, `whatsapp/audio`.
+- `registry.json` at the site root lists every shipped profile with per-rule
+  source type, URL, and check date. The UI shows when a profile's rules were
+  checked, each rule's source and age, and marks profiles older than 30 days
+  as stale. Profile sources gain the `fitifact-rule` type; trust is derived.
+- `?for=<destination>` links preselect a destination.
+- Byte windows: `file.bytes` accepts `gte`, the requirements parser reads
+  floors and ranges such as "20-50 KB", and JPEG fitting lands inside the
+  window or refuses. Files below a floor are refused, never padded.
+- Visible intelligence in the UI: what was wrong, what Fitifact changes, what
+  stays, and whether the result is verified.
+- Desktop app ships `ffmpeg`/`ffprobe` as sidecars so video and audio work
+  without a PATH install. CLI still uses FFmpeg from PATH. ffmpeg.wasm stays
+  forbidden. PDF, ZIP, Office, and SVG are refused in one sentence.
+- Windows desktop CI packages an unsigned NSIS installer (`desktop-windows` artifact). MSI is skipped because `0.1.0-rc.6` is not a valid MSI prerelease.
+- Desktop results offer **Copy file**: the validated output, or the untouched
+  original when it already fits, goes on the Windows clipboard as a file, so it
+  pastes into Discord, an email, or an Explorer folder as a copy.
+- A code signing policy in the README that meets SignPath Foundation's
+  conditions. Windows releases stay unsigned until the project is accepted.
+
+### [changed]
+
+- Results put measured properties and output actions first. Compatible files keep
+  their original bytes and filename, and mobile results collapse the target picker.
+- Crop and first-frame removal require explicit approval for each file. Plans
+  disclose provider metadata removal instead of attributing it to a destination.
+
+- Destination-first copy and chips (Discord, Gmail, GitHub, WhatsApp, Slack, X,
+  web image, web video). Public Pages stays still-image only.
+- Desktop accepts WebM and MKV. The web app still refuses video and audio with a
+  pointer to desktop.
+- FFmpeg missing: per-OS copy buttons instead of a command wall.
+- Work surface is file, destinations, then the verdict and download. Paste override sits below so compatible/no-op is visible without scrolling past the form.
+- Desktop no longer asks consumers to install FFmpeg. The CLI still does.
+- The desktop app ships one pinned FFmpeg build (9.0.2, the gyan.dev essentials
+  build), checked by SHA-256, with its GPLv3 text and build notes installed
+  beside it. The third-party notices name that build and its source.
+- A file that meets every hard constraint is never re-encoded. Picture format,
+  bit depth, and HDR are explicit profile rules (`media.video.pixel_format`,
+  `bit_depth`, `hdr`), and an encode cites the rule that failed. HDR is
+  tone-mapped to SDR with zscale when FFmpeg has it and refused otherwise.
+- Profiles re-verified on 2026-10-17: Discord Nitro uploads up to 1 GB;
+  Discord images stay at 20 MB on every tier because larger images arrive as
+  downloads; WhatsApp video is 64 MB in MKV, MOV, or MP4 with no codec rule;
+  WhatsApp audio uses the 2 GB documents limit; X and GitHub images are GIF,
+  JPEG, or PNG; GitHub video accepts MOV, MP4, or WebM; Slack images keep
+  edges under 25,000 px. `x/audio` is removed because X takes no audio-only
+  uploads. `whatsapp/photo` is shown as stale because its source page moved.
+- `matroska,webm` probes classify as WebM only when the codecs are WebM-legal
+  (VP8/VP9/AV1 plus Opus or Vorbis). H.264 in that probe is MKV and can remux.
 
 ## [0.1.0-rc.6] - 0.2 session Pages UI
 

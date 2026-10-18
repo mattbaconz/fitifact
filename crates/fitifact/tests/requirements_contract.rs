@@ -264,3 +264,78 @@ fn webp_gif_tiff_and_bmp_tokens_compile_as_format_alternatives() {
         ConstraintValue::List(vec!["bmp".into(), "gif".into(), "tiff".into()])
     );
 }
+
+fn byte_rules(input: &str) -> Vec<(Operator, u64)> {
+    let parsed = parse_image_requirements(input).unwrap();
+    assert!(
+        parsed.unresolved.is_empty(),
+        "{input}: {:?}",
+        parsed.unresolved
+    );
+    let mut rules: Vec<_> = parsed
+        .constraints
+        .unwrap()
+        .hard
+        .into_iter()
+        .filter(|constraint| constraint.field == Field::FileBytes)
+        .map(|constraint| match constraint.value {
+            ConstraintValue::Integer(value) => (constraint.op, value),
+            other => panic!("unexpected byte value {other:?}"),
+        })
+        .collect();
+    rules.sort_by_key(|(_, value)| *value);
+    rules
+}
+
+#[test]
+fn byte_floors_and_windows_compile_to_gte_and_lte() {
+    let window = vec![(Operator::Gte, 20_000), (Operator::Lte, 50_000)];
+    for input in [
+        "JPEG 20-50 KB",
+        "JPEG 20 KB to 50 KB",
+        "JPEG between 20 and 50 KB",
+        "JPEG from 20 to 50 KB",
+        "JPEG, min 20 KB, max 50 KB",
+        "JPEG, at least 20 KB, no more than 50 KB",
+        "JPEG, 20 KB minimum, 50 KB maximum",
+    ] {
+        assert_eq!(byte_rules(input), window, "{input}");
+    }
+    assert_eq!(
+        byte_rules("PNG, no less than 1 MB"),
+        vec![(Operator::Gte, 1_000_000)]
+    );
+}
+
+#[test]
+fn a_dimension_minimum_does_not_turn_a_byte_ceiling_into_a_floor() {
+    let parsed = parse_image_requirements("min width 600 px, 50 KB max").unwrap();
+    let constraints = parsed.constraints.unwrap();
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::FileBytes
+            && constraint.op == Operator::Lte
+            && constraint.value == ConstraintValue::Integer(50_000)
+    }));
+    assert!(constraints.hard.iter().any(|constraint| {
+        constraint.field == Field::ImageWidth && constraint.op == Operator::Gte
+    }));
+}
+
+#[test]
+fn a_dimension_before_a_dash_is_not_a_byte_range() {
+    let parsed = parse_image_requirements("1200x630 \u{2013} 2 MB max").unwrap();
+    let constraints = parsed.constraints.unwrap();
+    let bytes: Vec<_> = constraints
+        .hard
+        .iter()
+        .filter(|constraint| constraint.field == Field::FileBytes)
+        .collect();
+    assert_eq!(bytes.len(), 1);
+    assert_eq!(bytes[0].op, Operator::Lte);
+    assert_eq!(bytes[0].value, ConstraintValue::Integer(2_000_000));
+}
+
+#[test]
+fn an_inverted_byte_window_is_rejected() {
+    assert!(parse_image_requirements("JPEG 50-20 KB").is_err());
+}

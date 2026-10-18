@@ -27,6 +27,10 @@ When media behavior changes, add deterministic unit coverage and update fixtures
 or fixture-generation instructions. Live FFmpeg tests are ignored by default;
 their opt-in command is documented in `crates/fitifact/tests/live_ffmpeg.rs`.
 
+Desktop video/audio packaging: from `apps/desktop`, run `npm run sidecar` so
+`ffmpeg`/`ffprobe` land in `src-tauri/binaries/` (gitignored). Do not commit
+those binaries.
+
 ## Pull requests
 
 Keep pull requests focused. Explain the compatibility problem, the constraints

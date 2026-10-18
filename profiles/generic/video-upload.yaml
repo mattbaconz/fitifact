@@ -1,16 +1,13 @@
 schema: fitifact.profile/v1
 id: generic/video-upload
 name: Generic H.264 MP4 video upload
-revision: 1
-last_verified: 2026-08-25
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   feature: video-upload
-  note: Documented starter for MP4 H.264/AAC with a 25 MB ceiling.
-
-trust:
-  level: documented
+  note: Starter for MP4 H.264/AAC with a 25 MB ceiling.
 
 constraints:
   - id: container
@@ -33,6 +30,21 @@ constraints:
     op: lte
     value: 25000000
     source: src-user
+  - id: pixel-format
+    field: media.video.pixel_format
+    op: in
+    value: [yuv420p, yuvj420p]
+    source: src-fitifact-picture
+  - id: bit-depth
+    field: media.video.bit_depth
+    op: lte
+    value: 8
+    source: src-fitifact-picture
+  - id: sdr
+    field: media.video.hdr
+    op: in
+    value: [sdr, unknown]
+    source: src-fitifact-picture
 
 preferences:
   preserve:
@@ -42,8 +54,12 @@ preferences:
 sources:
   - id: src-user
     type: user-config
-    observed_at: 2026-08-25
+    observed_at: 2026-10-17
     note: Local starter for a typical 25 MB MP4 H.264/AAC upload. Not a claim about a named platform.
+  - id: src-fitifact-picture
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule, not a destination statement: H.264 video plays reliably everywhere only as 8-bit 4:2:0 SDR. 10-bit, 4:2:2/4:4:4, and HDR H.264 often fail to play or show wrong colors, so they are re-encoded. Untagged video counts as SDR because players show it that way."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4

@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::contract::DoctorSchema;
+use crate::media_tools::{MediaToolPaths, resolve_media_tools};
 use crate::runtime::ProcessSpawner;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,13 +57,38 @@ pub fn diagnose(
     temporary: &Path,
     timeout: Duration,
 ) -> DoctorReport {
-    let ffprobe = tool_report(spawner, "ffprobe", timeout);
-    let ffmpeg = tool_report(spawner, "ffmpeg", timeout);
+    diagnose_with_tools(
+        spawner,
+        destination,
+        temporary,
+        timeout,
+        &resolve_media_tools(),
+    )
+}
+
+pub fn diagnose_with_tools(
+    spawner: &dyn ProcessSpawner,
+    destination: &Path,
+    temporary: &Path,
+    timeout: Duration,
+    tools: &MediaToolPaths,
+) -> DoctorReport {
+    let ffprobe_program = tools.ffprobe_program();
+    let ffmpeg_program = tools.ffmpeg_program();
+    let mut ffprobe = tool_report(spawner, "ffprobe", &ffprobe_program, timeout);
+    let mut ffmpeg = tool_report(spawner, "ffmpeg", &ffmpeg_program, timeout);
+    if ffprobe.available && tools.ffprobe_is_bundled() {
+        ffprobe.detail = Some("shipped with Fitifact".into());
+    }
+    if ffmpeg.available && tools.ffmpeg_is_bundled() {
+        ffmpeg.detail = Some("shipped with Fitifact".into());
+    }
     let ffmpeg_available = ffmpeg.available;
     let capabilities = if ffmpeg_available {
         vec![
             capability_report(
                 spawner,
+                &ffmpeg_program,
                 "libx264",
                 &["-hide_banner", "-encoders"],
                 "libx264",
@@ -70,6 +96,7 @@ pub fn diagnose(
             ),
             capability_report(
                 spawner,
+                &ffmpeg_program,
                 "mp4_muxer",
                 &["-hide_banner", "-muxers"],
                 " mp4 ",
@@ -119,9 +146,14 @@ pub fn diagnose(
     }
 }
 
-fn tool_report(spawner: &dyn ProcessSpawner, name: &str, timeout: Duration) -> DoctorTool {
+fn tool_report(
+    spawner: &dyn ProcessSpawner,
+    name: &str,
+    program: &str,
+    timeout: Duration,
+) -> DoctorTool {
     let args = vec!["-version".into()];
-    match spawner.spawn(name, &args, timeout) {
+    match spawner.spawn(program, &args, timeout) {
         Ok(output) if output.success() && !output.stdout_truncated => {
             let version = output
                 .stdout_str()
@@ -139,13 +171,14 @@ fn tool_report(spawner: &dyn ProcessSpawner, name: &str, timeout: Duration) -> D
             name: name.into(),
             available: false,
             version: None,
-            detail: Some("not available on PATH or did not start successfully".into()),
+            detail: Some("not found next to Fitifact or on PATH".into()),
         },
     }
 }
 
 fn capability_report(
     spawner: &dyn ProcessSpawner,
+    ffmpeg_program: &str,
     name: &str,
     args: &[&str],
     marker: &str,
@@ -156,7 +189,7 @@ fn capability_report(
         .map(|value| (*value).to_string())
         .collect::<Vec<_>>();
     let available = spawner
-        .spawn("ffmpeg", &args, timeout)
+        .spawn(ffmpeg_program, &args, timeout)
         .ok()
         .filter(|output| output.success() && !output.stdout_truncated)
         .is_some_and(|output| output.stdout_str().contains(marker));
@@ -223,7 +256,11 @@ mod tests {
 
     impl ProcessSpawner for HealthyTools {
         fn spawn(&self, program: &str, args: &[String], _timeout: Duration) -> Result<SpawnOutput> {
-            let stdout = match (program, args.first().map(String::as_str)) {
+            let name = Path::new(program)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(program);
+            let stdout = match (name, args.first().map(String::as_str)) {
                 ("ffprobe", Some("-version")) => "ffprobe version 7.1\n",
                 ("ffmpeg", Some("-version")) => "ffmpeg version 7.1\n",
                 ("ffmpeg", _) if args.iter().any(|arg| arg == "-encoders") => {
@@ -249,11 +286,12 @@ mod tests {
         let temporary = root.join("temporary");
         std::fs::create_dir_all(&destination).unwrap();
         std::fs::create_dir_all(&temporary).unwrap();
-        let report = diagnose(
+        let report = diagnose_with_tools(
             &HealthyTools,
             &destination,
             &temporary,
             Duration::from_secs(5),
+            &MediaToolPaths::path_names(),
         );
         assert!(report.healthy);
         assert!(
@@ -271,6 +309,31 @@ mod tests {
         assert_eq!(report.workspaces.len(), 2);
         assert!(report.workspaces.iter().all(|item| item.writable));
         assert!(report.warnings.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn doctor_marks_shipped_tools() {
+        let root =
+            std::env::temp_dir().join(format!("fitifact-doctor-shipped-{}", std::process::id()));
+        let destination = root.join("destination");
+        let temporary = root.join("temporary");
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::create_dir_all(&temporary).unwrap();
+        let report = diagnose_with_tools(
+            &HealthyTools,
+            &destination,
+            &temporary,
+            Duration::from_secs(5),
+            &MediaToolPaths {
+                ffmpeg: std::path::PathBuf::from("/opt/fitifact/ffmpeg"),
+                ffprobe: std::path::PathBuf::from("/opt/fitifact/ffprobe"),
+            },
+        );
+        assert!(report.healthy);
+        assert!(report.tools.iter().all(|tool| {
+            tool.available && tool.detail.as_deref() == Some("shipped with Fitifact")
+        }));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

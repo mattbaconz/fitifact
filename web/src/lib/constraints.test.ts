@@ -16,7 +16,7 @@ describe("parser-facing editable target", () => {
       preferences: { preserve_audio: true, preserve_resolution: true },
     });
     expect(editable).toEqual({
-      formats: ["jpeg", "png"], maxBytes: "2000000",
+      formats: ["jpeg", "png"], maxBytes: "2000000", minBytes: "",
       widthExact: "", widthMin: "640", widthMax: "1920",
       heightExact: "", heightMin: "480", heightMax: "1080",
     });
@@ -28,6 +28,23 @@ describe("parser-facing editable target", () => {
       { id: "height-minimum", field: "image.height", op: "gte", value: 480 },
       { id: "height-maximum", field: "image.height", op: "lte", value: 1080 },
     ]);
+  });
+
+  it("round-trips a byte floor and refuses an inverted range", () => {
+    const editable = editableTargetFromConstraints({
+      schema: "fitifact.constraints/v1",
+      hard: [
+        { id: "min", field: "file.bytes", op: "gte", value: 20_000 },
+        { id: "max", field: "file.bytes", op: "lte", value: 50_000 },
+      ],
+      preferences: { preserve_audio: true, preserve_resolution: true },
+    });
+    expect([editable.minBytes, editable.maxBytes]).toEqual(["20000", "50000"]);
+    expect(constraintSetFromEditable(editable).hard.slice(1)).toEqual([
+      { id: "min-bytes", field: "file.bytes", op: "gte", value: 20_000 },
+      { id: "max-bytes", field: "file.bytes", op: "lte", value: 50_000 },
+    ]);
+    expect(() => constraintSetFromEditable({ ...editable, minBytes: "60 KB" })).toThrow("Minimum size exceeds maximum size.");
   });
 
   it("keeps WebP when the confirmed target names it", () => {

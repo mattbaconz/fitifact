@@ -131,6 +131,7 @@ fn pretty_codec(raw: &str) -> String {
         VideoCodec::Hevc => "HEVC".into(),
         VideoCodec::H264 => "H.264".into(),
         VideoCodec::Vp9 => "VP9".into(),
+        VideoCodec::Vp8 => "VP8".into(),
         VideoCodec::Av1 => "AV1".into(),
         VideoCodec::Unknown(other) => other,
     }
@@ -157,6 +158,9 @@ fn plan_summary(plan: &Plan) -> String {
         }
         return "I can change only the video stream.".into();
     }
+    if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::TranscodeAudio {
+        return "I can change the audio without re-encoding the picture.".into();
+    }
     if plan.steps.len() == 1 && plan.steps[0].operation == TransformId::Remux {
         return "I can remux the container without re-encoding.".into();
     }
@@ -172,9 +176,22 @@ fn step_line(step: &PlanStep) -> String {
         TransformId::Remux => "Remux to the required container (stream copy).".into(),
         TransformId::TranscodeVideo => {
             if step.target.max_bytes.is_some() {
-                "Re-encode video to fit the size limit; copy audio if present.".into()
+                "Re-encode video to fit the size limit.".into()
+            } else if step.target.width.is_some()
+                && !step
+                    .preservation
+                    .contains(&crate::plan::PreservationClaim::VideoDimensions)
+            {
+                "Resize and re-encode the video.".into()
             } else {
-                "Transcode video; copy audio if present.".into()
+                "Transcode video to H.264.".into()
+            }
+        }
+        TransformId::TranscodeAudio => {
+            if step.is_audio_only_transcode() || step.target.max_bytes.is_some() {
+                "Re-encode the sound so the file works there.".into()
+            } else {
+                "Encode audio to AAC; copy the video stream.".into()
             }
         }
         TransformId::EncodeJpeg => "Encode to JPEG without changing the pixel dimensions.".into(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyInput, refuseMessage } from "./magic";
+import { classifyInput, isDesktopMedia, refuseMessage } from "./magic";
 
 describe("local magic detection", () => {
   it("recognizes JPEG and the full PNG signature", () => {
@@ -48,7 +48,17 @@ describe("local magic detection", () => {
     expect(classifyInput(video)).toBe("video");
     expect(classifyInput(new TextEncoder().encode("%PDF-1.7"))).toBe("pdf");
     expect(classifyInput(Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0, 0]))).toBe("zip");
+    expect(classifyInput(Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0]))).toBe("office");
+    expect(classifyInput(new TextEncoder().encode("{\\rtf1"))).toBe("office");
+    expect(refuseMessage("office")).toMatch(/Office document/);
+    expect(refuseMessage("zip")).toMatch(/ZIP or documents/);
     expect(classifyInput(Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0]))).toBe("matroska");
+    expect(isDesktopMedia("matroska")).toBe(true);
+    expect(classifyInput(new TextEncoder().encode("ID3\x03"))).toBe("audio");
+    const wave = new Uint8Array(12);
+    wave.set(new TextEncoder().encode("RIFF"), 0);
+    wave.set(new TextEncoder().encode("WAVE"), 8);
+    expect(classifyInput(wave)).toBe("audio");
   });
 
   it("never promotes SVG or HTML text into a renderable type", () => {
@@ -56,8 +66,10 @@ describe("local magic detection", () => {
     expect(classifyInput(new TextEncoder().encode("<!doctype html><img src=x>"))).toBe("unsupported");
     expect(refuseMessage("unsupported")).toMatch(/SVG and HTML are never rendered/);
     expect(refuseMessage("video")).toBe(
-      "This is a video. The web app adapts images. Use the desktop app or CLI after ffmpeg is on PATH.",
+      "This is a video. The web app adapts photos. Open it in the Fitifact desktop app.",
     );
-    expect(refuseMessage("matroska")).toMatch(/WebM or Matroska/);
+    expect(refuseMessage("matroska")).toMatch(/WebM or MKV/);
+    expect(refuseMessage("audio")).toMatch(/desktop app/);
+    expect(isDesktopMedia("audio")).toBe(true);
   });
 });

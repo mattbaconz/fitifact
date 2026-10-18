@@ -363,11 +363,33 @@ fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
                 ImageFormat::parse_constraint(value).map(|value| value.as_str().to_string())
             })?;
         }
+        (Field::FileBytes, Operator::Lte | Operator::Gte, ConstraintValue::Integer(value))
+            if *value > 0 => {}
         (
-            Field::FileBytes | Field::MediaVideoWidth | Field::MediaVideoHeight,
+            Field::MediaVideoWidth | Field::MediaVideoHeight,
             Operator::Lte,
             ConstraintValue::Integer(value),
         ) if *value > 0 => {}
+        (Field::MediaVideoBitDepth, Operator::Lte, ConstraintValue::Integer(value))
+            if (1..=16).contains(value) => {}
+        (Field::MediaVideoPixelFormat, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "pixel format", |value| {
+                let value = value.trim().to_ascii_lowercase();
+                (!value.is_empty()
+                    && value.len() <= 32
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+                .then_some(value)
+            })?;
+        }
+        // "unknown" means the stream signals no HDR transfer, so players show it as SDR.
+        (Field::MediaVideoHdr, Operator::In, ConstraintValue::List(values)) => {
+            normalize_list(values, "HDR status", |value| {
+                let value = value.trim().to_ascii_lowercase();
+                matches!(value.as_str(), "sdr" | "hdr" | "unknown").then_some(value)
+            })?;
+        }
         (
             Field::ImageWidth | Field::ImageHeight,
             Operator::Eq | Operator::Gte | Operator::Lte,
@@ -423,7 +445,10 @@ fn reject_conflicts(constraints: &[Constraint]) -> Result<()> {
         if group.len() < 2 {
             continue;
         }
-        let conflict = if matches!(field, Field::ImageWidth | Field::ImageHeight) {
+        let conflict = if matches!(
+            field,
+            Field::ImageWidth | Field::ImageHeight | Field::FileBytes
+        ) {
             numeric_range_conflicts(&group)
         } else {
             match group[0].op {

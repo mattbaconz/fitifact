@@ -1,3 +1,5 @@
+import { byteCap, byteCapLabel, capLabel } from "./registry";
+
 export type DestinationFamily =
   | "discord"
   | "gmail"
@@ -8,18 +10,21 @@ export type DestinationFamily =
   | "jpeg"
   | "generic-video";
 export type DiscordCap = "free" | "nitro-basic" | "nitro";
-export type FileKind = "image" | "video";
+export type FileKind = "image" | "video" | "audio";
 
-export const PROFILE_DOCUMENTED = "2026-08-27";
-export const PROFILE_DOCUMENTED_NEW = "2026-08-28";
+function discordCap(id: string, label: string) {
+  const bytes = byteCap(id) ?? 0;
+  return { bytes, label, short: capLabel(bytes) };
+}
 
+/** Upload caps per tier, read from the shipped Discord file profiles. */
 export const DISCORD_CAPS: Record<
   DiscordCap,
   { bytes: number; label: string; short: string }
 > = {
-  free: { bytes: 20_000_000, label: "Free", short: "20 MB" },
-  "nitro-basic": { bytes: 50_000_000, label: "Nitro Basic", short: "50 MB" },
-  nitro: { bytes: 500_000_000, label: "Nitro", short: "500 MB" },
+  free: discordCap("discord/file-upload", "Free"),
+  "nitro-basic": discordCap("discord/file-upload-nitro-basic", "Nitro Basic"),
+  nitro: discordCap("discord/file-upload-nitro", "Nitro"),
 };
 
 const DISCORD_VIDEO: Record<DiscordCap, string> = {
@@ -32,6 +37,12 @@ const DISCORD_IMAGE: Record<DiscordCap, string> = {
   free: "discord/image-upload",
   "nitro-basic": "discord/image-upload-nitro-basic",
   nitro: "discord/image-upload-nitro",
+};
+
+const DISCORD_FILE: Record<DiscordCap, string> = {
+  free: "discord/file-upload",
+  "nitro-basic": "discord/file-upload-nitro-basic",
+  nitro: "discord/file-upload-nitro",
 };
 
 export const DESTINATION_FAMILIES: DestinationFamily[] = [
@@ -54,8 +65,8 @@ export const FAMILY_LABEL: Record<DestinationFamily, string> = {
   slack: "Slack",
   whatsapp: "WhatsApp",
   x: "X",
-  jpeg: "JPEG photo",
-  "generic-video": "Generic video",
+  jpeg: "Web image",
+  "generic-video": "Web video",
 };
 
 export interface DestinationChip {
@@ -74,12 +85,12 @@ export function discordUsingCopy(cap: DiscordCap): string {
 export function usingDestinationCopy(family: DestinationFamily, cap: DiscordCap): string {
   if (family === "discord") return discordUsingCopy(cap);
   if (family === "gmail") return "Using Gmail attachment.";
-  if (family === "github") return "Using GitHub comment image.";
-  if (family === "slack") return "Using Slack file image.";
-  if (family === "whatsapp") return "Using WhatsApp photo.";
-  if (family === "x") return "Using X image.";
-  if (family === "jpeg") return "Using JPEG photo.";
-  return "Using generic video.";
+  if (family === "github") return "Using GitHub comments.";
+  if (family === "slack") return "Using Slack files.";
+  if (family === "whatsapp") return "Using WhatsApp.";
+  if (family === "x") return "Using X.";
+  if (family === "jpeg") return "Using a typical web image upload.";
+  return "Using a typical web video upload.";
 }
 
 export function sameAsLastTimeCopy(family: DestinationFamily, cap: DiscordCap): string {
@@ -92,21 +103,36 @@ export function sameAsLastTimeCopy(family: DestinationFamily, cap: DiscordCap): 
   if (family === "slack") return "Same as last time: Slack.";
   if (family === "whatsapp") return "Same as last time: WhatsApp.";
   if (family === "x") return "Same as last time: X.";
-  if (family === "jpeg") return "Same as last time: JPEG photo.";
-  return "Same as last time: Generic video.";
+  if (family === "jpeg") return "Same as last time: Web image.";
+  return "Same as last time: Web video.";
 }
 
 export function chipSubtitle(family: DestinationFamily, cap: DiscordCap): string {
   if (family === "discord") {
-    return `Discord ${DISCORD_CAPS[cap].label.toLowerCase()} · ${DISCORD_CAPS[cap].short} · documented ${PROFILE_DOCUMENTED}`;
+    return `${DISCORD_CAPS[cap].short} (the cap you set)`;
   }
-  if (family === "gmail") return `Gmail · 25 MB · documented 2026-08-25`;
-  if (family === "github") return `GitHub · 10 MB · documented ${PROFILE_DOCUMENTED_NEW}`;
-  if (family === "slack") return `Slack · 1 GB · documented ${PROFILE_DOCUMENTED_NEW}`;
-  if (family === "whatsapp") return `WhatsApp photo · 16 MB JPEG · documented ${PROFILE_DOCUMENTED_NEW}`;
-  if (family === "x") return `X · 5 MB · documented ${PROFILE_DOCUMENTED_NEW}`;
-  if (family === "jpeg") return "JPEG photo · 8 MB";
-  return "Generic video · 25 MB MP4 H.264";
+  if (family === "gmail") return `${byteCapLabel("gmail/attachment")} attachment`;
+  if (family === "github") return `${byteCapLabel("github/comment-image")} comment`;
+  if (family === "slack") return `${byteCapLabel("slack/file-upload")} file`;
+  if (family === "whatsapp") {
+    return `${byteCapLabel("whatsapp/photo")} photo, ${byteCapLabel("whatsapp/video")} video`;
+  }
+  if (family === "x") return `${byteCapLabel("x/image")} photo, ${byteCapLabel("x/video")} video`;
+  if (family === "jpeg") return `JPEG PNG WebP · ${byteCapLabel("generic/web-image")}`;
+  return `MP4 · ${byteCapLabel("generic/video-upload")}`;
+}
+
+const QUERY_ALIASES: Record<string, DestinationFamily> = {
+  twitter: "x",
+  "web-image": "jpeg",
+  "web-video": "generic-video",
+};
+
+/** The destination named by a `?for=` deep link, or null when absent or unknown. */
+export function familyFromQuery(search: string): DestinationFamily | null {
+  const value = new URLSearchParams(search).get("for")?.trim().toLowerCase() ?? "";
+  if ((DESTINATION_FAMILIES as string[]).includes(value)) return value as DestinationFamily;
+  return QUERY_ALIASES[value] ?? null;
 }
 
 export function destinationChips(
@@ -130,19 +156,23 @@ export function profileForFamily(
 ): string | null {
   switch (family) {
     case "discord":
-      return kind === "video" ? DISCORD_VIDEO[cap] : DISCORD_IMAGE[cap];
+      return kind === "video"
+        ? DISCORD_VIDEO[cap]
+        : kind === "audio"
+          ? DISCORD_FILE[cap]
+          : DISCORD_IMAGE[cap];
     case "gmail":
       return "gmail/attachment";
     case "github":
-      return kind === "image" ? "github/comment-image" : null;
+      return kind === "image" ? "github/comment-image" : kind === "video" ? "github/comment-video" : null;
     case "slack":
-      return kind === "image" ? "slack/file-image" : null;
+      return kind === "image" ? "slack/file-image" : kind === "audio" ? "slack/file-upload" : "slack/file-video";
     case "whatsapp":
-      return kind === "image" ? "whatsapp/photo" : null;
+      return kind === "image" ? "whatsapp/photo" : kind === "audio" ? "whatsapp/audio" : "whatsapp/video";
     case "x":
-      return kind === "image" ? "x/image" : null;
+      return kind === "image" ? "x/image" : kind === "video" ? "x/video" : null;
     case "jpeg":
-      return kind === "image" ? "jpeg/photo-upload" : null;
+      return kind === "image" ? "generic/web-image" : null;
     case "generic-video":
       return kind === "video" ? "generic/video-upload" : null;
   }
@@ -163,11 +193,11 @@ export function resolveProfile(
 export function familyForProfile(id: string): DestinationFamily | null {
   if (id.startsWith("discord/")) return "discord";
   if (id === "gmail/attachment") return "gmail";
-  if (id === "github/comment-image") return "github";
-  if (id === "slack/file-image") return "slack";
-  if (id === "whatsapp/photo") return "whatsapp";
-  if (id === "x/image") return "x";
-  if (id === "jpeg/photo-upload") return "jpeg";
+  if (id === "github/comment-image" || id === "github/comment-video") return "github";
+  if (id === "slack/file-image" || id === "slack/file-video" || id === "slack/file-upload") return "slack";
+  if (id === "whatsapp/photo" || id === "whatsapp/video" || id === "whatsapp/audio") return "whatsapp";
+  if (id === "x/image" || id === "x/video") return "x";
+  if (id === "jpeg/photo-upload" || id === "generic/web-image") return "jpeg";
   if (id === "generic/video-upload") return "generic-video";
   return null;
 }
@@ -178,5 +208,34 @@ export function isImageCapableProfile(id: string): boolean {
 }
 
 export function isVideoProfile(id: string): boolean {
-  return id.includes("/video-upload");
+  return id.includes("/video") && !id.includes("image");
+}
+
+export function profilePlainSummary(id: string, cap: DiscordCap): string {
+  const family = familyForProfile(id);
+  if (!family) return id;
+  const size = byteCapLabel(id);
+  if (family === "discord") {
+    const name = cap === "free" ? "free" : DISCORD_CAPS[cap].label;
+    if (isVideoProfile(id)) return `Discord ${name} video · ${size}`;
+    if (id.includes("file-upload")) return `Discord ${name} file · ${size}`;
+    return `Discord ${name} image · ${size}`;
+  }
+  if (family === "gmail") return `Gmail attachment · ${size}`;
+  if (family === "github") {
+    return `GitHub comment ${isVideoProfile(id) ? "video" : "image"} · ${size}`;
+  }
+  if (family === "slack") {
+    if (isVideoProfile(id)) return `Slack file video · ${size}`;
+    if (id.endsWith("file-upload")) return `Slack file · ${size}`;
+    return `Slack file image · ${size}`;
+  }
+  if (family === "whatsapp") {
+    if (isVideoProfile(id)) return `WhatsApp video · ${size}`;
+    if (id.endsWith("/audio")) return `WhatsApp audio · ${size}`;
+    return `WhatsApp photo · ${size} JPEG`;
+  }
+  if (family === "x") return `X ${isVideoProfile(id) ? "video" : "image"} · ${size}`;
+  if (family === "jpeg") return `Web image · JPEG PNG WebP · ${size}`;
+  return `Web video · MP4 · ${size}`;
 }

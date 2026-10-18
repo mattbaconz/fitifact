@@ -31,6 +31,56 @@ fn require_tools() {
     );
 }
 
+#[test]
+#[ignore]
+fn cancellation_reaps_a_live_ffmpeg_process() {
+    assert_cancel_reaps("ffmpeg", &[]);
+}
+
+/// Chocolatey's shim runs the real FFmpeg as its own child, as `cmd /c` does.
+#[cfg(windows)]
+#[test]
+#[ignore]
+fn cancellation_reaps_ffmpeg_behind_a_shim() {
+    assert_cancel_reaps("cmd", &["/c", "ffmpeg"]);
+}
+
+fn assert_cancel_reaps(program: &'static str, prefix: &[&str]) {
+    use fitifact::runtime::{CancellableSystemSpawner, ProcessSpawner};
+    require_tools();
+    let args: Vec<String> = prefix
+        .iter()
+        .chain(&[
+            "-nostdin",
+            "-re",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=64x64:rate=10",
+            "-t",
+            "60",
+            "-f",
+            "null",
+            "-",
+        ])
+        .map(|arg| arg.to_string())
+        .collect();
+    let token = fitifact::CancellationToken::default();
+    let worker = token.clone();
+    let start = std::time::Instant::now();
+    let job = std::thread::spawn(move || {
+        CancellableSystemSpawner(worker).spawn(program, &args, Duration::from_secs(90))
+    });
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(token.cancel());
+    let error = job.join().unwrap().unwrap_err();
+    assert_eq!(error.code, ErrorCode::ExecutionCancelled);
+    assert!(
+        start.elapsed() < Duration::from_secs(10),
+        "cancel must reap the process promptly"
+    );
+}
+
 fn canonical_fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -186,6 +236,56 @@ fn live_hevc_transcodes_video_only() {
 
 #[test]
 #[ignore]
+fn live_untagged_source_transcodes_to_tagged_sdr() {
+    require_tools();
+    assert!(
+        encoder_ok("libx265") && encoder_ok("libx264"),
+        "need libx265 and libx264"
+    );
+    let dir = std::env::temp_dir().join(format!("fitifact-live-untagged-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // Screen recordings and generated clips often carry no transfer or primaries tags.
+    let input = generate(
+        &dir,
+        "untagged-hevc.mp4",
+        &[
+            "-c:v", "libx265", "-pix_fmt", "yuv420p", "-tag:v", "hvc1", "-c:a", "aac", "-b:a",
+            "64k",
+        ],
+    );
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let inspector = FfprobeInspector::new(&spawner);
+    let source = inspector.inspect(&input).unwrap();
+    assert_eq!(source.first_video().unwrap().color_transfer, None);
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints: media_h264_mp4_aac(),
+        output: Some(dir.join("untagged-hevc.adapted.mp4")),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&FfmpegProvider::new(&spawner)),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        result.status,
+        AdaptationStatus::Adapted,
+        "{:?}",
+        result.error
+    );
+    let video = result.validation.expect("validation").artifact;
+    let video = video.first_video().unwrap();
+    assert_eq!(video.color_transfer.as_deref(), Some("bt709"));
+    assert_eq!(video.color_primaries.as_deref(), Some("bt709"));
+    assert_eq!(video.hdr, HdrStatus::Sdr);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
 fn live_h264_mp4_is_noop_without_ffmpeg() {
     require_tools();
     assert!(encoder_ok("libx264"), "need libx264");
@@ -314,25 +414,59 @@ fn canonical_extra_stream_fixture_is_refused() {
 
 #[test]
 #[ignore]
-fn canonical_hdr10_fixture_is_refused_without_conversion() {
+fn canonical_hdr10_fixture_tone_maps_to_validated_sdr() {
     require_tools();
+    let input = canonical_fixture("refusal-hdr10-hevc-aac.mp4");
     let inspector = FfprobeInspector::default();
-    let artifact = inspector
-        .inspect(&canonical_fixture("refusal-hdr10-hevc-aac.mp4"))
-        .unwrap();
+    let artifact = inspector.inspect(&input).unwrap();
     let video = artifact.first_video().unwrap();
     assert_eq!(video.bit_depth, Some(10));
     assert_eq!(video.hdr, HdrStatus::Hdr);
-    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
     assert_eq!(
-        outcome.blocking_codes(),
+        create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog()).blocking_codes(),
         vec![BlockingCode::HdrConversionUnsupported]
     );
+    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
+    assert!(
+        catalog.hdr_tone_mapping,
+        "this FFmpeg build lacks the zscale/tonemap filters"
+    );
+
+    let dir = std::env::temp_dir().join(format!("fitifact-live-hdr-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let output = dir.join("sdr.mp4");
+    let spawner = RecordingSpawner::new(SystemSpawner);
+    let provider = FfmpegProvider::new(&spawner);
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints: media_h264_mp4_aac(),
+        output: Some(output.clone()),
+        catalog: Some(&catalog),
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(120),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    assert!(result.plan.expect("plan").steps[0].target.tone_map_hdr);
+
+    let produced = inspector.inspect(&output).unwrap();
+    let video = produced.first_video().unwrap();
+    assert_eq!(video.codec, Some(VideoCodec::H264));
+    assert_eq!(video.pixel_format.as_deref(), Some("yuv420p"));
+    assert_eq!(video.bit_depth, Some(8));
+    assert_eq!(video.hdr, HdrStatus::Sdr);
+    assert_eq!(video.color_transfer.as_deref(), Some("bt709"));
+    assert_eq!(video.color_primaries.as_deref(), Some("bt709"));
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
 #[ignore]
-fn live_matroska_is_not_webm_and_cannot_remux() {
+fn live_matroska_h264_aac_can_remux_to_mp4() {
     require_tools();
     assert!(encoder_ok("libx264"), "need libx264");
     let dir = std::env::temp_dir().join(format!("fitifact-live-mkv-{}", std::process::id()));
@@ -355,15 +489,17 @@ fn live_matroska_is_not_webm_and_cannot_remux() {
     assert!(!check(&artifact, &webm_target).compatible);
     let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
     assert_eq!(
-        outcome.blocking_codes(),
-        vec![BlockingCode::UnsupportedContainer]
+        outcome.steps()[0].operation,
+        TransformId::Remux,
+        "MKV H.264/AAC should remux, got {:?}",
+        outcome.blocking_codes()
     );
     let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
 #[ignore]
-fn live_webm_is_fail_closed_and_cannot_remux() {
+fn live_webm_vp9_plans_a_transcode() {
     require_tools();
     assert!(
         encoder_ok("libvpx-vp9") && encoder_ok("libopus"),
@@ -399,14 +535,11 @@ fn live_webm_is_fail_closed_and_cannot_remux() {
     );
     assert!(!check(&artifact, &media_h264_mp4_aac()).compatible);
     let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
-    assert!(
-        !outcome.is_compatible() && outcome.plan().is_none(),
-        "live WebM must be refused rather than remuxed or transcoded, got {:?}",
+    assert_eq!(
+        outcome.steps()[0].operation,
+        TransformId::TranscodeVideo,
+        "live WebM VP9 should transcode, got {:?}",
         outcome.blocking_codes()
-    );
-    assert!(
-        !outcome.blocking_codes().is_empty(),
-        "refusal must carry a blocking code"
     );
     if let Some(Container::Unknown(label)) = &artifact.container {
         assert!(
@@ -703,5 +836,112 @@ fn live_oversized_mov_hevc_fits_or_refuses_at_the_floor() {
         }
         other => panic!("unexpected status {other:?}"),
     }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn generate_audio(dir: &Path, name: &str, extra: &[&str]) -> PathBuf {
+    let dest = dir.join(name);
+    let mut args = vec![
+        "-nostdin",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=3",
+    ];
+    args.extend_from_slice(extra);
+    args.push(dest.to_str().unwrap());
+    let status = Command::new("ffmpeg").args(&args).status().unwrap();
+    assert!(
+        status.success(),
+        "audio fixture generation failed for {name}"
+    );
+    dest
+}
+
+#[test]
+#[ignore]
+fn live_wav_under_gmail_size_is_a_noop() {
+    require_tools();
+    let dir = std::env::temp_dir().join(format!("fitifact-live-audio-noop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate_audio(&dir, "ok.wav", &["-c:a", "pcm_s16le"]);
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector.inspect(&input).unwrap();
+    assert!(artifact.is_audio_only());
+    let target = compile(ConstraintInput {
+        max_bytes: Some(25_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    assert!(create_plan(&artifact, &target, &default_catalog()).is_compatible());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_wav_over_a_byte_ceiling_adapts_to_aac() {
+    require_tools();
+    let dir = std::env::temp_dir().join(format!("fitifact-live-audio-fit-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate_audio(&dir, "fat.wav", &["-c:a", "pcm_s16le"]);
+    let source_len = std::fs::metadata(&input).unwrap().len();
+    let ceiling = 40_000u64;
+    assert!(
+        source_len > ceiling,
+        "generated wav must exceed the test ceiling, got {source_len}"
+    );
+    let output = dir.join("fat.adapted.mp4");
+    let constraints = compile(ConstraintInput {
+        max_bytes: Some(ceiling),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let inspector = FfprobeInspector::default();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    assert_eq!(
+        result.plan.as_ref().unwrap().steps[0].operation,
+        TransformId::TranscodeAudio
+    );
+    let validation = result.validation.expect("validation");
+    assert_eq!(validation.status, fitifact::ValidationStatus::Pass);
+    let out = &validation.artifact;
+    assert!(out.is_audio_only());
+    assert_eq!(out.container, Some(Container::Mp4));
+    assert_eq!(out.first_audio().unwrap().codec, Some(AudioCodec::Aac));
+    let out_len = std::fs::metadata(&output).unwrap().len();
+    assert!(out_len <= ceiling, "output {out_len} exceeded {ceiling}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore]
+fn live_audio_cannot_satisfy_a_video_destination() {
+    require_tools();
+    let dir =
+        std::env::temp_dir().join(format!("fitifact-live-audio-video-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate_audio(&dir, "voice.wav", &["-c:a", "pcm_s16le"]);
+    let inspector = FfprobeInspector::default();
+    let artifact = inspector.inspect(&input).unwrap();
+    let outcome = create_plan(&artifact, &media_h264_mp4_aac(), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::UnsupportedVideoTarget]
+    );
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -1,22 +1,29 @@
 schema: fitifact.profile/v1
 id: slack/file-image
 name: Slack file image
-revision: 1
-last_verified: 2026-08-28
+revision: 2
+last_verified: 2026-10-17
 
 scope:
   kind: web-upload
   platform: slack
   feature: file-image
 
-trust:
-  level: documented
-
 constraints:
   - id: format
     field: image.format
     op: in
     value: [jpeg, png, gif, webp]
+    source: src-fitifact-image
+  - id: max-width
+    field: image.width
+    op: lte
+    value: 24999
+    source: src-files
+  - id: max-height
+    field: image.height
+    op: lte
+    value: 24999
     source: src-files
   - id: bytes
     field: file.bytes
@@ -32,8 +39,12 @@ sources:
   - id: src-files
     type: official-doc
     url: https://slack.com/help/articles/201330736-Add-files-to-Slack
-    observed_at: 2026-08-28
-    note: Slack documents 1 GB per uploaded file. The useful job for this chip is image format. The byte ceiling is declared honestly, not a claim that 1 GB is a typical Slack image.
+    observed_at: 2026-10-17
+    note: "Files up to 1GB. An image previews inline only if it is smaller than 25,000 pixels on the longest side and less than 45 million pixels in total; Fitifact enforces the edge limit but cannot yet check the pixel total."
+  - id: src-fitifact-image
+    type: fitifact-rule
+    observed_at: 2026-10-17
+    note: "Fitifact rule: Slack lists no image formats. These are common web image formats that browsers preview."
 
 tests:
   - fixture: image/compatible-jpeg.jpg

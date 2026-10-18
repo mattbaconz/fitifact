@@ -1,0 +1,39 @@
+---
+title: Getting started
+description: Make your file work there. Change only what needs to change.
+---
+
+Fitifact inspects a file, compares it with a destination’s requirements, and finds the minimum supported change. It checks the result against the same requirements before calling it compatible.
+
+If your file already fits, **nothing changes**. You keep the original bytes and filename.
+
+## Your first file
+
+1. Open Fitifact and choose a photo, or try one of the sample scenarios.
+2. Choose its destination. If you have an upload rejection or precise rules, choose **Custom** and paste them.
+3. Review **Needs to change**, **Will be preserved**, and any warnings. Approve a crop or first-frame extraction only if you want it.
+4. Choose **Adapt file**. When validation passes, download the result. An unchanged file offers **Use original** instead.
+
+Your original is preserved. Files are processed on your device; nothing is uploaded to Fitifact.
+
+## Choose your environment
+
+| Environment | Use it for                                | Processing                                  |
+| ----------- | ----------------------------------------- | ------------------------------------------- |
+| Browser     | A single photo or still-image output      | Local Rust/WASM worker                      |
+| Desktop     | Photos, video, and audio from local paths | Shared UI, Rust engine, native FFmpeg tools |
+| CLI         | Scripts and inspectable JSON reports      | Rust engine with FFmpeg/ffprobe on PATH     |
+
+The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC. Video and audio require desktop or CLI. Browser inputs are limited to 32 MiB and 24 megapixels. Some files may need explicit first-frame approval or may be refused.
+
+## Desktop
+
+The desktop interface adds native video and audio processing. Read the [desktop guide](./desktop-guide/) for setup, tool recovery, and distribution status. CLI archives are not desktop installers.
+
+## Understand the promise
+
+**Inspect → Plan → Adapt → Validate** describes the work, not four screens you must navigate. Adaptation is skipped when inspection proves that the original already satisfies the confirmed constraints.
+
+Compatibility means “passes these requirements.” Destinations may have additional undocumented rules. If an upload still fails, paste its rejection into Custom and review the revised plan.
+
+Continue with the [browser guide](./browser-guide/) or explore [real examples](./examples/).

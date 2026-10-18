@@ -1,3 +1,4 @@
+import { readStored, writeStored } from "./storage";
 import {
   DESTINATION_FAMILIES,
   type DestinationFamily,
@@ -30,7 +31,7 @@ function isCap(value: unknown): value is DiscordCap {
 
 function readJson(key: string): unknown {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = readStored(key);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -53,7 +54,7 @@ export function loadSetup(): SetupState {
 }
 
 export function saveSetup(setup: SetupState) {
-  localStorage.setItem(SETUP_KEY, JSON.stringify(setup));
+  writeStored(SETUP_KEY, JSON.stringify(setup));
 }
 
 export function declareSetup(partial: Partial<SetupState>, previous = loadSetup()): SetupState {

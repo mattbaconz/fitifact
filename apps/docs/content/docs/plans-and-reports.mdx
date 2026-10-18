@@ -1,0 +1,36 @@
+---
+title: Plans and reports
+description: Know what will change, what will remain, and how the result was checked.
+---
+
+## Inspect
+
+Fitifact reads the file’s actual properties: format, bytes, image dimensions, or native media streams. A filename extension is only a hint. Resource limits and unsupported formats produce an explicit refusal.
+
+## Plan
+
+The engine compares the source with the confirmed constraints and selects the minimum supported transformation. The interface shows the failed requirements, proposed changes, preservation, and warnings together.
+
+Technical checks remain available below the plain-language explanation. No plan can execute until required crop or first-frame consent is given for the current file.
+
+## Adapt
+
+If all checks already pass, this stage is skipped. Otherwise the image provider or native media provider executes the plan locally. Re-encoding may remove image metadata or reduce quality; review the disclosures before continuing.
+
+Progress describes the current work. It is not a fabricated percentage or a promise of remaining time.
+
+## Validate
+
+Fitifact re-inspects generated output and checks it against the same hard constraints. A successful encoder process is insufficient. The result is offered as compatible only after validation passes.
+
+For a no-op, the original inspection supplies the compatibility checks. There is no misleading before/after comparison because nothing changed.
+
+## Download evidence
+
+The result offers the actual engine report and confirmed constraints as JSON. Reports retain their existing schema identifiers and describe inspection, planning, or adaptation evidence. They are never treated as executable saved plans.
+
+Check whether a report refers to the original or to output validation. Native adaptation includes both the source compatibility report and the output validation checks.
+
+## Compatibility has a boundary
+
+Passing the confirmed constraints does not guarantee that a destination has no additional undocumented rules. If it still rejects the file, paste that message into Custom and review the revised requirements.

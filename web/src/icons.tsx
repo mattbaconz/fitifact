@@ -173,3 +173,59 @@ export function XIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  );
+}
+
+export function ShareIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <path d="M12 15V4" />
+      <path d="M8 8l4-4 4 4" />
+      <path d="M6 12v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6" />
+    </svg>
+  );
+}
+
+export function WarningIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <path d="M12 4l9 16H3z" />
+      <path d="M12 10v4" />
+      <path d="M12 17.5h.01" />
+    </svg>
+  );
+}
+
+export function RefuseIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M6 6l12 12" />
+    </svg>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5v5.5" />
+      <path d="M12 16.5h.01" />
+    </svg>
+  );
+}
+
+export function PlanIcon(props: IconProps) {
+  return (
+    <svg {...icon(props)}>
+      <path d="M5 6h14M5 12h10M5 18h6" />
+    </svg>
+  );
+}

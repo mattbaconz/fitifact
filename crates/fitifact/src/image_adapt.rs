@@ -25,7 +25,7 @@ use crate::plan::{
     StepTarget,
 };
 
-const MAX_JPEG_ENCODINGS: u8 = 7;
+const MAX_JPEG_ENCODINGS: u8 = 12;
 const MAX_DIMENSION_REDUCTIONS: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +70,8 @@ pub struct ImageAdaptTarget {
     pub width: u32,
     pub height: u32,
     pub max_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_bytes: Option<u64>,
     pub preservation: Vec<ImagePreservationClaim>,
     pub metadata: ImageMetadataBehavior,
     pub quality_warnings: Vec<String>,
@@ -287,12 +289,13 @@ pub fn plan_image_adaptation(
         choose_dimensions(source_width, source_height, width_range, height_range);
     enforce_decoded_limit(target_width, target_height)?;
     let crop_required = !same_aspect(source_width, source_height, target_width, target_height);
-    let max_bytes = constraints
-        .hard
-        .iter()
-        .filter(|constraint| constraint.field == Field::FileBytes)
-        .filter_map(|constraint| integer_value(&constraint.value))
-        .min();
+    let max_bytes = crate::media_fit::file_bytes_limit(constraints);
+    let min_bytes = crate::media_fit::file_bytes_floor(constraints);
+    if min_bytes.is_some_and(|floor| artifact.byte_length < floor) {
+        return Err(no_plan(
+            "image.below_minimum_size: the file is smaller than this destination's minimum size, and Fitifact does not pad files",
+        ));
+    }
     let noop = check(artifact, constraints).compatible && !first_frame_required;
     let proportional_reduction_allowed = max_bytes.is_some()
         && width_range.exact.is_none()
@@ -355,6 +358,7 @@ pub fn plan_image_adaptation(
         width: target_width,
         height: target_height,
         max_bytes,
+        min_bytes,
         preservation,
         metadata,
         quality_warnings,
@@ -602,16 +606,22 @@ fn encode_fitted_jpeg(
     let mut stats = ImageExecutionStats::default();
     let qualities = [95_u8, 80, 65, 50];
     let ceiling = plan.target.max_bytes;
+    let floor = plan.target.min_bytes.unwrap_or(0);
     let mut last_size = 0_u64;
+    let mut too_big = None;
     for quality in qualities {
         cancelled(cancellation)?;
         let bytes = encode_jpeg(&image, quality)?;
         stats.jpeg_encodes += 1;
         stats.jpeg_quality = Some(quality);
         last_size = bytes.len() as u64;
-        if ceiling.is_none_or(|limit| bytes.len() as u64 <= limit) {
-            return Ok(ImageProviderOutput { bytes, stats });
+        if ceiling.is_none_or(|limit| last_size <= limit) {
+            if last_size >= floor {
+                return Ok(ImageProviderOutput { bytes, stats });
+            }
+            return jpeg_into_window(&image, quality, too_big, plan, stats, cancellation);
         }
+        too_big = Some(quality);
     }
     while stats.dimension_reductions < MAX_DIMENSION_REDUCTIONS
         && stats.jpeg_encodes < MAX_JPEG_ENCODINGS
@@ -634,12 +644,47 @@ fn encode_fitted_jpeg(
         stats.jpeg_encodes += 1;
         stats.jpeg_quality = Some(50);
         last_size = bytes.len() as u64;
-        if bytes.len() as u64 <= limit {
-            return Ok(ImageProviderOutput { bytes, stats });
+        if last_size <= limit {
+            if last_size >= floor {
+                return Ok(ImageProviderOutput { bytes, stats });
+            }
+            return jpeg_into_window(&image, 50, None, plan, stats, cancellation);
         }
     }
     Err(no_plan(
         "image.byte_target_impossible: JPEG cannot meet the byte ceiling at quality 50",
+    ))
+}
+
+/// Bisects quality between `low` (under the byte floor) and `high` (over the ceiling, or
+/// untested when `None`) for an encode inside the window. Refuses rather than pads.
+fn jpeg_into_window(
+    image: &DynamicImage,
+    mut low: u8,
+    high: Option<u8>,
+    plan: &ImageAdaptPlan,
+    mut stats: ImageExecutionStats,
+    cancellation: &dyn CancellationSignal,
+) -> Result<ImageProviderOutput> {
+    let floor = plan.target.min_bytes.unwrap_or(0);
+    let mut high = high.unwrap_or(96);
+    while high - low > 1 && stats.jpeg_encodes < MAX_JPEG_ENCODINGS {
+        cancelled(cancellation)?;
+        let quality = low + (high - low) / 2;
+        let bytes = encode_jpeg(image, quality)?;
+        stats.jpeg_encodes += 1;
+        stats.jpeg_quality = Some(quality);
+        let size = bytes.len() as u64;
+        if size < floor {
+            low = quality;
+        } else if plan.target.max_bytes.is_some_and(|limit| size > limit) {
+            high = quality;
+        } else {
+            return Ok(ImageProviderOutput { bytes, stats });
+        }
+    }
+    Err(no_plan(
+        "image.byte_target_impossible: no JPEG quality lands inside the byte window, and Fitifact does not pad files",
     ))
 }
 
@@ -650,9 +695,7 @@ fn encode_fitted_png(
 ) -> Result<ImageProviderOutput> {
     let mut stats = ImageExecutionStats::default();
     let mut bytes = encode_png(&image)?;
-    let Some(limit) = plan.target.max_bytes else {
-        return Ok(ImageProviderOutput { bytes, stats });
-    };
+    let limit = plan.target.max_bytes.unwrap_or(u64::MAX);
     while bytes.len() as u64 > limit
         && stats.dimension_reductions < MAX_DIMENSION_REDUCTIONS
         && plan.target.proportional_reduction_allowed
@@ -671,6 +714,11 @@ fn encode_fitted_png(
             "image.byte_target_impossible: lossless PNG cannot meet the byte ceiling",
         ));
     }
+    if (bytes.len() as u64) < plan.target.min_bytes.unwrap_or(0) {
+        return Err(no_plan(
+            "image.byte_target_impossible: lossless PNG falls below the byte floor, and Fitifact does not pad files",
+        ));
+    }
     Ok(ImageProviderOutput { bytes, stats })
 }
 
@@ -681,9 +729,7 @@ fn encode_fitted_webp(
 ) -> Result<ImageProviderOutput> {
     let mut stats = ImageExecutionStats::default();
     let mut bytes = encode_webp(&image)?;
-    let Some(limit) = plan.target.max_bytes else {
-        return Ok(ImageProviderOutput { bytes, stats });
-    };
+    let limit = plan.target.max_bytes.unwrap_or(u64::MAX);
     while bytes.len() as u64 > limit
         && stats.dimension_reductions < MAX_DIMENSION_REDUCTIONS
         && plan.target.proportional_reduction_allowed
@@ -700,6 +746,11 @@ fn encode_fitted_webp(
     if bytes.len() as u64 > limit {
         return Err(no_plan(
             "image.byte_target_impossible: WebP cannot meet the byte ceiling",
+        ));
+    }
+    if (bytes.len() as u64) < plan.target.min_bytes.unwrap_or(0) {
+        return Err(no_plan(
+            "image.byte_target_impossible: WebP falls below the byte floor, and Fitifact does not pad files",
         ));
     }
     Ok(ImageProviderOutput { bytes, stats })

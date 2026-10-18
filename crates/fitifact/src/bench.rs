@@ -321,6 +321,11 @@ fn run_scenario(path: &Path, expected: &str, work_dir: &Path) -> Result<BenchSce
         {
             "transcode"
         }
+        (AdaptationStatus::Adapted, Some(step))
+            if step.operation == TransformId::TranscodeAudio =>
+        {
+            "transcode-audio"
+        }
         (AdaptationStatus::Adapted, Some(step)) if step.operation == TransformId::EncodeJpeg => {
             "encode-jpeg"
         }

@@ -1,0 +1,28 @@
+---
+title: Privacy and limitations
+description: Local processing, explicit boundaries, and no hidden upload fallback.
+---
+
+## Files stay on your device
+
+The browser runs an image engine in a local worker. Desktop and CLI run native tools on local files. Fitifact has no upload endpoint, account requirement, telemetry, or cloud-processing fallback.
+
+Opening the website downloads its static application assets. Fonts, samples, and documentation search data are served with the site. Documentation search runs in your browser; queries are not sent to a search service. Following an external link leaves Fitifact.
+
+## Local preferences
+
+Appearance, destination preferences, and saved targets are stored in this browser or desktop webview. They are not synced to an account. Theme preferences are shared between the app and docs on the same origin. Original file contents are not stored as preferences.
+
+## Preservation is explicit
+
+Compatible files are unchanged. Adaptation preserves the original and offers a separate result. Re-encoded images may lose metadata or quality; crops remove edges; first-frame extraction removes other frames or pages. Review warnings and give the required consent before execution.
+
+## Supported scope
+
+Fitifact handles one source file at a time. It does not add batch processing, new codecs on demand, cloud conversion, or a browser media runtime. Browser resource limits are 32 MiB and 24 megapixels. Supported HEIC decoding is loaded only when needed.
+
+The planner has a bounded catalog. Unsupported or impossible requests are refused. Validation proves the confirmed hard constraints, not all possible rules of a third-party service.
+
+## Release candidate
+
+Current source version: **0.1.0-rc.6**. Published CLI archives may be an older candidate. Desktop signing and publication are separate from a local build. Read the [desktop download guidance](../desktop-guide/) before choosing an artifact.

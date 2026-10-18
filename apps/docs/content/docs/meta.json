@@ -1,0 +1,14 @@
+{
+  "title": "Fitifact",
+  "pages": [
+    "index",
+    "browser-guide",
+    "desktop-guide",
+    "cli",
+    "constraints-and-profiles",
+    "plans-and-reports",
+    "examples",
+    "troubleshooting",
+    "privacy-and-limitations"
+  ]
+}

@@ -1,5 +1,5 @@
 import { formatBytes } from "./constraints";
-import type { ImageKind, PlanReport, RasterFormat, RequirementParse } from "../types";
+import type { CompatibilityReport, ConstraintCheck, ImageKind, PlanReport, RasterFormat, RequirementParse } from "../types";
 
 export function formatLabel(value: string | null | undefined): string {
   switch (value) {
@@ -20,6 +20,34 @@ export function formatLabel(value: string | null | undefined): string {
       return "TIFF";
     case "bmp":
       return "BMP";
+    case "mp4":
+      return "MP4";
+    case "mov":
+    case "quicktime":
+      return "MOV";
+    case "webm":
+      return "WebM";
+    case "mkv":
+    case "matroska":
+      return "MKV";
+    case "h264":
+    case "avc":
+      return "H.264";
+    case "hevc":
+    case "h265":
+      return "HEVC";
+    case "vp9":
+      return "VP9";
+    case "vp8":
+      return "VP8";
+    case "av1":
+      return "AV1";
+    case "aac":
+      return "AAC";
+    case "opus":
+      return "Opus";
+    case "none":
+      return "none";
     default:
       return value?.toUpperCase() || "This file";
   }
@@ -36,11 +64,21 @@ export function checkLabel(field: string): string {
     case "file.bytes":
       return "File size";
     case "media.container":
-      return "Container";
+      return "File type";
     case "media.video.codec":
-      return "Video codec";
+      return "Video";
     case "media.audio.codec":
-      return "Audio codec";
+      return "Sound";
+    case "media.video.width":
+      return "Width";
+    case "media.video.height":
+      return "Height";
+    case "media.video.pixel_format":
+      return "Picture format";
+    case "media.video.bit_depth":
+      return "Bit depth";
+    case "media.video.hdr":
+      return "Dynamic range";
     default:
       return field;
   }
@@ -62,7 +100,7 @@ export function formatCheckValue(field: string, value: string | null | undefined
       return `${prefix}${formatBytes(n)}`;
     }
   }
-  if (field === "image.format") {
+  if (field === "image.format" || field === "media.container" || field === "media.video.codec" || field === "media.audio.codec") {
     return value
       .split(/[,\s/]+/)
       .map((part) => part.trim())
@@ -88,7 +126,8 @@ export function understoodNote(parse: RequirementParse | null): string | null {
       const raw = Array.isArray(constraint.value) ? constraint.value.join(",") : String(constraint.value);
       parts.push(formatCheckValue("image.format", raw));
     } else if (constraint.field === "file.bytes") {
-      parts.push(`max ${formatCheckValue("file.bytes", String(constraint.value))}`);
+      const bound = constraint.op === "gte" ? "min" : "max";
+      parts.push(`${bound} ${formatCheckValue("file.bytes", String(constraint.value))}`);
     } else if (constraint.field === "image.width" || constraint.field === "image.height") {
       const axis = constraint.field === "image.width" ? "width" : "height";
       if (constraint.op === "eq") parts.push(`${axis} ${constraint.value}`);
@@ -96,7 +135,7 @@ export function understoodNote(parse: RequirementParse | null): string | null {
       else if (constraint.op === "gte") parts.push(`min ${axis} ${constraint.value}`);
     }
   }
-  return parts.length ? `I took: ${parts.join(", ")}.` : null;
+  return parts.length ? `Understood: ${parts.join(", ")}.` : null;
 }
 
 export function inspectLine(kind: ImageKind | RasterFormat | null | undefined, width: number | null | undefined, height: number | null | undefined, bytes: number): string {
@@ -104,52 +143,227 @@ export function inspectLine(kind: ImageKind | RasterFormat | null | undefined, w
   return `${formatLabel(kind)} · ${formatBytes(bytes)} · ${size}`;
 }
 
-export function describeProblems(plan: PlanReport): string[] {
+function problemForCheck(check: ConstraintCheck): string | null {
+  if (check.result !== "fail") return null;
+  if (check.field === "image.format") {
+    return `${formatLabel(check.actual)} isn't accepted`;
+  }
+  if (check.field === "file.bytes") {
+    const size = Number(check.actual) < Number(check.required) ? "small" : "large";
+    return `The file is too ${size} (${formatCheckValue("file.bytes", check.actual)} vs ${formatCheckValue("file.bytes", check.required)})`;
+  }
+  if (check.field === "image.width" || check.field === "image.height") {
+    return "The dimensions don't match";
+  }
+  if (check.field === "media.container") {
+    return `This is ${formatCheckValue("media.container", check.actual)}; the destination needs ${formatCheckValue("media.container", check.required)}`;
+  }
+  if (check.field === "media.video.codec") {
+    return "The video won't play there as-is";
+  }
+  if (check.field === "media.audio.codec") {
+    return "The sound won't play there as-is";
+  }
+  if (check.field === "media.video.width" || check.field === "media.video.height") {
+    return "The frame is larger than allowed";
+  }
+  return `${checkLabel(check.field)} doesn't match`;
+}
+
+export function describeProblemsFromChecks(report: CompatibilityReport | null | undefined): string[] {
+  if (!report) return [];
   const problems: string[] = [];
-  let sawDimensions = false;
-  for (const check of plan.report.checks) {
-    if (check.result !== "fail") continue;
-    if (check.field === "image.format") {
-      problems.push(`${formatLabel(check.actual)} isn't accepted`);
-    } else if (check.field === "file.bytes") {
-      problems.push(
-        `The file is too large (${formatCheckValue("file.bytes", check.actual)} vs ${formatCheckValue("file.bytes", check.required)})`,
-      );
-    } else if (check.field === "image.width" || check.field === "image.height") {
-      if (!sawDimensions) {
+  let sawImageDimensions = false;
+  let sawVideoDimensions = false;
+  for (const check of report.checks) {
+    if (check.field === "image.width" || check.field === "image.height") {
+      if (check.result !== "fail") continue;
+      if (!sawImageDimensions) {
         problems.push("The dimensions don't match");
-        sawDimensions = true;
+        sawImageDimensions = true;
       }
-    } else {
-      problems.push(`${check.field} doesn't match`);
+      continue;
     }
+    if (check.field === "media.video.width" || check.field === "media.video.height") {
+      if (check.result !== "fail") continue;
+      if (!sawVideoDimensions) {
+        problems.push("The frame is larger than allowed");
+        sawVideoDimensions = true;
+      }
+      continue;
+    }
+    const line = problemForCheck(check);
+    if (line) problems.push(line);
   }
-  if (plan.plan.target.crop.required && !sawDimensions) {
-    problems.push("The image isn't the required shape");
-  }
-  if (!problems.length && !plan.report.compatible) {
-    problems.push("I don't know why this file is being rejected from the supplied rules");
+  if (!problems.length && !report.compatible) {
+    problems.push("This file does not match the destination rules");
   }
   return problems;
 }
 
-export function describeActions(plan: PlanReport): string[] {
+export function describeProblems(plan: PlanReport): string[] {
+  const problems = describeProblemsFromChecks(plan.report);
+  const sawDimensions = problems.includes("The dimensions don't match");
+  if (plan.plan.target.crop.required && !sawDimensions) {
+    problems.push("The image isn't the required shape");
+  }
+  return problems;
+}
+
+function keptLabel(token: string): string | null {
+  switch (token) {
+    case "source_format":
+      return "Original format";
+    case "dimensions":
+    case "image_dimensions":
+    case "video_dimensions":
+      return "Frame size";
+    case "aspect_ratio":
+      return "Shape";
+    case "alpha":
+      return "Transparency";
+    case "all_streams_copied":
+    case "all streams copied":
+      return "Picture and sound (copied, not re-encoded)";
+    case "audio_stream_copied":
+    case "audio stream copied":
+      return "Sound";
+    case "video_pixel_format":
+    case "video pixel format":
+      return "Color sampling";
+    case "video_color_metadata":
+    case "video color metadata":
+      return "Color metadata";
+    default:
+      return token.replace(/_/g, " ");
+  }
+}
+
+export function describeKept(plan: PlanReport | null, extra: string[] = []): string[] {
+  const tokens = [
+    ...(plan?.plan.target.preservation ?? []),
+    ...extra,
+  ];
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const token of tokens) {
+    const label = keptLabel(token);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    kept.push(label);
+  }
+  if (plan?.plan.target.metadata === "keep" || plan?.plan.target.metadata === "preserve_unchanged") kept.push("Metadata");
+  return kept;
+}
+
+export function describeActions(plan: PlanReport, completed = false): string[] {
   if (plan.report.compatible && plan.plan.noop) return ["Nothing. This file already fits."];
   const actions: string[] = [];
   if (plan.plan.source_format !== plan.plan.target.format) {
-    actions.push(`The destination needs ${formatLabel(plan.plan.target.format)}`);
+    actions.push(completed ? `Converted to ${formatLabel(plan.plan.target.format)}` : `The destination needs ${formatLabel(plan.plan.target.format)}`);
   }
   if (plan.plan.target.crop.required) {
-    actions.push("Crop to the required shape — choose framing");
+    actions.push(completed ? "Cropped using the framing you approved" : "Crop to the required shape. Choose framing");
   }
   if (plan.plan.target.first_frame?.required) {
-    actions.push("Keep only the first frame or page — extra frames are discarded");
+    actions.push(completed ? "Kept the first frame or page with your approval" : "Keep only the first frame or page. Extra frames are discarded");
   }
   if (plan.plan.source_width !== plan.plan.target.width || plan.plan.source_height !== plan.plan.target.height) {
-    actions.push(`Resize to ${plan.plan.target.width}×${plan.plan.target.height}`);
+    actions.push(`${completed ? "Resized" : "Resize"} to ${plan.plan.target.width}×${plan.plan.target.height}`);
   }
-  if (plan.plan.target.max_bytes && (plan.plan.target.quality_warnings.length || plan.plan.target.proportional_reduction_allowed)) {
-    actions.push("Reduce quality only as much as required to stay under the size limit");
+  const sizeFails = plan.report.checks.some((check) => check.field === "file.bytes" && check.result === "fail");
+  if (!completed && sizeFails && plan.plan.target.max_bytes && (plan.plan.target.quality_warnings.length || plan.plan.target.proportional_reduction_allowed)) {
+    actions.push(
+      plan.plan.target.min_bytes
+        ? "Reduce quality only as much as required to land inside the size range"
+        : "Reduce quality only as much as required to stay under the size limit",
+    );
+  }
+  if (
+    plan.plan.target.metadata === "strip" ||
+    plan.plan.target.metadata === "normalize_orientation_and_strip"
+  ) {
+    actions.push("Metadata is removed during re-encoding");
   }
   return actions;
 }
+
+export function describeMediaActions(steps: Array<{ operation: string; reasons?: Array<{ message: string }>; warnings?: string[] }> | undefined): string[] {
+  if (!steps?.length) return [];
+  return steps.map((step) => {
+    const operation = step.operation.toLowerCase();
+    if (operation.includes("remux")) return "Change the wrapper. Keep the same picture and sound";
+    if (operation.includes("transcode_audio") || operation.includes("transcode-audio")) {
+      const reason = step.reasons?.[0]?.message?.toLowerCase() ?? "";
+      if (reason.includes("byte") || reason.includes("size")) {
+        return "Re-encode so the file fits the size limit";
+      }
+      if (reason.includes("picture") || reason.includes("video")) {
+        return "Change the sound format. Keep the picture";
+      }
+      return "Change the sound format";
+    }
+    if (operation.includes("transcode")) {
+      const reason = step.reasons?.[0]?.message?.toLowerCase() ?? "";
+      if (reason.includes("byte") || reason.includes("size")) {
+        return "Re-encode so the file fits the size limit";
+      }
+      if (reason.includes("width") || reason.includes("height") || reason.includes("dimension")) {
+        return "Scale the frame so it fits";
+      }
+      return "Re-encode the video so it plays there";
+    }
+    return step.reasons?.[0]?.message ?? operation.replace(/[._]/g, " ");
+  });
+}
+
+export function describeVerified(opts: {
+  compatible: boolean;
+  adapted: boolean;
+  checks: ConstraintCheck[];
+}): string | null {
+  if (!opts.checks.length) {
+    if (opts.compatible) return "Verified: this file already matches the destination. Nothing was changed.";
+    if (opts.adapted) return "Verified: the new file matches the destination rules.";
+    return null;
+  }
+  const unresolved = opts.checks.filter((check) => check.result !== "pass");
+  if (unresolved.length) return null;
+  if (opts.compatible && !opts.adapted) {
+    return "Verified: this file already matches the destination. Nothing was changed.";
+  }
+  if (opts.adapted) return "Verified: the new file matches the destination rules.";
+  return null;
+}
+
+export interface MeasuredRow {
+  id: string;
+  label: string;
+  needs: string;
+  before: string;
+  beforeResult: ConstraintCheck["result"];
+  /** Present only once an output exists. */
+  after: string | null;
+  result: ConstraintCheck["result"];
+}
+
+/** Pairs each requirement with what was measured before and, after adapting, on the output. */
+export function measuredRows(before: ConstraintCheck[], after: ConstraintCheck[] | null = null): MeasuredRow[] {
+  const output = new Map((after ?? []).map((check) => [check.constraint_id, check]));
+  const ids = [...new Set([...before.map((check) => check.constraint_id), ...output.keys()])];
+  return ids.map((id) => {
+    const source = before.find((check) => check.constraint_id === id);
+    const result = output.get(id);
+    const check = (result ?? source)!;
+    return {
+      id,
+      label: checkLabel(check.field),
+      needs: formatCheckValue(check.field, check.required),
+      before: source ? formatCheckValue(source.field, source.actual) : "Unknown",
+      beforeResult: source?.result ?? "unknown",
+      after: after ? formatCheckValue(check.field, result?.actual) : null,
+      result: check.result,
+    };
+  });
+}
+

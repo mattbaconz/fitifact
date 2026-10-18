@@ -35,27 +35,28 @@ open an issue or record it here.
 The current public candidate is `0.1.0-rc.6`: a Rust workspace containing the
 `fitifact` library, `fitifact-cli` binary, and `fitifact-wasm` bindings plus the
 D-026/D-028 static consumer image product. The `0.1.0-rc.1` freeze SHA remains the
-media-only D-020 boundary. Media still uses system `ffmpeg`/`ffprobe` from
-`PATH`; they are never bundled. Images use an in-process Rust provider and must
-not construct `FfmpegProvider`.
+media-only D-020 boundary. The CLI uses `ffmpeg`/`ffprobe` from `PATH`. The
+desktop app ships those binaries as sidecars (resolve env, then next to the
+executable, then PATH). Images use an in-process Rust provider and must
+not construct `FfmpegProvider`. ffmpeg.wasm is still forbidden.
 
 The executable adaptation catalog is deliberately small:
 
 - MP4/H.264/AAC that already satisfies the constraints is a no-op;
-- MOV/H.264/AAC can be remuxed to MP4 without re-encoding when bytes already pass;
-- MP4 or MOV HEVC/AAC can be transcoded to MP4/H.264/AAC while AAC is copied;
-- media `file.bytes` can be executed with an H.264 bitrate ladder and quality floor;
+- MOV/MKV/WebM H.264+AAC can be remuxed to MP4 without re-encoding when bytes already pass;
+- `matroska,webm` probes are WebM only when codecs are WebM-legal; H.264 in that probe is MKV;
+- HEVC/VP8/VP9/AV1 can be transcoded to MP4/H.264 while AAC is copied when present;
+- H.264 with a non-AAC soundtrack can encode audio to AAC and copy video;
+- audio-only files (MP3/WAV/FLAC/OGG/M4A) on size-only targets are a no-op when under the ceiling; otherwise AAC in MP4 with an audio bitrate ladder;
+- audio-only files aimed at a video target are refused;
+- media `file.bytes` and dimension limits can be executed with scale-to-fit plus an H.264 bitrate ladder and quality floor;
 - JPEG/PNG/still WebP that already satisfies the confirmed image target is a no-op;
 - JPEG/PNG/still WebP/TIFF/BMP/GIF/single-image HEIC can be adapted in-process
   under D-026/D-029 format, byte, dimension, crop, and first-frame constraints
   to JPEG or PNG, plus WebP when the confirmed target names it;
-- every mutation outside the frozen media matrix and D-026/D-028/D-029 image
-  contract is refused explicitly.
+- every mutation outside that catalog is refused explicitly.
 
-File-size constraints on media are executable via the H.264 bitrate ladder
-(D-030). Video-dimension constraints can be inspected and checked, but the
-media provider does not resize. The image provider executes only the bounded
-D-026 fitting pipeline. A provider returning success is not proof of
+A provider returning success is not proof of
 compatibility: every produced output must be re-inspected and validated against
 the same hard constraints.
 
@@ -66,14 +67,15 @@ policy is a YAML profile compiled to `ConstraintSet`; `plan.rs` must not match
 on destination names.
 
 Images beyond this still-image matrix, browser extensions, mobile
-shells, managed APIs/cloud execution, bundled FFmpeg, ffmpeg.wasm,
-registry publishing, OS signing, package-manager formulae, and
-telemetry/network activity are deferred. The public web app is static hosting
-only; it adds no server or upload path. A thin Tauri 2 host in `apps/desktop/`
-(D-031) reuses that UI plus the engine: still images in-process/WASM, MP4/MOV
-via system FFmpeg. The desktop crate is **not** a workspace member. Discord
-Nitro is declared in Setup, never detected (D-032). Design
-documents for deferred areas are not evidence of implementation.
+shells, managed APIs/cloud execution, ffmpeg.wasm, registry publishing, OS
+signing, package-manager formulae, and telemetry/network activity are
+deferred. The public web app is static hosting only; it adds no server or
+upload path. A thin Tauri 2
+host in `apps/desktop/` (D-031) reuses that UI plus the engine: still images
+in-process/WASM, MP4/MOV/WebM/MKV and common audio via shipped FFmpeg sidecars.
+The desktop crate is **not** a workspace member. Discord Nitro is declared in
+Setup, never detected (D-032). Design documents for deferred areas are not
+evidence of implementation.
 
 Distribution for v0.1 is GitHub-only from
 `https://github.com/mattbaconz/fitifact`. All Cargo packages remain
@@ -88,7 +90,8 @@ enterprise control-plane code belong in a separate private checkout if they are
 ever approved. Do not create that checkout from this repository.
 
 Local Fitifact performs no telemetry or network activity. Never add an implicit
-upload or make cloud execution a fallback.
+upload or make cloud execution a fallback. Building the desktop package (not
+the running app) may fetch FFmpeg once into `apps/desktop/src-tauri/binaries/`.
 
 ## Non-negotiable product invariants
 
@@ -121,6 +124,26 @@ FFmpeg/ffprobe as the media provider, `fitifact-wasm` plus a static drop-first
 web surface for the still-image matrix, and a thin Tauri 2 host in
 `apps/desktop/` that reuses that UI. The desktop package stays out of the
 workspace lockfile.
+
+Picture format, bit depth, and HDR are profile constraints like any other; only
+a video encode satisfies them, and HDR is tone-mapped to SDR only when the
+FFmpeg build has `zscale` and `tonemap` (otherwise the plan is refused). Each
+profile rule names a typed source (`official-doc`, `official-api`,
+`fitifact-rule`, `user-config`, ...), trust is derived from those types, and
+`web/public/registry.json` is generated from `profiles/` and checked by a
+golden test (`FITIFACT_BLESS=1 cargo test -p fitifact --lib registry`
+regenerates it).
+
+The public documentation site is a separate Next.js/Fumadocs static export in
+`apps/docs`. The Vite application remains at the root URL. `web`'s build merges
+the docs export at `/docs/` (including the configured Pages base path). Shared
+brand tokens and `ft-` components (see `DESIGN.md`), self-hosted fonts, and the
+local `fitifact.theme` preference keep both surfaces coherent. Documentation
+search is browser-local.
+
+Native adaptation requests carry operation identifiers. Cancellation uses an
+optional core token and cancellable process spawner; publication and cancellation
+share an atomic boundary so completed output is never falsely called cancelled.
 
 This is a recommendation, not an excuse to prematurely create 25 crates.
 

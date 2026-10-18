@@ -68,6 +68,8 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: Install locked web dependencies
         run: npm ci
+      - name: Install locked documentation dependencies
+        run: npm ci --prefix ../apps/docs
       - name: Install pinned browser engines
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Web lint and typecheck
@@ -173,7 +175,14 @@ jobs:
       - name: Install FFmpeg 7.1.1 on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install ffmpeg-full --version=7.1.1 --yes --no-progress
+        # The community feed returns intermittent 5xx; retry before failing.
+        run: |
+          foreach ($attempt in 1..3) {
+            choco install ffmpeg-full --version=7.1.1 --yes --no-progress
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
+          exit 1
       - name: Install Ubuntu FFmpeg package
         if: runner.os == 'Linux'
         run: |

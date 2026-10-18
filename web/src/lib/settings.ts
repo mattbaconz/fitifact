@@ -1,3 +1,4 @@
+import { readStored, writeStored, removeStored } from "./storage";
 const SETTINGS_KEY = "fitifact.settings.v1";
 const LAST_TARGET_KEY = "fitifact.last-target.v1";
 
@@ -20,7 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 function readJson(key: string): unknown {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = readStored(key);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -38,7 +39,7 @@ export function loadSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  writeStored(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export function loadLastTarget(): LastTarget | null {
@@ -60,9 +61,9 @@ export function loadLastTarget(): LastTarget | null {
 }
 
 export function saveLastTarget(target: LastTarget) {
-  localStorage.setItem(LAST_TARGET_KEY, JSON.stringify(target));
+  writeStored(LAST_TARGET_KEY, JSON.stringify(target));
 }
 
 export function clearLastTarget() {
-  localStorage.removeItem(LAST_TARGET_KEY);
+  removeStored(LAST_TARGET_KEY);
 }

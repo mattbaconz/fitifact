@@ -8,15 +8,17 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: "fitifact-dev-csp",
+        // The web build connects only to itself. The desktop webview also talks to
+        // its host over Tauri IPC, and the dev server needs inline styles and HMR.
+        name: "fitifact-csp",
         transformIndexHtml(html, ctx) {
-          if (!ctx.server) return html;
-          return html
-            .replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
-            .replace(
-              "connect-src 'self'",
-              "connect-src 'self' ipc: http://ipc.localhost ws: wss:",
-            );
+          const connect = ["'self'"];
+          if (env.TAURI_ENV_PLATFORM) connect.push("ipc:", "http://ipc.localhost");
+          if (ctx.server) connect.push("ws:", "wss:");
+          const out = html.replace("connect-src 'self'", `connect-src ${connect.join(" ")}`);
+          return ctx.server
+            ? out.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
+            : out;
         },
       },
     ],
