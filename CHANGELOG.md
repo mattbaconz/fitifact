@@ -59,6 +59,19 @@ All notable changes to Fitifact are documented here.
   source type, URL, and check date. The UI shows when a profile's rules were
   checked, each rule's source and age, and marks profiles older than 30 days
   as stale. Profile sources gain the `fitifact-rule` type; trust is derived.
+- `fitifact mcp` serves `list_destinations`, `inspect`, `check`, and `fit` to
+  AI clients over stdio (Model Context Protocol). `fit` validates every output
+  and saves it beside the original without replacing any file.
+- `file.base64_bytes` and `--max-base64-size` limit the base64-encoded size
+  that APIs accept inline; Fitifact fits the file under 3 × ⌊N ÷ 4⌋ bytes.
+- AI destinations: `anthropic/vision`, `anthropic/vision-cloud`,
+  `openai/vision`, and `openai/transcription`.
+- Every profile records its change history. The docs have a page per
+  destination with its rules, sources, and history, linked from the app's
+  provenance panel.
+- A weekly check confirms that each profile's quoted source sentences are
+  still published and opens a tracking issue when one changes or a profile
+  goes 30 days without re-verification.
 - `?for=<destination>` links preselect a destination.
 - Byte windows: `file.bytes` accepts `gte`, the requirements parser reads
   floors and ranges such as "20-50 KB", and JPEG fitting lands inside the
