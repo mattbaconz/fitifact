@@ -133,7 +133,7 @@ $freshnessRequirements = @(
     @{ Name = "manual runs report only by default"; Pattern = '(?ms)open_issue:.*?default: false' },
     @{ Name = "issue only from the schedule or an explicit request"; Pattern = "github\.event_name == 'schedule' \|\| inputs\.open_issue" },
     @{ Name = "read-only default token"; Pattern = '(?m)^permissions:\r?\n  contents: read\s*$' },
-    @{ Name = "checker tests"; Pattern = 'node --test scripts/' }
+    @{ Name = "checker tests"; Pattern = 'node --test "scripts/\*\.test\.mjs"' }
 )
 foreach ($requirement in $freshnessRequirements) {
     if ($freshnessWorkflow -notmatch $requirement.Pattern) {

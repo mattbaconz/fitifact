@@ -477,9 +477,7 @@ fn shipped_profile_yaml(id: &str) -> Option<&'static str> {
             "../../../profiles/anthropic/vision-cloud.yaml"
         )),
         "openai/vision" => Some(include_str!("../../../profiles/openai/vision.yaml")),
-        "openai/transcription" => Some(include_str!(
-            "../../../profiles/openai/transcription.yaml"
-        )),
+        "openai/transcription" => Some(include_str!("../../../profiles/openai/transcription.yaml")),
         _ => None,
     }
 }

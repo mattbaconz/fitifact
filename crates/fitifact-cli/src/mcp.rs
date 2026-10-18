@@ -68,7 +68,11 @@ pub fn serve(mut input: impl BufRead, mut output: impl Write) -> std::io::Result
 
 fn handle(message: &[u8]) -> Option<Value> {
     let Ok(message) = serde_json::from_slice::<Value>(message) else {
-        return Some(error_reply(Value::Null, PARSE_ERROR, "the message is not JSON"));
+        return Some(error_reply(
+            Value::Null,
+            PARSE_ERROR,
+            "the message is not JSON",
+        ));
     };
     let Value::Object(message) = message else {
         return Some(error_reply(
@@ -495,8 +499,7 @@ fn fit_image(
             "the adapted image was not produced",
         ));
     };
-    let written =
-        fitifact::write_sibling_output(path, extension(&plan.target.format), output)?;
+    let written = fitifact::write_sibling_output(path, extension(&plan.target.format), output)?;
     Ok(json!({
         "status": "adapted",
         "output": written,
@@ -635,8 +638,14 @@ mod tests {
             replies[0]["result"]["capabilities"],
             json!({ "tools": { "listChanged": false } })
         );
-        assert_eq!(replies[1], json!({ "jsonrpc": "2.0", "id": "p", "result": {} }));
-        assert_eq!(replies[2]["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
+        assert_eq!(
+            replies[1],
+            json!({ "jsonrpc": "2.0", "id": "p", "result": {} })
+        );
+        assert_eq!(
+            replies[2]["result"]["protocolVersion"],
+            PROTOCOL_VERSIONS[0]
+        );
     }
 
     #[test]
@@ -732,7 +741,10 @@ mod tests {
         ]));
         for reply in &replies {
             assert_eq!(reply["result"]["isError"], true);
-            assert_eq!(reply["result"]["structuredContent"]["code"], "INPUT_INVALID");
+            assert_eq!(
+                reply["result"]["structuredContent"]["code"],
+                "INPUT_INVALID"
+            );
         }
         assert!(
             replies[0]["result"]["content"][0]["text"]
@@ -758,7 +770,10 @@ mod tests {
             "fit",
             json!({ "path": input, "constraints": jpeg, "dry_run": true }),
         )]));
-        assert_eq!(planned[0]["result"]["structuredContent"]["status"], "planned");
+        assert_eq!(
+            planned[0]["result"]["structuredContent"]["status"],
+            "planned"
+        );
         assert!(!dir.join("shot.fitifact.jpg").exists());
 
         let fitted = exchange(&lines(&[
