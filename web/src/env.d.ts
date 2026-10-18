@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 declare const __FITIFACT_HEIC_APPROVED__: boolean;
+declare const __FITIFACT_VERSION__: string;
 
 declare module "*fitifact_wasm.js" {
   export default function init(): Promise<void>;

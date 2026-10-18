@@ -81,6 +81,14 @@ jobs:
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      # Pull requests plan without a tag. Also plan the tag a maintainer would push
+      # for the checked-in version, so a mismatch shows up before tagging.
+      - name: Plan the candidate tag
+        if: ${{ github.event.pull_request }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          dist plan --tag="v$version" --output-format=json > /dev/null
+          echo "dist plan --tag=v$version: PASS"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

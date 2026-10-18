@@ -2,7 +2,11 @@
 
 All notable changes to Fitifact are documented here.
 
-## [Unreleased] - after `0.1.0-rc.6`
+## [1.0.0-rc.1] - first 1.0 candidate
+
+1.0.0 replaces the planned 0.1.0 as the first stable version. Existing
+`v0.1.0-rc.1` through `v0.1.0-rc.5` tags stay where they are; `0.1.0-rc.6` was
+never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
 
 ### [fixed]
 
@@ -81,7 +85,7 @@ All notable changes to Fitifact are documented here.
 - Desktop app ships `ffmpeg`/`ffprobe` as sidecars so video and audio work
   without a PATH install. CLI still uses FFmpeg from PATH. ffmpeg.wasm stays
   forbidden. PDF, ZIP, Office, and SVG are refused in one sentence.
-- Windows desktop CI packages an unsigned NSIS installer (`desktop-windows` artifact). MSI is skipped because `0.1.0-rc.6` is not a valid MSI prerelease.
+- Windows desktop CI packages an unsigned NSIS installer (`desktop-windows` artifact). MSI is skipped because `1.0.0-rc.1` is not a valid MSI prerelease.
 - Desktop results offer **Copy file**: the validated output, or the untouched
   original when it already fits, goes on the Windows clipboard as a file, so it
   pastes into Discord, an email, or an Explorer folder as a copy.
@@ -90,6 +94,9 @@ All notable changes to Fitifact are documented here.
 
 ### [changed]
 
+- Version `1.0.0-rc.1` across Cargo, the web app, the desktop app, and the
+  docs. Settings reads the version from the web package, and a check fails
+  when any declared version differs from the Cargo workspace.
 - Results put measured properties and output actions first. Compatible files keep
   their original bytes and filename, and mobile results collapse the target picker.
 - Crop and first-frame removal require explicit approval for each file. Plans
