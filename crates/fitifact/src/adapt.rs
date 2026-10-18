@@ -463,21 +463,61 @@ fn default_output_with_limit(
             _ => "mp4",
         }
     };
+    for suffix in 1..=limit {
+        let candidate = sibling_name(input, ext, suffix);
+        if !occupied(&candidate) {
+            return Ok(candidate);
+        }
+    }
+    Err(Error::new(
+        ErrorCode::ExecutionFailed,
+        "could not allocate an unused default output name",
+    ))
+}
+
+fn sibling_name(input: &Path, ext: &str, suffix: u32) -> PathBuf {
     let stem = input
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("output");
     let parent = input.parent().unwrap_or_else(|| Path::new("."));
-    for suffix in 1..=limit {
-        let name = if suffix == 1 {
-            format!("{stem}.fitifact.{ext}")
-        } else {
-            format!("{stem}.fitifact.{suffix}.{ext}")
+    if suffix == 1 {
+        parent.join(format!("{stem}.fitifact.{ext}"))
+    } else {
+        parent.join(format!("{stem}.fitifact.{suffix}.{ext}"))
+    }
+}
+
+/// Writes validated bytes beside `input` as `{stem}.fitifact.{ext}`, then `.2.`, `.3.`, and
+/// so on. Creation is exclusive, so an existing file is never replaced.
+pub fn write_sibling_output(input: &Path, ext: &str, bytes: &[u8]) -> Result<PathBuf> {
+    use std::io::Write;
+
+    for suffix in 1..=10_000 {
+        let candidate = sibling_name(input, ext, suffix);
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(Error::new(
+                    ErrorCode::ExecutionFailed,
+                    format!("cannot create {}: {error}", candidate.display()),
+                ));
+            }
         };
-        let candidate = parent.join(name);
-        if !occupied(&candidate) {
-            return Ok(candidate);
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(&candidate);
+            return Err(Error::new(
+                ErrorCode::ExecutionFailed,
+                format!("cannot write {}: {error}", candidate.display()),
+            ));
         }
+        return Ok(candidate);
     }
     Err(Error::new(
         ErrorCode::ExecutionFailed,
@@ -1666,6 +1706,21 @@ mod tests {
         let path =
             default_output_with_limit(Path::new("photo.png"), &plan, None, 10, |_| false).unwrap();
         assert_eq!(path, PathBuf::from("photo.fitifact.jpg"));
+    }
+
+    #[test]
+    fn sibling_output_never_replaces_an_existing_file() {
+        let dir = test_dir("sibling-write");
+        let input = dir.join("shot.png");
+        let occupied = dir.join("shot.fitifact.jpg");
+        std::fs::write(&input, b"original").unwrap();
+        std::fs::write(&occupied, b"occupied").unwrap();
+        let written = write_sibling_output(&input, "jpg", b"new").unwrap();
+        assert_eq!(written, dir.join("shot.fitifact.2.jpg"));
+        assert_eq!(std::fs::read(&written).unwrap(), b"new");
+        assert_eq!(std::fs::read(&occupied).unwrap(), b"occupied");
+        assert_eq!(std::fs::read(&input).unwrap(), b"original");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

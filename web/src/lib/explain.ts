@@ -63,6 +63,8 @@ export function checkLabel(field: string): string {
       return "Height";
     case "file.bytes":
       return "File size";
+    case "file.base64_bytes":
+      return "Base64 size";
     case "media.container":
       return "File type";
     case "media.video.codec":
@@ -93,11 +95,12 @@ function numericToken(value: string): number | null {
 
 export function formatCheckValue(field: string, value: string | null | undefined): string {
   if (value == null || value === "") return "Unknown";
-  if (field === "file.bytes") {
+  if (field === "file.bytes" || field === "file.base64_bytes") {
     const n = numericToken(value);
     if (n != null) {
       const prefix = /^(<=|≤|gte|>=|≥)/.test(value.trim()) ? (value.trim().startsWith(">") || value.trim().startsWith("≥") ? "≥" : "≤") : "";
-      return `${prefix}${formatBytes(n)}`;
+      // Base64 limits count encoded characters, not file bytes.
+      return field === "file.bytes" ? `${prefix}${formatBytes(n)}` : `${prefix}${n.toLocaleString("en-US")} characters`;
     }
   }
   if (field === "image.format" || field === "media.container" || field === "media.video.codec" || field === "media.audio.codec") {
@@ -151,6 +154,9 @@ function problemForCheck(check: ConstraintCheck): string | null {
   if (check.field === "file.bytes") {
     const size = Number(check.actual) < Number(check.required) ? "small" : "large";
     return `The file is too ${size} (${formatCheckValue("file.bytes", check.actual)} vs ${formatCheckValue("file.bytes", check.required)})`;
+  }
+  if (check.field === "file.base64_bytes") {
+    return `The file is too large once base64-encoded (${formatCheckValue(check.field, check.actual)} vs ${formatCheckValue(check.field, check.required)})`;
   }
   if (check.field === "image.width" || check.field === "image.height") {
     return "The dimensions don't match";

@@ -8,13 +8,16 @@ const MIN_VIDEO_BPS: u64 = 80_000;
 const MIN_EDGE: u32 = 160;
 const SCALE_STEPS: u8 = 8;
 
+/// The raw byte ceiling, folding any base64 ceiling into its raw equivalent.
 pub fn file_bytes_limit(constraints: &ConstraintSet) -> Option<u64> {
     constraints
         .hard
         .iter()
-        .filter(|constraint| constraint.field == Field::FileBytes && constraint.op == Operator::Lte)
-        .filter_map(|constraint| match constraint.value {
-            ConstraintValue::Integer(value) => Some(value),
+        .filter(|constraint| constraint.op == Operator::Lte)
+        .filter_map(|constraint| match (constraint.field, &constraint.value) {
+            (Field::FileBytes, ConstraintValue::Integer(value)) => Some(*value),
+            // N base64 characters hold at most 3 * floor(N / 4) raw bytes.
+            (Field::FileBase64Bytes, ConstraintValue::Integer(value)) => Some(value / 4 * 3),
             _ => None,
         })
         .min()
@@ -278,5 +281,16 @@ mod tests {
     fn three_second_audio_fits_a_typical_upload_ceiling() {
         assert!(can_fit_audio(3_000, 40_000));
         assert!(!can_fit_audio(3_000, 2_000));
+    }
+
+    #[test]
+    fn file_bytes_limit_folds_a_base64_ceiling() {
+        let constraints = compile(ConstraintInput {
+            max_bytes: Some(2_000_000),
+            max_base64_bytes: Some(2_000_003),
+            ..ConstraintInput::default()
+        })
+        .unwrap();
+        assert_eq!(file_bytes_limit(&constraints), Some(1_500_000));
     }
 }

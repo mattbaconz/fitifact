@@ -64,3 +64,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Added Fitifact's picture rules (8-bit 4:2:0 SDR)."
+  - revision: 1
+    date: 2026-08-26
+    change: "First published."

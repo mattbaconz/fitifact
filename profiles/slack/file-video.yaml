@@ -56,7 +56,7 @@ sources:
     type: official-doc
     url: https://slack.com/help/articles/201330736-Add-files-to-Slack
     observed_at: 2026-10-17
-    note: "Files up to 1GB."
+    note: "\"You can add files up to 1GB in size.\""
   - id: src-fitifact-codec
     type: fitifact-rule
     observed_at: 2026-10-17
@@ -69,3 +69,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the MP4, H.264, and AAC requirement as a Fitifact rule, not a Slack limit."
+  - revision: 1
+    date: 2026-08-26
+    change: "First published."

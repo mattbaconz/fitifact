@@ -40,7 +40,17 @@ fitifact plan photo.png --constraints target.json --json
 fitifact adapt photo.png --constraints target.json --json
 ```
 
-The CLI refuses conflicting target sources. Do not combine `--constraints` with `--for` or individual hard-target flags. `MB` uses decimal bytes and `MiB` uses binary bytes.
+The CLI refuses conflicting target sources. Do not combine `--constraints` with `--for` or individual hard-target flags. `MB` uses decimal bytes and `MiB` uses binary bytes. `--max-base64-size` limits the base64-encoded length instead of the file size, for APIs that take files inline.
+
+`adapt` converts a PNG to JPEG in process but does not resize images or fit them to a byte limit. The browser app, the desktop app, and the MCP `fit` tool do.
+
+## Serve AI tools
+
+```sh
+fitifact mcp
+```
+
+This runs the Model Context Protocol server over stdio, for AI clients. See [AI tools (MCP)](../ai-tools/).
 
 ## Errors and reports
 

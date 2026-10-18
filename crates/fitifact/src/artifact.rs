@@ -118,6 +118,10 @@ impl Container {
             "mov" | "quicktime" | "qt" => Some(Self::Mov),
             "webm" => Some(Self::Webm),
             "mkv" | "matroska" => Some(Self::Mkv),
+            "mp3" => Some(Self::Mp3),
+            "wav" | "wave" => Some(Self::Wav),
+            "flac" => Some(Self::Flac),
+            "ogg" => Some(Self::Ogg),
             _ => None,
         }
     }

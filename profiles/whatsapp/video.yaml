@@ -36,3 +36,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Now follows WhatsApp's media FAQ: MKV, MOV, or MP4 up to 64 MB. Removed the H.264, AAC, and 1280-pixel rules, because WhatsApp re-encodes video itself."
+  - revision: 1
+    date: 2026-10-16
+    change: "First published."

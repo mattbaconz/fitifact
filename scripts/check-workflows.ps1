@@ -127,4 +127,21 @@ foreach ($requirement in $desktopRequirements) {
     }
 }
 
-Write-Host "GitHub YAML parse, action pins, publication gate, permissions, attestation order, single release creation, and SBOM scope: PASS ($($yamlFiles.Count) files)"
+$freshnessWorkflow = [IO.File]::ReadAllText((Join-Path $root ".github\workflows\source-freshness.yml"))
+$freshnessRequirements = @(
+    @{ Name = "weekly schedule"; Pattern = '(?m)^\s+- cron: "[^"]+ \* \* 1"\s*$' },
+    @{ Name = "manual runs report only by default"; Pattern = '(?ms)open_issue:.*?default: false' },
+    @{ Name = "issue only from the schedule or an explicit request"; Pattern = "github\.event_name == 'schedule' \|\| inputs\.open_issue" },
+    @{ Name = "read-only default token"; Pattern = '(?m)^permissions:\r?\n  contents: read\s*$' },
+    @{ Name = "checker tests"; Pattern = 'node --test scripts/' }
+)
+foreach ($requirement in $freshnessRequirements) {
+    if ($freshnessWorkflow -notmatch $requirement.Pattern) {
+        throw "Source freshness workflow is missing invariant: $($requirement.Name)"
+    }
+}
+if (([regex]::Matches($freshnessWorkflow, '(?m)^\s+issues: write\s*$')).Count -ne 1) {
+    throw "Source freshness workflow must grant issues write exactly once (the check job)"
+}
+
+Write-Host "GitHub YAML parse, action pins, publication gate, permissions, attestation order, single release creation, SBOM scope, and source freshness gate: PASS ($($yamlFiles.Count) files)"

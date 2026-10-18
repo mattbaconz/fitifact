@@ -40,3 +40,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Lowered the size limit from 50 MB to 20 MB, because Discord shares any image over 20 MB as a download on every plan. Marked the format list as a Fitifact rule."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

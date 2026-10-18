@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/sync-brand.mjs && next dev --port 3003",
-    "build": "node scripts/sync-brand.mjs && next build --webpack",
+    "dev": "node scripts/sync-brand.mjs && node ../../scripts/destination-pages.mjs && next dev --port 3003",
+    "build": "node scripts/sync-brand.mjs && node ../../scripts/destination-pages.mjs && next build --webpack",
     "lint": "tsc --noEmit",
     "postinstall": "fumadocs-mdx"
   },

@@ -76,6 +76,8 @@ jobs:
         run: npm run lint
       - name: Web unit tests and real HEIC decode
         run: npm test
+      - name: Site script tests
+        run: node --test ../scripts/
       - name: Default static build
         run: npm run build
       - name: Verify default artifact includes lazy HEIC decoder

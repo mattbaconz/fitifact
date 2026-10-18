@@ -1,0 +1,52 @@
+schema: fitifact.profile/v1
+id: anthropic/vision-cloud
+name: Claude image on Amazon Bedrock or Google Cloud
+revision: 1
+last_verified: 2026-10-18
+
+scope:
+  kind: api
+  platform: anthropic
+  feature: vision-cloud
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, gif, webp]
+    source: src-vision
+  - id: max-width
+    field: image.width
+    op: lte
+    value: 8000
+    source: src-vision
+  - id: max-height
+    field: image.height
+    op: lte
+    value: 8000
+    source: src-vision
+  - id: base64-bytes
+    field: file.base64_bytes
+    op: lte
+    value: 5000000
+    source: src-vision
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-vision
+    type: official-doc
+    url: https://platform.claude.com/docs/en/build-with-claude/vision
+    observed_at: 2026-10-18
+    note: "\"5 MB (base64-encoded) on Amazon Bedrock and Google Cloud.\" Fitifact uses 5000000 base64 characters, the smaller reading of MB. JPEG, PNG, GIF, and WebP; at most 8000x8000 px. A request with more than 20 images lowers every image's limit to 2000 px per side, which this one-image profile does not model."
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt
+
+history:
+  - revision: 1
+    date: 2026-10-18
+    change: "First published."

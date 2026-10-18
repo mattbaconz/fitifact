@@ -36,3 +36,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Added Google Workspace's sending limits as a second source. The 25 MB limit did not change."
+  - revision: 1
+    date: 2026-08-26
+    change: "First published."

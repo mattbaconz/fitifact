@@ -275,3 +275,44 @@ fn bench_json_reports_canonical_proofs() {
     assert_eq!(value["proofs"]["all_outcomes_matched"], true);
     assert_eq!(value["proofs"]["image_adapt_ffmpeg_spawns_zero"], true);
 }
+
+#[test]
+fn mcp_stdout_carries_only_protocol_replies() {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fitifact"))
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let image = std::env::temp_dir().join(format!("fitifact-mcp-{}.png", std::process::id()));
+    std::fs::write(&image, fitifact::sample_png_rgb(16, 16)).unwrap();
+    let requests = [
+        serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"contract","version":"0"}}}),
+        serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+        serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"check","arguments":{"path":image,"destination":"anthropic/vision"}}}),
+    ];
+    let mut stdin = child.stdin.take().unwrap();
+    for request in &requests {
+        writeln!(stdin, "{request}").unwrap();
+    }
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    let _ = std::fs::remove_file(&image);
+    assert!(output.status.success());
+    let replies: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(replies.len(), 3);
+    assert_eq!(replies[0]["result"]["serverInfo"]["name"], "fitifact");
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 4);
+    let check = &replies[2]["result"]["structuredContent"];
+    assert_eq!(check["compatible"], true);
+    assert_eq!(replies[2]["result"]["isError"], false);
+}

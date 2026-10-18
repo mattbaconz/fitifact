@@ -84,3 +84,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Size and dimensions now cite X's Help Center, and codecs and 4:2:0 color cite X's API docs. Added Fitifact's 8-bit SDR rules."
+  - revision: 1
+    date: 2026-10-16
+    change: "First published."

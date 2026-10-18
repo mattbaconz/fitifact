@@ -53,6 +53,8 @@ describe("human plan copy", () => {
     expect(checkLabel("image.format")).toBe("Format");
     expect(checkLabel("file.bytes")).toBe("File size");
     expect(formatCheckValue("file.bytes", "2000000")).toBe("2.00 MB");
+    expect(checkLabel("file.base64_bytes")).toBe("Base64 size");
+    expect(formatCheckValue("file.base64_bytes", "<= 10000000")).toBe("≤10,000,000 characters");
     expect(leftoverNote(["File must be"])).toBe("Not used: File must be.");
     expect(
       understoodNote({

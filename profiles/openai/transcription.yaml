@@ -1,0 +1,43 @@
+schema: fitifact.profile/v1
+id: openai/transcription
+name: OpenAI API transcription
+revision: 1
+last_verified: 2026-10-18
+
+scope:
+  kind: api
+  platform: openai
+  feature: transcription
+
+constraints:
+  - id: container
+    field: media.container
+    op: in
+    value: [mp3, mp4, wav, webm]
+    source: src-transcription
+  - id: bytes
+    field: file.bytes
+    op: lte
+    value: 25000000
+    source: src-transcription
+
+preferences:
+  preserve:
+    resolution: high
+    audio: high
+
+sources:
+  - id: src-transcription
+    type: official-doc
+    url: https://developers.openai.com/api/docs/guides/speech-to-text
+    observed_at: 2026-10-18
+    note: "\"Files can be up to 25 MB. Supported input formats are mp3, mp4, mpeg, mpga, m4a, wav, and webm.\" Fitifact uses 25000000 bytes, the smaller reading of MB, and reads m4a as MP4 and mpga as MP3. MPEG program streams are not modeled, so Fitifact refuses them rather than guess."
+
+tests:
+  - fixture: media/compatible-h264-aac.mp4
+    expect: compatible-or-adapt
+
+history:
+  - revision: 1
+    date: 2026-10-18
+    change: "First published."

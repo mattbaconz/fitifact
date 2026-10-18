@@ -20,3 +20,4 @@ fixtures/media/.generate-*
 /apps/docs/.next
 /apps/docs/out
 /apps/docs/.source
+/apps/docs/content/docs/destinations

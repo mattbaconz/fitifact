@@ -291,7 +291,7 @@ pub fn plan(
         {
             return cannot(vec![blocking(
                 BlockingCode::SizeFittingUnsupported,
-                ids_for(&initial, Field::FileBytes),
+                size_ids(&initial),
                 "the size limit is below the quality floor this encoder will use",
             )]);
         }
@@ -636,7 +636,7 @@ fn check_only_blocker(report: &CompatibilityReport) -> Option<BlockingReason> {
             ));
         }
     }
-    match report.failing_or_unknown(Field::FileBytes) {
+    match size_failure(report) {
         Some(check) if check.result == CheckResult::Unknown => {
             return Some(blocking(
                 BlockingCode::UnknownRequiredFact,
@@ -671,10 +671,10 @@ fn audio_mutation_blocker(
     artifact: &Artifact,
     report: &CompatibilityReport,
 ) -> Option<BlockingReason> {
-    if artifact.duration_ms.is_none() && report.failing_or_unknown(Field::FileBytes).is_some() {
+    if artifact.duration_ms.is_none() && size_failure(report).is_some() {
         return Some(blocking(
             BlockingCode::UnknownRequiredFact,
-            ids_for(report, Field::FileBytes),
+            size_ids(report),
             "cannot size-fit audio without a known duration",
         ));
     }
@@ -899,7 +899,7 @@ fn instantiate_remux(
         || video.width.is_none()
         || video.height.is_none()
         || artifact.duration_ms.is_none()
-        || report.failing_or_unknown(Field::FileBytes).is_some()
+        || size_failure(report).is_some()
         || report.failing_or_unknown(Field::MediaVideoCodec).is_some()
         || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
         || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
@@ -945,7 +945,7 @@ fn instantiate_transcode_audio_only(
     }
     let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec);
     let container_fail = report.failing_or_unknown(Field::MediaContainer);
-    let bytes_fail = report.failing_or_unknown(Field::FileBytes);
+    let bytes_fail = size_failure(report);
     if audio_fail.is_none() && container_fail.is_none() && bytes_fail.is_none() {
         return None;
     }
@@ -1023,7 +1023,7 @@ fn instantiate_transcode_audio(
         || video.height.is_none()
         || artifact.duration_ms.is_none()
         || report.failing_or_unknown(Field::MediaVideoCodec).is_some()
-        || report.failing_or_unknown(Field::FileBytes).is_some()
+        || size_failure(report).is_some()
         || report.failing_or_unknown(Field::MediaVideoWidth).is_some()
         || report.failing_or_unknown(Field::MediaVideoHeight).is_some()
         || !picture_failures(report).is_empty()
@@ -1098,7 +1098,7 @@ fn instantiate_transcode_video(
     }
 
     let codec_fail = report.failing_or_unknown(Field::MediaVideoCodec);
-    let bytes_fail = report.failing_or_unknown(Field::FileBytes);
+    let bytes_fail = size_failure(report);
     let width_fail = report.failing_or_unknown(Field::MediaVideoWidth);
     let height_fail = report.failing_or_unknown(Field::MediaVideoHeight);
     let audio_fail = report.failing_or_unknown(Field::MediaAudioCodec);
@@ -1273,7 +1273,7 @@ fn can_remux_instead(artifact: &Artifact, report: &CompatibilityReport) -> bool 
         && copyable_audio(artifact)
         && picture_failures(report).is_empty()
         && report.failing_or_unknown(Field::MediaVideoCodec).is_none()
-        && report.failing_or_unknown(Field::FileBytes).is_none()
+        && size_failure(report).is_none()
         && report.failing_or_unknown(Field::MediaVideoWidth).is_none()
         && report.failing_or_unknown(Field::MediaVideoHeight).is_none()
         && report.failing_or_unknown(Field::MediaAudioCodec).is_none()
@@ -1382,6 +1382,25 @@ fn transcode_expected_facts(width: u32, height: u32, has_audio: bool) -> Vec<Exp
         });
     }
     expected
+}
+
+/// Raw and base64 size ceilings both shrink the encoded bytes, so they fail together.
+fn size_failure(report: &CompatibilityReport) -> Option<&crate::check::ConstraintCheck> {
+    report
+        .failing_or_unknown(Field::FileBytes)
+        .or_else(|| report.failing_or_unknown(Field::FileBase64Bytes))
+}
+
+fn size_ids(report: &CompatibilityReport) -> Vec<String> {
+    report
+        .checks
+        .iter()
+        .filter(|check| {
+            matches!(check.field, Field::FileBytes | Field::FileBase64Bytes)
+                && check.result != CheckResult::Pass
+        })
+        .map(|check| check.constraint_id.clone())
+        .collect()
 }
 
 fn ids_for(report: &CompatibilityReport, field: Field) -> Vec<String> {

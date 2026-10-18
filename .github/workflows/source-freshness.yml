@@ -1,0 +1,55 @@
+name: Source freshness
+
+# Weekly check that each destination profile's sources still say what its rules quote.
+# Schedules run only on the default branch. A manual run reports only, unless asked to
+# open the tracking issue.
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      open_issue:
+        description: Open or update the tracking issue when something needs review
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check destination sources
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: web/.node-version
+      - name: Test the checker
+        run: node --test scripts/
+      - name: Check every cited source
+        id: check
+        run: node scripts/check-source-freshness.mjs --report "$RUNNER_TEMP/freshness.md"
+      - name: Open or update the tracking issue
+        if: steps.check.outputs.changed == 'true' && (github.event_name == 'schedule' || inputs.open_issue)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ runner.temp }}/freshness.md
+        run: |
+          gh label create source-freshness --repo "$GITHUB_REPOSITORY" --color FBCA04 \
+            --description "A destination source changed or a profile is stale" --force
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --label source-freshness --state open \
+            --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$REPORT"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label source-freshness \
+              --title "Destination sources need review" --body-file "$REPORT"
+          fi

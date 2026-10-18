@@ -56,7 +56,7 @@ sources:
     type: official-doc
     url: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
     observed_at: 2026-10-17
-    note: "Videos up to 10 MB on free plans (100 MB on paid plans) as .mp4, .mov, or .webm. This profile uses the free-plan ceiling."
+    note: "\"10MB for videos uploaded to a repository owned by a user or organization on a free GitHub plan\" (100 MB on paid plans), as .mp4, .mov, or .webm. This profile uses the free-plan ceiling."
   - id: src-fitifact-codec
     type: fitifact-rule
     observed_at: 2026-10-17
@@ -69,3 +69,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Accepts MOV and WebM as well as MP4, as GitHub documents. Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a GitHub limit."
+  - revision: 1
+    date: 2026-10-16
+    change: "First published."
