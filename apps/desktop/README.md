@@ -45,7 +45,7 @@ The UI build writes `web/dist`. Tauri bundles that, the YAML profiles under
 `profiles/`, and the FFmpeg sidecars with their notices. Unsigned Windows and
 macOS binaries will show OS warnings; see the
 [code signing policy](../../README.md#code-signing-policy).
-This RC packages NSIS only (`0.1.0-rc.6` is not a valid MSI prerelease).
+This RC packages NSIS only (`1.0.0-rc.1` is not a valid MSI prerelease).
 FFmpeg is a separate process with its own license; see
 [`FFMPEG-NOTICE.md`](FFMPEG-NOTICE.md).
 

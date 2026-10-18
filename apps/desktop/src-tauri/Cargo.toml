@@ -1,6 +1,6 @@
 [package]
 name = "fitifact-desktop"
-version = "0.1.0-rc.6"
+version = "1.0.0-rc.1"
 description = "Thin Tauri 2 host for the Fitifact compatibility engine"
 authors = ["Fitifact"]
 edition = "2021"

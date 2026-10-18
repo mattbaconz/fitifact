@@ -96,7 +96,7 @@ export function SettingsDrawer({ session }: { session: FitifactSession }) {
           <h3>About Fitifact</h3>
           <p>Your file stays on this device. Nothing is uploaded.</p>
           <p className="helper">
-            Version 0.1.0-rc.6 · Images are processed locally.{" "}
+            Version {__FITIFACT_VERSION__} · Images are processed locally.{" "}
             {desktop
               ? "Video and audio use FFmpeg shipped with this app."
               : "Video and audio use the desktop app."}
