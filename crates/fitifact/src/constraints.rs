@@ -12,6 +12,9 @@ pub const MAX_CONSTRAINT_BYTES: usize = 1024 * 1024;
 pub enum Field {
     #[serde(rename = "file.bytes")]
     FileBytes,
+    /// Length of the file once base64-encoded, for APIs that cap the encoded payload.
+    #[serde(rename = "file.base64_bytes")]
+    FileBase64Bytes,
     #[serde(rename = "file.family")]
     FileFamily,
     #[serde(rename = "media.container")]
@@ -50,6 +53,7 @@ impl Field {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FileBytes => "file.bytes",
+            Self::FileBase64Bytes => "file.base64_bytes",
             Self::FileFamily => "file.family",
             Self::MediaContainer => "media.container",
             Self::MediaVideoCodec => "media.video.codec",
@@ -150,6 +154,8 @@ pub struct ConstraintInput {
     pub audio_codec: Option<Vec<String>>,
     pub family: Option<String>,
     pub max_bytes: Option<u64>,
+    #[serde(default)]
+    pub max_base64_bytes: Option<u64>,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
     pub image_format: Option<Vec<String>>,
@@ -171,6 +177,7 @@ impl Default for ConstraintInput {
             audio_codec: None,
             family: None,
             max_bytes: None,
+            max_base64_bytes: None,
             max_width: None,
             max_height: None,
             image_format: None,
@@ -230,6 +237,14 @@ pub fn compile(input: ConstraintInput) -> Result<ConstraintSet> {
             field: Field::FileBytes,
             op: Operator::Lte,
             value: ConstraintValue::Integer(max_bytes),
+        });
+    }
+    if let Some(max_base64_bytes) = input.max_base64_bytes {
+        hard.push(Constraint {
+            id: "max-base64-bytes".into(),
+            field: Field::FileBase64Bytes,
+            op: Operator::Lte,
+            value: ConstraintValue::Integer(max_base64_bytes),
         });
     }
     if let Some(max_width) = input.max_width {
@@ -365,6 +380,8 @@ fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
         }
         (Field::FileBytes, Operator::Lte | Operator::Gte, ConstraintValue::Integer(value))
             if *value > 0 => {}
+        // Four characters is the smallest non-empty base64 payload.
+        (Field::FileBase64Bytes, Operator::Lte, ConstraintValue::Integer(value)) if *value >= 4 => {}
         (
             Field::MediaVideoWidth | Field::MediaVideoHeight,
             Operator::Lte,
@@ -447,7 +464,7 @@ fn reject_conflicts(constraints: &[Constraint]) -> Result<()> {
         }
         let conflict = if matches!(
             field,
-            Field::ImageWidth | Field::ImageHeight | Field::FileBytes
+            Field::ImageWidth | Field::ImageHeight | Field::FileBytes | Field::FileBase64Bytes
         ) {
             numeric_range_conflicts(&group)
         } else {

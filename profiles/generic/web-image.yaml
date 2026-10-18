@@ -34,3 +34,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Sources re-checked; no limit changed."
+  - revision: 1
+    date: 2026-08-26
+    change: "First published."

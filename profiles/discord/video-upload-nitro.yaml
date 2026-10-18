@@ -75,3 +75,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Raised the size limit from 500 MB to 1 GB, as Discord's FAQ states. Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a Discord limit."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

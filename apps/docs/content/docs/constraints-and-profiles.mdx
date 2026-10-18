@@ -13,7 +13,9 @@ Account tiers and upload surfaces can differ. Set your own Discord cap in Settin
 
 Every rule in a shipped profile names its source: the destination's official help page or API docs, a Fitifact rule, or a starter value. Fitifact rules are its own conservative choices, such as encoding 8-bit SDR H.264 so a video plays everywhere; they are labeled as Fitifact's, never as the destination's. A profile's trust follows from those sources rather than being declared.
 
-Under the current requirements, **Rules checked** shows when the profile was last verified against its sources and lists each rule with its source and age. A profile not re-checked within 30 days is marked **Stale**; verify its limits before relying on them. The same data is published as `registry.json` at the site root.
+Under the current requirements, **Rules checked** shows when the profile was last verified against its sources and lists each rule with its source and age. A profile not re-checked within 30 days is marked **Stale**; verify its limits before relying on them. The same data is published as `registry.json` at the site root, and [Destinations](../destinations/) has a page for each profile with its rules, sources, and change history.
+
+Each source note quotes the sentences its rules rest on. A weekly check fetches every source page and opens a tracking issue when a quoted sentence disappears or a profile goes 30 days without re-verification. A changed limit becomes a new profile revision with a change history entry.
 
 ## Hard constraints and preferences
 
@@ -24,6 +26,8 @@ Fitifact ranks supported plans to minimize semantic loss, lossy operations, stre
 ## Size and dimensions
 
 `2 MB` means 2,000,000 bytes. `2 MiB` means 2,097,152 bytes. The size editor accepts either unit or an exact byte count. A number without a unit means bytes. Values that would produce a fraction of a byte are refused instead of rounded.
+
+APIs that take a file inline as base64 limit the encoded text rather than the file. A `file.base64_bytes` rule checks that length, about a third more than the file size; see [Base64 size](../ai-tools/#base64-size).
 
 Some forms require a size window, such as a 20–50 KB photo. Fitifact fits JPEG quality into the window and refuses when no quality lands inside it. It never pads a file to reach a minimum, so a file that is already too small is refused.
 

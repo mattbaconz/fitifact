@@ -867,3 +867,26 @@ fn a_floor_the_jpeg_cannot_reach_is_refused_after_encoding() {
     assert_eq!(error.code, ErrorCode::NoValidPlan);
     assert!(error.message.contains("does not pad"));
 }
+
+#[test]
+fn base64_ceiling_fits_the_encoded_payload() {
+    let input = noisy_jpeg(256, 256, 95);
+    let limit = input.len() as u64;
+    let target = constraints(serde_json::json!([
+        {"id":"format","field":"image.format","op":"in","value":["jpeg"]},
+        {"id":"b64","field":"file.base64_bytes","op":"lte","value":limit}
+    ]));
+    let plan = plan_for(&input, &target);
+    assert!(!plan.noop, "raw bytes pass but the base64 text does not");
+    let result = execute_image_adaptation(
+        &input,
+        &target,
+        &plan,
+        &ImageAdaptOptions::default(),
+        &NeverCancelled,
+    )
+    .unwrap();
+    let encoded = (result.output.as_ref().unwrap().len() as u64).div_ceil(3) * 4;
+    assert!(encoded <= limit);
+    assert!(result.report.compatible);
+}

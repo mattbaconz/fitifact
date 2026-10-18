@@ -40,3 +40,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Marked the JPEG, PNG, and WebP list as a Fitifact rule, because Discord's FAQ names no image formats. The 20 MB inline limit was re-checked."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

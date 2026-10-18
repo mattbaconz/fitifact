@@ -27,7 +27,7 @@ export interface ErrorReport {
 
 export interface Constraint {
   id: string;
-  field: "image.format" | "image.width" | "image.height" | "file.bytes" | "file.family";
+  field: "image.format" | "image.width" | "image.height" | "file.bytes" | "file.base64_bytes" | "file.family";
   op: "eq" | "in" | "lte" | "gte";
   value: string | number | string[];
 }

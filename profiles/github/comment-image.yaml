@@ -30,8 +30,16 @@ sources:
     type: official-doc
     url: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
     observed_at: 2026-10-17
-    note: "Images and GIFs up to 10 MB in issues, pull requests, and comments. Supported image types are PNG, GIF, JPEG, and SVG; Fitifact cannot produce SVG, and WebP is not listed."
+    note: "\"10MB for images and gifs\" in issues, pull requests, and comments. Supported image types are PNG, GIF, JPEG, and SVG; Fitifact cannot produce SVG, and WebP is not listed."
 
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Formats narrowed to GIF, JPEG, and PNG, the image types GitHub lists for attachments; WebP was removed."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

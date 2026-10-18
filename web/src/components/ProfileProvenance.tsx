@@ -8,6 +8,7 @@ import {
   STALE_AFTER_DAYS,
   TRUST_LABEL,
 } from "../lib/registry";
+import { publicDocsHref } from "../lib/docs-url";
 
 export function ProfileProvenance({ profileId }: { profileId: string | null }) {
   const profile = registryProfile(profileId);
@@ -23,7 +24,8 @@ export function ProfileProvenance({ profileId }: { profileId: string | null }) {
         {TRUST_LABEL[profile.trust] ?? profile.trust}
         {stale
           ? ` Not re-checked in over ${STALE_AFTER_DAYS} days, so verify these limits before relying on them.`
-          : ""}
+          : ""}{" "}
+        <a href={`${publicDocsHref()}destinations/${profile.id}/`}>Sources and change history</a>
       </p>
       <ul>
         {profile.rules.map((rule) => (

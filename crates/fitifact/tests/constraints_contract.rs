@@ -245,3 +245,48 @@ fn picture_constraints_accept_only_closed_vocabularies() {
         input_error(&yaml(hard));
     }
 }
+
+#[test]
+fn base64_size_accepts_only_a_ceiling_of_at_least_one_quantum() {
+    let ceiling = compile_from_yaml(&yaml(
+        "  - id: b64
+    field: file.base64_bytes
+    op: lte
+    value: 10000000
+",
+    ))
+    .unwrap();
+    assert_eq!(fitifact::file_bytes_limit(&ceiling), Some(7_500_000));
+    for hard in [
+        "  - id: b64
+    field: file.base64_bytes
+    op: gte
+    value: 8
+",
+        "  - id: b64
+    field: file.base64_bytes
+    op: eq
+    value: 8
+",
+        "  - id: b64
+    field: file.base64_bytes
+    op: lte
+    value: 3
+",
+    ] {
+        input_error(&yaml(hard));
+    }
+}
+
+#[test]
+fn audio_containers_are_valid_constraint_values() {
+    let target = compile_from_yaml(&yaml(
+        "  - id: container
+    field: media.container
+    op: in
+    value: [WAV, mp3, mp4]
+",
+    ))
+    .unwrap();
+    assert_eq!(target.hard[0].value.as_text_list(), ["mp3", "mp4", "wav"]);
+}

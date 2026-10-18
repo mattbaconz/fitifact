@@ -1,0 +1,42 @@
+schema: fitifact.profile/v1
+id: openai/vision
+name: OpenAI API image
+revision: 1
+last_verified: 2026-10-18
+
+scope:
+  kind: api
+  platform: openai
+  feature: vision
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, gif, webp]
+    source: src-vision
+  - id: base64-bytes
+    field: file.base64_bytes
+    op: lte
+    value: 512000000
+    source: src-vision
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-vision
+    type: official-doc
+    url: https://developers.openai.com/api/docs/guides/images-vision
+    observed_at: 2026-10-18
+    note: "File types: PNG, JPEG, WEBP, and non-animated GIF; \"Up to 512 MB total payload per request\". The cap covers the whole request, so a base64 image must fit under it with room for the rest. Fitifact keeps only the first frame of an animated GIF, with consent. Pixel limits depend on the model and detail level and are applied by resizing, so this profile does not flatten them."
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt
+
+history:
+  - revision: 1
+    date: 2026-10-18
+    change: "First published."

@@ -40,3 +40,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Formats are now GIF, JPEG, and PNG, as X's Help Center lists; WebP was removed. Added the X API docs as a second source."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

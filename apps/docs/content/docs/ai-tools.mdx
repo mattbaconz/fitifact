@@ -1,0 +1,74 @@
+---
+title: AI tools (MCP)
+description: Let an AI assistant inspect, check, and fit local files through the Model Context Protocol.
+---
+
+## What it does
+
+`fitifact mcp` runs Fitifact as a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. An AI client that supports MCP can then call four tools:
+
+| Tool | What it does | Writes files |
+| --- | --- | --- |
+| `list_destinations` | Lists the destinations Fitifact knows, with each requirement. Pass `id` for one destination's sources and notes. | No |
+| `inspect` | Reads a file's real format, codecs, dimensions, and size, not its extension. | No |
+| `check` | Checks a file against a destination or a constraint document and says what fails. | No |
+| `fit` | Makes the smallest change that fits, validates the result against the same requirements, and saves it beside the original. | A new file only |
+
+The server runs on your computer and makes no network requests, so files are never uploaded. Paths must be absolute, because the server's working directory is not the client's.
+
+## Connect a client
+
+Install the CLI from [GitHub Releases](https://github.com/mattbaconz/fitifact/releases) and put `fitifact` on your PATH. Video and audio also need `ffmpeg` and `ffprobe` on PATH; images do not.
+
+In Claude Code:
+
+```sh
+claude mcp add fitifact -- fitifact mcp
+```
+
+In clients that read an `mcpServers` configuration, such as Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "fitifact": { "command": "fitifact", "args": ["mcp"] }
+  }
+}
+```
+
+## How fit decides
+
+- A file that already fits is left alone. The result says `compatible`, and nothing is written.
+- Otherwise Fitifact plans the smallest change. Pass `dry_run: true` to see the plan without writing anything.
+- The output is inspected again and checked against the same requirements before it is saved as `name.fitifact.ext` beside the original, then `name.fitifact.2.ext`, and so on. An existing file is never overwritten, and the original is never changed.
+- Some image changes need the user's approval: keeping only the first frame of an animated GIF, or cropping to an exact shape. The result says `consent_required` and what to approve. Ask the user, then call `fit` again with `first_frame_consent: true`, or with `crop` and `crop_consent: true`.
+- When no supported plan fits, the result says `cannot_satisfy` and why. That is an answer, not an error.
+
+Every result has `status`, `output` (the saved file, or null), `summary`, and `details`, plus the full report. Images are resized, re-encoded, and fitted to a byte limit in process, the same way as in the browser app. Video and audio use FFmpeg, as in the [CLI](../cli/).
+
+## AI destinations
+
+| Destination | For | What Fitifact checks |
+| --- | --- | --- |
+| `anthropic/vision` | Images sent to the Claude API | JPEG, PNG, GIF, or WebP; at most 8000 × 8000 pixels; base64 text at most 10,000,000 characters |
+| `anthropic/vision-cloud` | Claude on Amazon Bedrock or Google Cloud | The same formats and pixels; base64 text at most 5,000,000 characters |
+| `openai/vision` | Images sent to the OpenAI API | JPEG, PNG, WebP, or GIF; base64 text within the 512 MB request limit |
+| `openai/transcription` | Audio sent to OpenAI transcription | MP3, MP4 (including M4A), WAV, or WebM; at most 25,000,000 bytes |
+
+Each rule links to the provider's documentation; `list_destinations` with an `id` returns the link and notes. Where a provider states "10 MB", Fitifact uses the smaller reading, 10,000,000. Limits that depend on the model, or on how many images one request carries, are not modeled, and the notes say so.
+
+## Base64 size
+
+APIs that take a file inline as base64 limit the encoded text, which is about a third larger than the file. The `file.base64_bytes` rule checks that length: a file of _n_ bytes encodes to 4 × ⌈_n_ ÷ 3⌉ characters. To meet a ceiling of _N_ characters, Fitifact fits the file under 3 × ⌊_N_ ÷ 4⌋ bytes, so 10,000,000 characters allows 7,500,000 bytes.
+
+In a constraint document:
+
+```json
+{ "id": "inline", "field": "file.base64_bytes", "op": "lte", "value": 5000000 }
+```
+
+From the CLI, `--max-base64-size` sets the same rule:
+
+```sh
+fitifact check screenshot.png --max-base64-size 5MB
+```

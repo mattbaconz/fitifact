@@ -893,3 +893,36 @@ fn core_planner_does_not_special_case_destinations() {
         assert!(!src.contains(needle), "{needle} must not appear in plan.rs");
     }
 }
+
+#[test]
+fn a_base64_ceiling_plans_its_raw_equivalent() {
+    let artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        2_500_000,
+    );
+    let target = |max_base64_bytes| {
+        compile(ConstraintInput {
+            container: Some(vec!["mp4".into()]),
+            video_codec: Some(vec!["h264".into()]),
+            audio_codec: Some(vec!["aac".into()]),
+            max_bytes: Some(3_000_000),
+            max_base64_bytes: Some(max_base64_bytes),
+            ..ConstraintInput::default()
+        })
+        .unwrap()
+    };
+    let outcome = plan(&artifact, &target(2_000_000), &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert_eq!(step.target.max_bytes, Some(1_500_000));
+    assert_eq!(step.reasons[0].constraint_id, "max-base64-bytes");
+
+    let outcome = plan(&artifact, &target(1_000), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::SizeFittingUnsupported]
+    );
+    assert_eq!(outcome.blocking()[0].constraint_ids, ["max-base64-bytes"]);
+}

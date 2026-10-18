@@ -1,6 +1,18 @@
 {
   "profiles": [
     {
+      "history": [
+        {
+          "change": "Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a Discord limit.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "discord/video-upload",
       "last_verified": "2026-10-17",
       "name": "Discord free video upload",
@@ -115,6 +127,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a Discord limit.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "discord/video-upload-nitro-basic",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro Basic video upload",
@@ -236,6 +260,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Raised the size limit from 500 MB to 1 GB, as Discord's FAQ states. Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a Discord limit.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "discord/video-upload-nitro",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro video upload",
@@ -357,6 +393,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Marked the JPEG, PNG, and WebP list as a Fitifact rule, because Discord's FAQ names no image formats. The 20 MB inline limit was re-checked.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "discord/image-upload",
       "last_verified": "2026-10-17",
       "name": "Discord free image upload",
@@ -406,6 +454,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Lowered the size limit from 50 MB to 20 MB, because Discord shares any image over 20 MB as a download on every plan. Marked the format list as a Fitifact rule.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "discord/image-upload-nitro-basic",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro Basic image upload",
@@ -455,6 +515,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Lowered the size limit from 500 MB to 20 MB, because Discord shares any image over 20 MB as a download on every plan. Marked the format list as a Fitifact rule.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "discord/image-upload-nitro",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro image upload",
@@ -504,6 +576,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Sources re-checked; no limit changed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "discord/file-upload",
       "last_verified": "2026-10-17",
       "name": "Discord free file upload",
@@ -532,6 +616,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Sources re-checked; no limit changed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "discord/file-upload-nitro-basic",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro Basic file upload",
@@ -560,6 +656,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Raised the size limit from 500 MB to 1 GB, as Discord's FAQ states.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "discord/file-upload-nitro",
       "last_verified": "2026-10-17",
       "name": "Discord Nitro file upload",
@@ -588,6 +696,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Added Google Workspace's sending limits as a second source. The 25 MB limit did not change.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "gmail/attachment",
       "last_verified": "2026-10-17",
       "name": "Gmail attachment",
@@ -623,6 +743,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Formats narrowed to GIF, JPEG, and PNG, the image types GitHub lists for attachments; WebP was removed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "github/comment-image",
       "last_verified": "2026-10-17",
       "name": "GitHub comment image",
@@ -656,7 +788,7 @@
       "sources": [
         {
           "id": "src-attach",
-          "note": "Images and GIFs up to 10 MB in issues, pull requests, and comments. Supported image types are PNG, GIF, JPEG, and SVG; Fitifact cannot produce SVG, and WebP is not listed.",
+          "note": "\"10MB for images and gifs\" in issues, pull requests, and comments. Supported image types are PNG, GIF, JPEG, and SVG; Fitifact cannot produce SVG, and WebP is not listed.",
           "observed_at": "2026-10-17",
           "type": "official-doc",
           "url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files"
@@ -665,6 +797,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "The cited WhatsApp page no longer shows a photo limit, so the 16 MB rule is kept but unverified.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "whatsapp/photo",
       "last_verified": "2026-08-28",
       "name": "WhatsApp photo",
@@ -705,6 +849,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Formats are now GIF, JPEG, and PNG, as X's Help Center lists; WebP was removed. Added the X API docs as a second source.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "x/image",
       "last_verified": "2026-10-17",
       "name": "X image",
@@ -754,6 +910,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Added a 24,999-pixel limit on each side, because Slack shows an image inline only when its longest side is under 25,000 pixels.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-29",
+          "revision": 1
+        }
+      ],
       "id": "slack/file-image",
       "last_verified": "2026-10-17",
       "name": "Slack file image",
@@ -808,7 +976,7 @@
       "sources": [
         {
           "id": "src-files",
-          "note": "Files up to 1GB. An image previews inline only if it is smaller than 25,000 pixels on the longest side and less than 45 million pixels in total; Fitifact enforces the edge limit but cannot yet check the pixel total.",
+          "note": "\"You can add files up to 1GB in size.\" An image preview \"will only display inline if it's smaller than 25,000 pixels on the longest side, and less than 45 million pixels total\"; Fitifact enforces the edge limit but cannot yet check the pixel total.",
           "observed_at": "2026-10-17",
           "type": "official-doc",
           "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
@@ -824,6 +992,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the MP4, H.264, and AAC requirement as a Fitifact rule, not a Slack limit.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "slack/file-video",
       "last_verified": "2026-10-17",
       "name": "Slack file video",
@@ -915,7 +1095,7 @@
       "sources": [
         {
           "id": "src-files",
-          "note": "Files up to 1GB.",
+          "note": "\"You can add files up to 1GB in size.\"",
           "observed_at": "2026-10-17",
           "type": "official-doc",
           "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
@@ -938,6 +1118,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Sources re-checked; no limit changed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "slack/file-upload",
       "last_verified": "2026-10-17",
       "name": "Slack file upload",
@@ -957,7 +1149,7 @@
       "sources": [
         {
           "id": "src-files",
-          "note": "Files up to 1GB. Playback rules are extra and undocumented here.",
+          "note": "\"You can add files up to 1GB in size.\" Playback rules are extra and undocumented here.",
           "observed_at": "2026-10-17",
           "type": "official-doc",
           "url": "https://slack.com/help/articles/201330736-Add-files-to-Slack"
@@ -966,6 +1158,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Sources re-checked; no limit changed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "jpeg/photo-upload",
       "last_verified": "2026-10-17",
       "name": "JPEG photo upload",
@@ -1006,6 +1210,18 @@
       "trust": "starter"
     },
     {
+      "history": [
+        {
+          "change": "Added Fitifact's picture rules (8-bit 4:2:0 SDR).",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "generic/video-upload",
       "last_verified": "2026-10-17",
       "name": "Generic H.264 MP4 video upload",
@@ -1113,6 +1329,18 @@
       "trust": "starter"
     },
     {
+      "history": [
+        {
+          "change": "Sources re-checked; no limit changed.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-08-26",
+          "revision": 1
+        }
+      ],
       "id": "generic/web-image",
       "last_verified": "2026-10-17",
       "name": "Generic web image",
@@ -1155,6 +1383,18 @@
       "trust": "starter"
     },
     {
+      "history": [
+        {
+          "change": "Now follows WhatsApp's media FAQ: MKV, MOV, or MP4 up to 64 MB. Removed the H.264, AAC, and 1280-pixel rules, because WhatsApp re-encodes video itself.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "whatsapp/video",
       "last_verified": "2026-10-17",
       "name": "WhatsApp video",
@@ -1197,6 +1437,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Raised the limit from 16 MB to 2 GB: WhatsApp states no separate audio cap, so the documents limit applies.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "whatsapp/audio",
       "last_verified": "2026-10-17",
       "name": "WhatsApp audio",
@@ -1225,6 +1477,18 @@
       "trust": "documented"
     },
     {
+      "history": [
+        {
+          "change": "Size and dimensions now cite X's Help Center, and codecs and 4:2:0 color cite X's API docs. Added Fitifact's 8-bit SDR rules.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "x/video",
       "last_verified": "2026-10-17",
       "name": "X video",
@@ -1366,6 +1630,18 @@
       "trust": "documented-with-rules"
     },
     {
+      "history": [
+        {
+          "change": "Accepts MOV and WebM as well as MP4, as GitHub documents. Added Fitifact's picture rules (8-bit 4:2:0 SDR) and marked the H.264 and AAC requirement as a Fitifact rule, not a GitHub limit.",
+          "date": "2026-10-17",
+          "revision": 2
+        },
+        {
+          "change": "First published.",
+          "date": "2026-10-16",
+          "revision": 1
+        }
+      ],
       "id": "github/comment-video",
       "last_verified": "2026-10-17",
       "name": "GitHub comment video",
@@ -1459,7 +1735,7 @@
       "sources": [
         {
           "id": "src-attach",
-          "note": "Videos up to 10 MB on free plans (100 MB on paid plans) as .mp4, .mov, or .webm. This profile uses the free-plan ceiling.",
+          "note": "\"10MB for videos uploaded to a repository owned by a user or organization on a free GitHub plan\" (100 MB on paid plans), as .mp4, .mov, or .webm. This profile uses the free-plan ceiling.",
           "observed_at": "2026-10-17",
           "type": "official-doc",
           "url": "https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files"
@@ -1480,6 +1756,246 @@
         }
       ],
       "trust": "documented-with-rules"
+    },
+    {
+      "history": [
+        {
+          "change": "First published.",
+          "date": "2026-10-18",
+          "revision": 1
+        }
+      ],
+      "id": "anthropic/vision",
+      "last_verified": "2026-10-18",
+      "name": "Claude API image",
+      "revision": 1,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-18",
+          "op": "in",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": [
+            "jpeg",
+            "png",
+            "gif",
+            "webp"
+          ]
+        },
+        {
+          "field": "image.width",
+          "id": "max-width",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 8000
+        },
+        {
+          "field": "image.height",
+          "id": "max-height",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 8000
+        },
+        {
+          "field": "file.base64_bytes",
+          "id": "base64-bytes",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 10000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-vision",
+          "note": "\"10 MB (base64-encoded) when using the Claude API directly.\" The limit is on the base64 text, so the raw file must be about a quarter smaller; Fitifact uses 10000000 characters, the smaller reading of MB. JPEG, PNG, GIF, and WebP; at most 8000x8000 px. A request with more than 20 images lowers every image's limit to 2000 px per side, which this one-image profile does not model.",
+          "observed_at": "2026-10-18",
+          "type": "official-doc",
+          "url": "https://platform.claude.com/docs/en/build-with-claude/vision"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "history": [
+        {
+          "change": "First published.",
+          "date": "2026-10-18",
+          "revision": 1
+        }
+      ],
+      "id": "anthropic/vision-cloud",
+      "last_verified": "2026-10-18",
+      "name": "Claude image on Amazon Bedrock or Google Cloud",
+      "revision": 1,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-18",
+          "op": "in",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": [
+            "jpeg",
+            "png",
+            "gif",
+            "webp"
+          ]
+        },
+        {
+          "field": "image.width",
+          "id": "max-width",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 8000
+        },
+        {
+          "field": "image.height",
+          "id": "max-height",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 8000
+        },
+        {
+          "field": "file.base64_bytes",
+          "id": "base64-bytes",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://platform.claude.com/docs/en/build-with-claude/vision",
+          "value": 5000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-vision",
+          "note": "\"5 MB (base64-encoded) on Amazon Bedrock and Google Cloud.\" Fitifact uses 5000000 base64 characters, the smaller reading of MB. JPEG, PNG, GIF, and WebP; at most 8000x8000 px. A request with more than 20 images lowers every image's limit to 2000 px per side, which this one-image profile does not model.",
+          "observed_at": "2026-10-18",
+          "type": "official-doc",
+          "url": "https://platform.claude.com/docs/en/build-with-claude/vision"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "history": [
+        {
+          "change": "First published.",
+          "date": "2026-10-18",
+          "revision": 1
+        }
+      ],
+      "id": "openai/vision",
+      "last_verified": "2026-10-18",
+      "name": "OpenAI API image",
+      "revision": 1,
+      "rules": [
+        {
+          "field": "image.format",
+          "id": "format",
+          "observed_at": "2026-10-18",
+          "op": "in",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://developers.openai.com/api/docs/guides/images-vision",
+          "value": [
+            "jpeg",
+            "png",
+            "gif",
+            "webp"
+          ]
+        },
+        {
+          "field": "file.base64_bytes",
+          "id": "base64-bytes",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-vision",
+          "source_type": "official-doc",
+          "source_url": "https://developers.openai.com/api/docs/guides/images-vision",
+          "value": 512000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-vision",
+          "note": "File types: PNG, JPEG, WEBP, and non-animated GIF; \"Up to 512 MB total payload per request\". The cap covers the whole request, so a base64 image must fit under it with room for the rest. Fitifact keeps only the first frame of an animated GIF, with consent. Pixel limits depend on the model and detail level and are applied by resizing, so this profile does not flatten them.",
+          "observed_at": "2026-10-18",
+          "type": "official-doc",
+          "url": "https://developers.openai.com/api/docs/guides/images-vision"
+        }
+      ],
+      "trust": "documented"
+    },
+    {
+      "history": [
+        {
+          "change": "First published.",
+          "date": "2026-10-18",
+          "revision": 1
+        }
+      ],
+      "id": "openai/transcription",
+      "last_verified": "2026-10-18",
+      "name": "OpenAI API transcription",
+      "revision": 1,
+      "rules": [
+        {
+          "field": "media.container",
+          "id": "container",
+          "observed_at": "2026-10-18",
+          "op": "in",
+          "source": "src-transcription",
+          "source_type": "official-doc",
+          "source_url": "https://developers.openai.com/api/docs/guides/speech-to-text",
+          "value": [
+            "mp3",
+            "mp4",
+            "wav",
+            "webm"
+          ]
+        },
+        {
+          "field": "file.bytes",
+          "id": "bytes",
+          "observed_at": "2026-10-18",
+          "op": "lte",
+          "source": "src-transcription",
+          "source_type": "official-doc",
+          "source_url": "https://developers.openai.com/api/docs/guides/speech-to-text",
+          "value": 25000000
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-transcription",
+          "note": "\"Files can be up to 25 MB. Supported input formats are mp3, mp4, mpeg, mpga, m4a, wav, and webm.\" Fitifact uses 25000000 bytes, the smaller reading of MB, and reads m4a as MP4 and mpga as MP3. MPEG program streams are not modeled, so Fitifact refuses them rather than guess.",
+          "observed_at": "2026-10-18",
+          "type": "official-doc",
+          "url": "https://developers.openai.com/api/docs/guides/speech-to-text"
+        }
+      ],
+      "trust": "documented"
     }
   ],
   "schema": "fitifact.registry/v1"

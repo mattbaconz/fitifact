@@ -31,3 +31,11 @@ sources:
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Raised the limit from 16 MB to 2 GB: WhatsApp states no separate audio cap, so the documents limit applies."
+  - revision: 1
+    date: 2026-10-16
+    change: "First published."

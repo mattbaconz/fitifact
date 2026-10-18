@@ -25,7 +25,9 @@ pub mod requirements;
 pub mod runtime;
 pub mod validate;
 
-pub use adapt::{AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, adapt};
+pub use adapt::{
+    AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, adapt, write_sibling_output,
+};
 pub use artifact::{
     Artifact, AudioCodec, AudioStream, Container, Family, ImageFacts, ImageFormat, VideoCodec,
     VideoStream,

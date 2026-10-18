@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::constraints::{
     Constraint, ConstraintSet, ConstraintValue, Field, Operator, Preferences,
@@ -36,6 +36,16 @@ struct ProfileDocument {
     preferences: Option<ProfilePreferences>,
     #[serde(default)]
     sources: Vec<ProfileSource>,
+    #[serde(default)]
+    history: Vec<ProfileChange>,
+}
+
+/// One published revision of a profile, listed newest first.
+#[derive(Debug, Deserialize, Serialize)]
+struct ProfileChange {
+    revision: u64,
+    date: String,
+    change: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,6 +223,20 @@ fn parse_profile(text: &str) -> Result<ProfileDocument> {
             format!("profile source type '{kind}' is not recognized"),
         ));
     }
+    let mut newer = None;
+    for entry in &profile.history {
+        let in_order = match newer {
+            None => entry.revision == profile.revision,
+            Some(newer) => entry.revision < newer,
+        };
+        if !in_order || entry.date.trim().is_empty() || entry.change.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InputInvalid,
+                "profile history must list revisions newest first, starting at the current revision, each with a date and a change",
+            ));
+        }
+        newer = Some(entry.revision);
+    }
     Ok(profile)
 }
 
@@ -299,6 +323,7 @@ pub fn shipped_registry_json() -> Result<String> {
             "trust": derived_trust(&profile),
             "rules": rules,
             "sources": sources,
+            "history": profile.history,
         }));
     }
     let registry = serde_json::json!({
@@ -392,6 +417,10 @@ pub fn shipped_profile_ids() -> &'static [&'static str] {
         "whatsapp/audio",
         "x/video",
         "github/comment-video",
+        "anthropic/vision",
+        "anthropic/vision-cloud",
+        "openai/vision",
+        "openai/transcription",
     ]
 }
 
@@ -443,6 +472,14 @@ fn shipped_profile_yaml(id: &str) -> Option<&'static str> {
         "whatsapp/audio" => Some(include_str!("../../../profiles/whatsapp/audio.yaml")),
         "x/video" => Some(include_str!("../../../profiles/x/video.yaml")),
         "github/comment-video" => Some(include_str!("../../../profiles/github/comment-video.yaml")),
+        "anthropic/vision" => Some(include_str!("../../../profiles/anthropic/vision.yaml")),
+        "anthropic/vision-cloud" => Some(include_str!(
+            "../../../profiles/anthropic/vision-cloud.yaml"
+        )),
+        "openai/vision" => Some(include_str!("../../../profiles/openai/vision.yaml")),
+        "openai/transcription" => Some(include_str!(
+            "../../../profiles/openai/transcription.yaml"
+        )),
         _ => None,
     }
 }
@@ -656,6 +693,28 @@ constraints:
             ),
             Some(8_000_000)
         );
+        // Base64 ceilings fold into the raw ceiling: 3 bytes per 4 characters.
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("anthropic/vision").unwrap()
+            ),
+            Some(7_500_000)
+        );
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(
+                &compile_shipped_profile("anthropic/vision-cloud").unwrap()
+            ),
+            Some(3_750_000)
+        );
+        let transcription = compile_shipped_profile("openai/transcription").unwrap();
+        assert_eq!(
+            crate::media_fit::file_bytes_limit(&transcription),
+            Some(25_000_000)
+        );
+        assert!(transcription.hard.iter().any(|item| {
+            item.field == Field::MediaContainer
+                && item.value.as_text_list() == ["mp3", "mp4", "wav", "webm"]
+        }));
     }
 
     #[test]
@@ -678,6 +737,28 @@ constraints:
     }
 
     #[test]
+    fn every_shipped_profile_records_its_change_history() {
+        for id in shipped_profile_ids() {
+            let profile = parse_profile(shipped_profile_yaml(id).unwrap()).unwrap();
+            let oldest = profile.history.last().map(|entry| entry.revision);
+            assert_eq!(oldest, Some(1), "{id} history must reach revision 1");
+        }
+    }
+
+    #[test]
+    fn rejects_history_that_skips_the_current_revision() {
+        let base = "schema: fitifact.profile/v1\nid: example/x\nname: Example\nrevision: 2\nlast_verified: 2026-10-17\nscope:\n  kind: web-upload\nconstraints:\n  - field: file.bytes\n    op: lte\n    value: 10\n    source: docs\nsources:\n  - id: docs\n    type: official-doc\n    url: https://example.invalid\n    observed_at: 2026-10-17\nhistory:\n";
+        let newer = "  - revision: 2\n    date: 2026-10-17\n    change: Raised the cap.\n";
+        let first = "  - revision: 1\n    date: 2026-08-26\n    change: First published.\n";
+        let valid = format!("{base}{newer}{first}");
+        assert!(compile_profile_yaml(&valid).is_ok());
+        let missing_current = format!("{base}{first}");
+        assert!(compile_profile_yaml(&missing_current).is_err());
+        let oldest_first = format!("{base}{first}{newer}");
+        assert!(compile_profile_yaml(&oldest_first).is_err());
+    }
+
+    #[test]
     fn rejects_an_unknown_source_type() {
         let yaml = "schema: fitifact.profile/v1\nid: example/x\nname: Example\nrevision: 1\nlast_verified: 2026-10-17\nscope:\n  kind: web-upload\nconstraints:\n  - field: file.bytes\n    op: lte\n    value: 10\n    source: docs\nsources:\n  - id: docs\n    type: rumor\n    url: https://example.invalid\n    observed_at: 2026-10-17\n";
         assert!(compile_profile_yaml(yaml).is_err());
@@ -689,6 +770,7 @@ constraints:
         assert_eq!(trust("gmail/attachment"), "documented");
         assert_eq!(trust("discord/video-upload"), "documented-with-rules");
         assert_eq!(trust("generic/video-upload"), "starter");
+        assert_eq!(trust("anthropic/vision"), "documented");
     }
 
     #[cfg(not(target_arch = "wasm32"))]

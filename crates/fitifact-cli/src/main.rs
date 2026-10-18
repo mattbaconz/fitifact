@@ -16,6 +16,8 @@ use fitifact::{
     load_profile, plan, resolve_fixtures, run_bench,
 };
 
+mod mcp;
+
 #[derive(Parser)]
 #[command(
     name = "fitifact",
@@ -74,6 +76,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Serve inspect, check, fit, and list_destinations to an AI client over stdio (MCP).
+    Mcp,
     /// Time the canonical v0.1 demo scenarios and print a report.
     Bench {
         #[arg(long)]
@@ -97,6 +101,13 @@ struct TargetArgs {
     image_format: Option<String>,
     #[arg(long = "max-size", value_name = "BYTES|MB|MiB", value_parser = parse_size_arg)]
     max_size: Option<u64>,
+    /// Ceiling on the base64-encoded length, for APIs that limit the encoded payload.
+    #[arg(
+        long = "max-base64-size",
+        value_name = "BYTES|MB|MiB",
+        value_parser = parse_size_arg
+    )]
+    max_base64_size: Option<u64>,
     #[arg(long = "max-width")]
     max_width: Option<u32>,
     #[arg(long = "max-height")]
@@ -109,6 +120,7 @@ struct TargetArgs {
             "audio_codec",
             "image_format",
             "max_size",
+            "max_base64_size",
             "max_width",
             "max_height",
             "for"
@@ -125,6 +137,7 @@ struct TargetArgs {
             "audio_codec",
             "image_format",
             "max_size",
+            "max_base64_size",
             "max_width",
             "max_height",
             "constraints"
@@ -176,6 +189,9 @@ fn run(cli: Cli) -> Result<ExitCode, CliError> {
             }
         }
         Command::Doctor { json } => doctor_cmd(json),
+        Command::Mcp => mcp::serve(std::io::stdin().lock(), std::io::stdout().lock())
+            .map(|()| ExitCode::SUCCESS)
+            .map_err(|error| CliError::usage(format!("the MCP connection failed: {error}"))),
         Command::Bench {
             json,
             fixtures,
@@ -267,39 +283,12 @@ fn adapt_cmd(
     timeout_seconds: u64,
 ) -> Result<ExitCode, CliError> {
     let constraints = load_constraints(&target)?;
-    let inspector = DefaultInspector::default();
-    let artifact = inspect(file, &inspector).map_err(CliError::engine)?;
-    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
-    let outcome = plan(&artifact, &constraints, &catalog);
-    let ffmpeg;
-    let image;
-    let provider: Option<&dyn TransformProvider> = match outcome
-        .plan()
-        .and_then(|plan| plan.steps.first())
-        .map(|step| step.operation)
-    {
-        Some(TransformId::EncodeJpeg) => {
-            image = ImageProvider;
-            Some(&image)
-        }
-        Some(_) => {
-            ffmpeg = FfmpegProvider::<SystemSpawner>::default();
-            Some(&ffmpeg)
-        }
-        None => None,
-    };
-    let result = adapt(AdaptRequest {
-        input: file,
+    let result = adapt_file(
+        file,
         constraints,
         output,
-        catalog: Some(&catalog),
-        inspector: &inspector,
-        provider,
-        execution: ExecutionContext {
-            timeout: Duration::from_secs(timeout_seconds),
-            temp_dir: None,
-        },
-    })
+        Duration::from_secs(timeout_seconds),
+    )
     .map_err(CliError::engine)?;
     if json {
         println!(
@@ -333,6 +322,49 @@ fn adapt_cmd(
             Some(fitifact::ErrorCode::ProviderMissing) => ExitCode::from(5),
             Some(fitifact::ErrorCode::SecurityBlocked) => ExitCode::from(7),
             _ => ExitCode::from(5),
+        },
+    })
+}
+
+/// Plans, loads only the provider that plan needs, then adapts and validates. Shared by
+/// `adapt` and the MCP `fit` tool.
+fn adapt_file(
+    file: &Path,
+    constraints: ConstraintSet,
+    output: Option<PathBuf>,
+    timeout: Duration,
+) -> Result<fitifact::AdaptationResult, fitifact::Error> {
+    let inspector = DefaultInspector::default();
+    let artifact = inspect(file, &inspector)?;
+    let catalog = fitifact::ffmpeg::catalog_for(&artifact);
+    let outcome = plan(&artifact, &constraints, &catalog);
+    let ffmpeg;
+    let image;
+    let provider: Option<&dyn TransformProvider> = match outcome
+        .plan()
+        .and_then(|plan| plan.steps.first())
+        .map(|step| step.operation)
+    {
+        Some(TransformId::EncodeJpeg) => {
+            image = ImageProvider;
+            Some(&image)
+        }
+        Some(_) => {
+            ffmpeg = FfmpegProvider::<SystemSpawner>::default();
+            Some(&ffmpeg)
+        }
+        None => None,
+    };
+    adapt(AdaptRequest {
+        input: file,
+        constraints,
+        output,
+        catalog: Some(&catalog),
+        inspector: &inspector,
+        provider,
+        execution: ExecutionContext {
+            timeout,
+            temp_dir: None,
         },
     })
 }
@@ -523,6 +555,7 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
         && target.audio_codec.is_none()
         && target.image_format.is_none()
         && target.max_size.is_none()
+        && target.max_base64_size.is_none()
         && target.max_width.is_none()
         && target.max_height.is_none()
     {
@@ -536,6 +569,7 @@ fn load_constraints(target: &TargetArgs) -> Result<ConstraintSet, CliError> {
         audio_codec: target.audio_codec.clone().map(|v| vec![v]),
         image_format: target.image_format.clone().map(|v| vec![v]),
         max_bytes: target.max_size,
+        max_base64_bytes: target.max_base64_size,
         max_width: target.max_width,
         max_height: target.max_height,
         ..ConstraintInput::default()

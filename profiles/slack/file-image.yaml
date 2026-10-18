@@ -40,7 +40,7 @@ sources:
     type: official-doc
     url: https://slack.com/help/articles/201330736-Add-files-to-Slack
     observed_at: 2026-10-17
-    note: "Files up to 1GB. An image previews inline only if it is smaller than 25,000 pixels on the longest side and less than 45 million pixels in total; Fitifact enforces the edge limit but cannot yet check the pixel total."
+    note: "\"You can add files up to 1GB in size.\" An image preview \"will only display inline if it's smaller than 25,000 pixels on the longest side, and less than 45 million pixels total\"; Fitifact enforces the edge limit but cannot yet check the pixel total."
   - id: src-fitifact-image
     type: fitifact-rule
     observed_at: 2026-10-17
@@ -49,3 +49,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Added a 24,999-pixel limit on each side, because Slack shows an image inline only when its longest side is under 25,000 pixels."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."

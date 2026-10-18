@@ -1,0 +1,52 @@
+schema: fitifact.profile/v1
+id: anthropic/vision
+name: Claude API image
+revision: 1
+last_verified: 2026-10-18
+
+scope:
+  kind: api
+  platform: anthropic
+  feature: vision
+
+constraints:
+  - id: format
+    field: image.format
+    op: in
+    value: [jpeg, png, gif, webp]
+    source: src-vision
+  - id: max-width
+    field: image.width
+    op: lte
+    value: 8000
+    source: src-vision
+  - id: max-height
+    field: image.height
+    op: lte
+    value: 8000
+    source: src-vision
+  - id: base64-bytes
+    field: file.base64_bytes
+    op: lte
+    value: 10000000
+    source: src-vision
+
+preferences:
+  preserve:
+    resolution: high
+
+sources:
+  - id: src-vision
+    type: official-doc
+    url: https://platform.claude.com/docs/en/build-with-claude/vision
+    observed_at: 2026-10-18
+    note: "\"10 MB (base64-encoded) when using the Claude API directly.\" The limit is on the base64 text, so the raw file must be about a quarter smaller; Fitifact uses 10000000 characters, the smaller reading of MB. JPEG, PNG, GIF, and WebP; at most 8000x8000 px. A request with more than 20 images lowers every image's limit to 2000 px per side, which this one-image profile does not model."
+
+tests:
+  - fixture: image/compatible-jpeg.jpg
+    expect: compatible-or-adapt
+
+history:
+  - revision: 1
+    date: 2026-10-18
+    change: "First published."

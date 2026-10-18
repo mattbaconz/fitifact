@@ -151,9 +151,15 @@ impl ConstraintValue {
     }
 }
 
+/// Padded base64 length: every started group of 3 bytes becomes 4 characters.
+pub fn base64_len(bytes: u64) -> u64 {
+    bytes.div_ceil(3).saturating_mul(4)
+}
+
 fn fact(artifact: &Artifact, field: Field) -> Option<Fact> {
     match field {
         Field::FileBytes => Some(Fact::Int(artifact.byte_length)),
+        Field::FileBase64Bytes => Some(Fact::Int(base64_len(artifact.byte_length))),
         Field::FileFamily => Some(Fact::Text(artifact.family.as_str().to_string())),
         Field::MediaContainer => artifact
             .container
@@ -345,5 +351,23 @@ mod tests {
         })
         .unwrap();
         assert!(check(&artifact, &constraints).compatible);
+    }
+
+    #[test]
+    fn base64_size_is_the_padded_encoded_length() {
+        assert_eq!(base64_len(0), 0);
+        assert_eq!(base64_len(1), 4);
+        assert_eq!(base64_len(3), 4);
+        assert_eq!(base64_len(4), 8);
+        assert_eq!(base64_len(7_500_000), 10_000_000);
+        let target = compile(ConstraintInput {
+            max_base64_bytes: Some(8),
+            ..ConstraintInput::default()
+        })
+        .unwrap();
+        let mut artifact = Artifact::audio(Container::Mp3, AudioCodec::Mp3, 6);
+        assert!(check(&artifact, &target).compatible);
+        artifact.byte_length = 7;
+        assert!(!check(&artifact, &target).compatible);
     }
 }

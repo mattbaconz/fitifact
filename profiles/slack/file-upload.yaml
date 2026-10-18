@@ -26,8 +26,16 @@ sources:
     type: official-doc
     url: https://slack.com/help/articles/201330736-Add-files-to-Slack
     observed_at: 2026-10-17
-    note: "Files up to 1GB. Playback rules are extra and undocumented here."
+    note: "\"You can add files up to 1GB in size.\" Playback rules are extra and undocumented here."
 
 tests:
   - fixture: media/compatible-h264-aac.mp4
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "Sources re-checked; no limit changed."
+  - revision: 1
+    date: 2026-10-16
+    change: "First published."

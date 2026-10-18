@@ -35,3 +35,11 @@ sources:
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
+
+history:
+  - revision: 2
+    date: 2026-10-17
+    change: "The cited WhatsApp page no longer shows a photo limit, so the 16 MB rule is kept but unverified."
+  - revision: 1
+    date: 2026-08-29
+    change: "First published."
