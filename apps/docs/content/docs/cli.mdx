@@ -31,6 +31,13 @@ fitifact adapt clip.mov --for discord/video-upload --json
 
 Fitifact preserves the original and validates the produced output against the same constraints used for planning. If the file already meets the target, it is returned unchanged.
 
+```sh
+fitifact adapt clip.mov --for discord/video-upload --dry-run --json
+fitifact adapt clip.mov --for discord/video-upload -o clip-for-discord.mp4
+```
+
+`--dry-run` returns the plan and writes nothing. The output is a new file beside the original, such as `clip.fitifact.mp4`; `-o` picks another new path, and an existing path is refused. `--timeout-seconds` bounds the transform, from 1 to 86400 seconds (default 1800).
+
 ## Supply exact constraints
 
 Use a confirmed `fitifact.constraints/v1` document, including one exported from the image app:
@@ -39,6 +46,8 @@ Use a confirmed `fitifact.constraints/v1` document, including one exported from 
 fitifact plan photo.png --constraints target.json --json
 fitifact adapt photo.png --constraints target.json --json
 ```
+
+Without a document or a destination, give the hard targets one by one: `--container`, `--video-codec`, `--audio-codec`, `--image-format`, `--max-size`, `--max-base64-size`, `--max-width`, and `--max-height`.
 
 The CLI refuses conflicting target sources. Do not combine `--constraints` with `--for` or individual hard-target flags. `MB` uses decimal bytes and `MiB` uses binary bytes. `--max-base64-size` limits the base64-encoded length instead of the file size, for APIs that take files inline.
 
@@ -51,6 +60,14 @@ fitifact mcp
 ```
 
 This runs the Model Context Protocol server over stdio, for AI clients. See [AI tools (MCP)](../ai-tools/).
+
+## Benchmark
+
+```sh
+fitifact bench --json
+```
+
+Times the canonical scenarios on the repository's fixtures: a no-op, a remux, an HEVC transcode, a JPEG no-op, and a PNG encode, with proof of which tools ran. Run it from the repository root, or point `--fixtures` at the media fixtures folder.
 
 ## Errors and reports
 

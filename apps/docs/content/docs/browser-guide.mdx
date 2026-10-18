@@ -5,7 +5,7 @@ description: From a local photo to a checked result, without an upload.
 
 ## Choose a source
 
-Drop one image or use **Choose file**. You can try the sample scenarios before choosing your own: an unchanged PNG, a PNG-to-JPEG format change, and a square crop requiring approval.
+Drop one image or use **Choose a file**. You can try the sample scenarios before choosing your own: an unchanged PNG, a PNG-to-JPEG format change, and a square crop requiring approval.
 
 The source summary shows the inspected format, dimensions, and size. The extension alone is not proof of the format. If a replacement is rejected, your valid source remains available.
 
@@ -14,6 +14,8 @@ The source summary shows the inspected format, dimensions, and size. The extensi
 Choose a destination, a saved target, or **Custom**. Destination preferences such as your Discord upload cap are declared in Settings; Fitifact does not detect your subscription.
 
 A link can preselect the destination: add `?for=` with `discord`, `gmail`, `github`, `whatsapp`, `x`, `slack`, `web-image`, or `web-video` to the app address. The next file you add uses that destination.
+
+Under a destination, **Rules checked** shows when each rule was last verified and where it comes from, with a link to that destination's [sources and change history](../destinations/). Rules not re-checked in 30 days carry a warning.
 
 Custom requirements are parsed automatically. Review the understood rules and any text that was ignored. Ambiguous or contradictory rules need correction before you can adapt.
 
@@ -25,15 +27,17 @@ Use **Edit requirements** to inspect exact byte and dimension limits. Changing r
 
 ## Review a plan
 
+The plan lists each requirement with what it needs and what your file has, marked **Pass** or **Fail**, then **Needs to change**, **The minimum change**, and **Will be preserved**. Choose **Adapt and download** to run it: the download starts only after the output passes validation, and nothing is saved if it fails. A file that needs no approval takes three steps: add it, choose a destination, and choose **Adapt and download**.
+
 The plan separates the necessary changes from what will be preserved. Metadata can be removed when an image is re-encoded; this is provider behavior, not an invented destination requirement. Byte limits may require lower quality or smaller dimensions. Upscaling cannot restore missing detail.
 
 A crop removes edges. First-frame extraction discards extra frames or pages. Both require explicit approval for the current file; they are never silently enabled by a saved preference.
 
 ## Use the result
 
-The result starts with its measured properties, validation status, and download action. Expand **Validation details** to see the individual checks. Download the report and confirmed constraints as JSON if you need to inspect or reproduce the decision.
+The result shows **Adapted and verified**, each requirement measured before and after, the original and the output side by side, and what changed, why, and what was kept. The download button saves the validated file. **Copy** and **Share** appear where the browser can hand over that exact file. **Download report JSON** and **Download constraints JSON** export the decision, so you can inspect it or reuse the requirements with the CLI's `--constraints`.
 
-An already compatible file offers the original bytes and original filename. Adapted downloads can add a `.fitifact` suffix, controlled in Settings.
+A file that already fits shows **Already compatible. Nothing changed.** and **Use original**, which keeps the original bytes and filename. Adapted downloads can add a `.fitifact` suffix, controlled in Settings. Settings also holds your destination preferences and the appearance: light, dark, or the system setting.
 
 ## Save a target
 

@@ -12,7 +12,7 @@ If your file already fits, **nothing changes**. You keep the original bytes and 
 1. Open Fitifact and choose a photo, or try one of the sample scenarios.
 2. Choose its destination. If you have an upload rejection or precise rules, choose **Custom** and paste them.
 3. Review **Needs to change**, **Will be preserved**, and any warnings. Approve a crop or first-frame extraction only if you want it.
-4. Choose **Adapt file**. When validation passes, download the result. An unchanged file offers **Use original** instead.
+4. Choose **Adapt and download**. The download starts only after the result passes validation. In the desktop app, video and audio use **Adapt and save**, which saves the result beside the original. An unchanged file offers **Use original** instead.
 
 Your original is preserved. Files are processed on your device; nothing is uploaded to Fitifact.
 
@@ -23,6 +23,9 @@ Your original is preserved. Files are processed on your device; nothing is uploa
 | Browser     | A single photo or still-image output      | Local Rust/WASM worker                      |
 | Desktop     | Photos, video, and audio from local paths | Shared UI, Rust engine, native FFmpeg tools |
 | CLI         | Scripts and inspectable JSON reports      | Rust engine with FFmpeg/ffprobe on PATH     |
+| AI client   | An assistant that checks and fits files   | [`fitifact mcp`](./ai-tools/) over stdio    |
+
+Every destination's rules, sources, and change history are on its [destination page](./destinations/).
 
 The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC. Video and audio require desktop or CLI. Browser inputs are limited to 32 MiB and 24 megapixels. Some files may need explicit first-frame approval or may be refused.
 
