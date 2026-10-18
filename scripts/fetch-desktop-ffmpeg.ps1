@@ -11,6 +11,17 @@ $pinnedVersion = "9.0.2"
 $pinnedUrl = "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip"
 $pinnedSha256 = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"
 
+# Windows PowerShell started from PowerShell 7 (npm run sidecar in a pwsh shell,
+# as in CI) inherits a module path that cannot load Get-FileHash, so hash with .NET.
+function Get-Sha256([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        return -join ([Security.Cryptography.SHA256]::Create().ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-RustHostTriple {
     $line = rustc -vV | Select-String -Pattern '^host: ' | Select-Object -First 1
     if (-not $line) { throw "rustc did not report a host triple" }
@@ -50,18 +61,19 @@ if ($present) {
 $work = Join-Path $env:TEMP "fitifact-ffmpeg-sidecar"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $zip = Join-Path $work (Split-Path -Leaf $pinnedUrl)
-if (-not (Test-Path -LiteralPath $zip) -or (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $pinnedSha256) {
+if (-not (Test-Path -LiteralPath $zip) -or (Get-Sha256 $zip) -ne $pinnedSha256) {
     Write-Host "Downloading FFmpeg $pinnedVersion essentials for $triple"
     Invoke-WebRequest -Uri $pinnedUrl -OutFile $zip
 }
-$actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+$actual = Get-Sha256 $zip
 if ($actual -ne $pinnedSha256) {
     Remove-Item -LiteralPath $zip -Force
     throw "FFmpeg archive SHA-256 mismatch: expected $pinnedSha256, got $actual"
 }
 $extract = Join-Path $work "extract"
 if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
-Expand-Archive -LiteralPath $zip -DestinationPath $extract
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[IO.Compression.ZipFile]::ExtractToDirectory($zip, $extract)
 $build = Join-Path $extract ([IO.Path]::GetFileNameWithoutExtension($pinnedUrl))
 Copy-Item -LiteralPath (Join-Path $build "bin\ffmpeg.exe") -Destination $ffmpegDest -Force
 Copy-Item -LiteralPath (Join-Path $build "bin\ffprobe.exe") -Destination $ffprobeDest -Force
