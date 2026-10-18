@@ -67,9 +67,9 @@ Cargo, web, desktop, and docs are at `1.0.0-rc.1`, the first 1.0 candidate.
 
 Named destinations load from local YAML via `--for` (for example
 `fitifact adapt clip.webm --for discord/video-upload`). Shipped presets cover
-Discord, Gmail, WhatsApp, Slack, X, GitHub, a typical web image, and a typical
-web video, plus size-only file uploads for sound and AI APIs (Anthropic and
-OpenAI vision, OpenAI transcription). Each destination's
+Discord, Gmail, WhatsApp, Slack, X, GitHub, a typical web image, a typical web
+video, size-only file uploads for sound, and AI APIs (Anthropic and OpenAI
+vision, OpenAI transcription). Each destination's
 [page](https://mattbaconz.github.io/fitifact/docs/destinations/) lists its
 rules, sources, and change history, and a weekly check flags sources that
 change. The browser image provider
