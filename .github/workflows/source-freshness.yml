@@ -33,7 +33,7 @@ jobs:
         with:
           node-version-file: web/.node-version
       - name: Test the checker
-        run: node --test scripts/
+        run: node --test "scripts/*.test.mjs"
       - name: Check every cited source
         id: check
         run: node scripts/check-source-freshness.mjs --report "$RUNNER_TEMP/freshness.md"

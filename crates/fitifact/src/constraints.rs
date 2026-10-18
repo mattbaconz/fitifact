@@ -381,7 +381,8 @@ fn normalize_constraint(constraint: &mut Constraint) -> Result<()> {
         (Field::FileBytes, Operator::Lte | Operator::Gte, ConstraintValue::Integer(value))
             if *value > 0 => {}
         // Four characters is the smallest non-empty base64 payload.
-        (Field::FileBase64Bytes, Operator::Lte, ConstraintValue::Integer(value)) if *value >= 4 => {}
+        (Field::FileBase64Bytes, Operator::Lte, ConstraintValue::Integer(value)) if *value >= 4 => {
+        }
         (
             Field::MediaVideoWidth | Field::MediaVideoHeight,
             Operator::Lte,
