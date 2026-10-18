@@ -14,6 +14,10 @@ sound file, pick where it has to work, and it inspects the file, changes only
 what that destination rejects, then verifies the result. Compatible files are a
 no-op. Nothing is uploaded.
 
+![Fitifact in the browser: a PNG checked against "JPEG, max 2 MB", converted to JPEG, and verified, with each requirement measured before and after](docs/screenshots/web-adapted.png)
+
+![The Fitifact desktop app: a 38 MB HEVC phone clip fitted to Discord's 20 MB limit as an H.264 MP4, verified 7 of 7, ready to paste with Copy file](docs/screenshots/desktop-discord-video.png)
+
 The public web app adapts still photos locally in the browser. The desktop
 interface adds video and audio using bundled FFmpeg tools. Published release
 archives currently verified are CLI builds, not desktop installers. See the
@@ -41,9 +45,10 @@ never uploaded to Fitifact.
 inspect -> constraints -> check -> plan -> execute -> validate
 ```
 
-## v0.1 scope
+## Scope
 
-Cargo/web/desktop version is `0.1.0-rc.6`. Do not invent a `v0.2.0` tag.
+Cargo, web, desktop, and docs are at `1.0.0-rc.1`, the first 1.0 candidate.
+1.0.0 is the first stable version; there will be no `v0.1.0` or `v0.2.0` tag.
 
 | Input and requested result | Behavior |
 | --- | --- |
@@ -63,7 +68,11 @@ Cargo/web/desktop version is `0.1.0-rc.6`. Do not invent a `v0.2.0` tag.
 Named destinations load from local YAML via `--for` (for example
 `fitifact adapt clip.webm --for discord/video-upload`). Shipped presets cover
 Discord, Gmail, WhatsApp, Slack, X, GitHub, a typical web image, and a typical
-web video, plus size-only file uploads for sound. The browser image provider
+web video, plus size-only file uploads for sound and AI APIs (Anthropic and
+OpenAI vision, OpenAI transcription). Each destination's
+[page](https://mattbaconz.github.io/fitifact/docs/destinations/) lists its
+rules, sources, and change history, and a weekly check flags sources that
+change. The browser image provider
 executes bounded image fitting. The desktop app ships FFmpeg as a sidecar
 process for video and audio. The CLI uses FFmpeg from PATH. Neither surface
 overwrites the input or an existing output, silently drops streams, or treats
@@ -161,7 +170,8 @@ The web UI is still-image only on GitHub Pages; the desktop host adds MP4, MOV,
 WebM, MKV, and common audio (MP3, WAV, FLAC, M4A).
 
 `--max-size` accepts exact whole bytes, decimal `MB`, or binary `MiB` (for
-example `25000000`, `25 MB`, or `25 MiB`). Adaptation plans are always recreated
+example `25000000`, `25 MB`, or `25 MiB`). `--max-base64-size` limits the
+base64-encoded length instead, for APIs that take files inline. Adaptation plans are always recreated
 from fresh inspection and typed constraints; saved JSON plans are never
 executable input.
 
@@ -171,6 +181,17 @@ Typed constraints can also be loaded from YAML:
 cargo run -p fitifact-cli -- check video.mp4 --constraints fixtures/constraints/mp4-h264-aac.yaml
 ```
 
+## AI tools (MCP)
+
+`fitifact mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io/)
+server over stdio, so an AI client can call `list_destinations`, `inspect`,
+`check`, and `fit` on local files. `fit` leaves a file that already fits
+alone, asks before a crop or a first-frame change instead of making it,
+validates every output against the same requirements, and saves it beside the
+original without replacing any file; `dry_run` returns the plan only. The
+client starts and stops the server; there is no daemon and no network. Client
+setup is in [AI tools](https://mattbaconz.github.io/fitifact/docs/ai-tools/).
+
 ## Prepared release installation and verification
 
 The public RC workflow produces ZIP or tar.gz
@@ -178,9 +199,9 @@ archives, `fitifact-cli-installer.sh`, `fitifact-cli-installer.ps1`, a unified
 `sha256.sum`, per-archive SHA-256 files, and a CycloneDX
 `fitifact-cli.cdx.xml` SBOM.
 
-The checked-in package and binary version is the public
-`0.1.0-rc.6` candidate. Stable `0.1.0` requires a later reviewed version-bump
-commit after RC acceptance; this commit must not receive the stable tag.
+The checked-in package and binary version is the `1.0.0-rc.1` candidate.
+Stable `1.0.0` requires a later reviewed version-bump commit after RC
+acceptance; this commit must not receive the stable tag.
 
 Download `sha256.sum` and the one archive for your target into the same
 directory. Verify only that exact downloaded asset before extraction:
@@ -218,7 +239,7 @@ gh attestation verify <archive> --repo mattbaconz/fitifact
 
 The CycloneDX XML describes the resolved Cargo dependency graph and is released
 alongside the archives. Windows binaries are not Authenticode-signed, and macOS
-binaries are not code-signed or notarized in v0.1; users should expect platform
+binaries are not code-signed or notarized in 1.0; users should expect platform
 warnings and rely on the checksum, SBOM, attestation, and source/tag provenance.
 
 If no prebuilt archive is suitable, the exact prepared source fallback is:
@@ -275,8 +296,8 @@ certificate by [SignPath Foundation](https://signpath.org/).
 ## Project status and distribution
 
 The intended public home is
-[`mattbaconz/fitifact`](https://github.com/mattbaconz/fitifact). v0.1
-distribution is GitHub-only; the Cargo packages are not published. Public
+[`mattbaconz/fitifact`](https://github.com/mattbaconz/fitifact).
+Distribution is GitHub-only; the Cargo packages are not published. Public
 prerelease publication remains restricted to a protected, explicitly approved
 release window.
 
