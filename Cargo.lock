@@ -211,6 +211,7 @@ version = "1.0.0-rc.1"
 dependencies = [
  "fitifact",
  "image",
+ "serde",
  "serde_json",
  "wasm-bindgen",
 ]

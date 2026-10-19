@@ -18,9 +18,11 @@ no-op. Nothing is uploaded.
 
 ![The Fitifact desktop app: a 38 MB HEVC phone clip fitted to Discord's 20 MB limit as an H.264 MP4, verified 7 of 7, ready to paste with Copy file](docs/screenshots/desktop-discord-video.png)
 
-The public web app adapts still photos locally in the browser and checks video
-there too, repackaging it into MP4 when no re-encoding is needed. The desktop
-interface adds video re-encoding and audio using bundled FFmpeg tools. Published release
+The public web app adapts still photos locally in the browser and handles video
+there too: it repackages video into MP4 when no re-encoding is needed and
+re-encodes it to H.264 where the browser's own encoders pass Fitifact's checks.
+The desktop interface handles the video the browser refuses, plus audio, using
+bundled FFmpeg tools. Published release
 archives currently verified are CLI builds, not desktop installers. See the
 [desktop guide](https://mattbaconz.github.io/fitifact/docs/desktop-guide/) for
 build and download guidance. Desktop installers are not code-signed yet; see the
@@ -168,8 +170,10 @@ through 86400 seconds with `--timeout-seconds`.
 
 Desktop packaging lives in [`apps/desktop/README.md`](apps/desktop/README.md).
 On GitHub Pages the web UI adapts still images and checks MP4, MOV, WebM, and MKV
-video, repackaging H.264/AAC video into MP4 without re-encoding. The desktop host
-adds video re-encoding and common audio (MP3, WAV, FLAC, M4A).
+video, repackaging H.264/AAC video into MP4 without re-encoding and re-encoding
+to H.264 with the browser's WebCodecs encoders where they pass Fitifact's checks.
+The desktop host adds the video the browser refuses (HDR, for one) and common
+audio (MP3, WAV, FLAC, M4A).
 
 `--max-size` accepts exact whole bytes, decimal `MB`, or binary `MiB` (for
 example `25000000`, `25 MB`, or `25 MiB`). `--max-base64-size` limits the

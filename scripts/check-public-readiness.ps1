@@ -41,10 +41,12 @@ try {
     $allowedBinaries = @(
         "fixtures/media/compatible-h264-aac.mp4",
         "fixtures/media/corrupt-truncated.mp4",
+        "fixtures/media/ladder-h264-aac.mp4",
         "fixtures/media/mismatch-hevc-aac.mp4",
         "fixtures/media/refusal-hdr10-hevc-aac.mp4",
         "fixtures/media/remux-h264-aac.mkv",
         "fixtures/media/remux-h264-aac.mov",
+        "fixtures/media/transcode-vp9-opus.webm",
         "fixtures/media/unsupported-extra-video.mp4",
         "fixtures/image/compatible-jpeg.jpg",
         "fixtures/image/mismatch-png.png",

@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
 
 import type { Artifact, ErrorReport, ImageKind, InspectReport } from "../types";
+import type { MediaPlanReport } from "../lib/desktop-engine";
+import { browserVideoRefusal } from "../lib/error-copy";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
 import type * as MediaModule from "./media";
 import { classifyInput, refuseMessage } from "./magic";
@@ -331,11 +333,15 @@ async function adapt(request: Extract<WorkerRequest, { type: "adapt" }>) {
 
 type MediaTools = typeof MediaModule;
 
-// The browser runs stream copies only; encodes stay with the desktop app for now.
-const BROWSER_TRANSFORMS = JSON.stringify(["media.remux"]);
+interface MediaSource {
+  file: File;
+  probeJson: string;
+  /** What this browser measured for the selected video, by the engine's request. */
+  measured: Map<string, string>;
+}
 
 let mediaToolsPromise: Promise<MediaTools> | null = null;
-let mediaSource: { file: File; probeJson: string } | null = null;
+let mediaSource: MediaSource | null = null;
 let mediaGeneration = 0;
 
 async function mediaTools(id: number): Promise<MediaTools> {
@@ -361,7 +367,7 @@ async function withMediaFailures<T>(tools: MediaTools, run: () => Promise<T>): P
   }
 }
 
-function requireMedia(): { file: File; probeJson: string } {
+function requireMedia(): MediaSource {
   if (!mediaSource) throw localFailure("INPUT_INVALID", "Choose a video first.");
   return mediaSource;
 }
@@ -375,52 +381,95 @@ async function mediaInspect(request: Extract<WorkerRequest, { type: "media_inspe
   if (generation !== mediaGeneration) {
     throw localFailure("EXECUTION_CANCELLED", "A newer video replaced this operation.");
   }
-  mediaSource = { file: request.file, probeJson };
+  mediaSource = { file: request.file, probeJson, measured: new Map() };
   progress(request.id, "Inspection ready", 100);
   return artifact;
 }
 
+/**
+ * The engine's plan for the selected video, judged for this browser. When the plan needs an
+ * encode, the worker first measures what the engine asks and plans again with the answer.
+ */
+async function mediaPlan(id: number, constraintsJson: string): Promise<MediaPlanReport> {
+  const selected = requireMedia();
+  const wasm = await engine(id);
+  progress(id, "Checking every requirement", 60);
+  const plan = (measured: string) =>
+    parseReport<MediaPlanReport>(wasm.plan_media_probe(selected.probeJson, constraintsJson, measured));
+  let report = plan("null");
+  if (report.browser?.status === "measure") {
+    const request = report.browser.measure;
+    const key = JSON.stringify(request);
+    let measured = selected.measured.get(key);
+    if (!measured) {
+      const tools = await mediaTools(id);
+      progress(id, "Checking what this browser can encode", 70);
+      measured = JSON.stringify(await withMediaFailures(tools, () => tools.measure(selected.file, request)));
+      selected.measured.set(key, measured);
+    }
+    report = plan(measured);
+  }
+  // Worded here, not in the page, so the refusal copy stays out of the initial bundle.
+  if (report.browser?.status === "refused") {
+    report.browser.reason = browserVideoRefusal(report.browser.missing, videoCodec(report));
+  }
+  return report;
+}
+
 async function mediaAdapt(request: Extract<WorkerRequest, { type: "media_adapt" }>) {
   const selected = requireMedia();
-  const [wasm, tools] = await Promise.all([engine(request.id), mediaTools(request.id)]);
-  const planned = parseReport<{ outcome: { kind: string; plan?: { steps: Array<{ operation: string }> } } }>(
-    wasm.plan_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS),
-  );
-  const steps = planned.outcome.plan?.steps ?? [];
-  if (!steps.length) {
-    return { report: parseReport(wasm.adapt_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS, "null")) };
+  const planned = await mediaPlan(request.id, request.constraintsJson);
+  const wasm = await engine(request.id);
+  const browser = planned.browser;
+  if (!browser) {
+    return { report: parseReport(wasm.adapt_media_probe(selected.probeJson, request.constraintsJson, "null")) };
   }
-  if (steps.some((step) => step.operation !== "media.remux")) {
-    throw localFailure("NO_VALID_PLAN", "This change needs the Fitifact desktop app.");
+  if (browser.status !== "ready") {
+    throw localFailure("NO_VALID_PLAN", browser.status === "refused" ? browser.reason : browserVideoRefusal([], null));
   }
+  const tools = await mediaTools(request.id);
   return withMediaFailures(tools, async () => {
-    const output = await tools.remuxToMp4(selected.file, (fraction) =>
-      progress(request.id, "Copying the streams into MP4", 15 + Math.round(fraction * 55)),
-    );
+    const { execution } = browser;
+    const output =
+      execution.operation === "media.remux"
+        ? await tools.remuxToMp4(selected.file, (fraction) =>
+            progress(request.id, "Copying the streams into MP4", 15 + Math.round(fraction * 55)),
+          )
+        : await tools.transcodeToMp4(selected.file, execution, (fraction, attempt) =>
+            progress(
+              request.id,
+              attempt ? `Re-encoding at a lower bitrate (try ${attempt + 1})` : "Re-encoding the video as H.264",
+              15 + Math.round(fraction * 55),
+            ),
+          );
     const outputFile = new File([output], request.outputName, { type: "video/mp4" });
     progress(request.id, "Inspecting the new file", 75);
     const outputProbe = await tools.probe(outputFile);
-    progress(request.id, "Proving every stream was copied", 85);
+    progress(request.id, "Proving each stream is what the plan said", 85);
     const source = await tools.streamFacts(selected.file);
-    const copied = await tools.streamFacts(outputFile);
+    const produced = await tools.streamFacts(outputFile);
     const report = parseReport<{ status: string }>(
       wasm.adapt_media_probe(
         selected.probeJson,
         request.constraintsJson,
-        BROWSER_TRANSFORMS,
         JSON.stringify({
           name: request.outputName,
           probe: outputProbe,
           source_hashes: source.hashes,
-          output_hashes: copied.hashes,
+          output_hashes: produced.hashes,
           source_geometry: source.geometry,
-          output_geometry: copied.geometry,
+          output_geometry: produced.geometry,
         }),
       ),
     );
     progress(request.id, "Validation complete", 100);
     return report.status === "adapted" ? { report, output } : { report };
   });
+}
+
+function videoCodec(planned: MediaPlanReport): string | null {
+  const codec = planned.inspection.streams?.find((stream) => stream.type === "video")?.codec;
+  return typeof codec === "string" ? codec : null;
 }
 
 scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
@@ -462,13 +511,7 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
       } else if (request.type === "media_inspect") {
         post({ id: request.id, type: "result", report: await mediaInspect(request) });
       } else if (request.type === "media_plan") {
-        const selected = requireMedia();
-        const wasm = await engine(request.id);
-        progress(request.id, "Checking every requirement", 60);
-        const report = parseReport(
-          wasm.plan_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS),
-        );
-        post({ id: request.id, type: "result", report });
+        post({ id: request.id, type: "result", report: await mediaPlan(request.id, request.constraintsJson) });
       } else if (request.type === "media_adapt") {
         const result = await mediaAdapt(request);
         if ("output" in result && result.output) {

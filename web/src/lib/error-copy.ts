@@ -51,3 +51,39 @@ function plainDetail(message: string): string {
     .replace(/byte window/g, "size range");
   return `${detail[0].toUpperCase()}${detail.slice(1).replace(/\.?$/, ".")}`;
 }
+
+const CODEC_NAMES: Record<string, string> = {
+  h264: "H.264",
+  hevc: "HEVC",
+  vp8: "VP8",
+  vp9: "VP9",
+  av1: "AV1",
+};
+
+/** What the browser lacks for the engine's plan, by the codes `plan_media_probe` reports. */
+const BROWSER_GAPS: Record<string, string> = {
+  hdr: "This video is HDR, and the web app can't convert HDR to standard video the way the desktop app does.",
+  display_transform:
+    "This video is stored rotated, mirrored, or stretched, which the web app can't re-encode yet.",
+  video_decoder: "This browser can't decode {codec} video.",
+  h264_encoder: "This browser has no H.264 encoder the web app can use.",
+  h264_encoder_output:
+    "This browser's H.264 encoder writes video other apps may misread, so the web app won't use it.",
+  audio_decoder: "This browser can't decode this video's soundtrack.",
+  aac_encoder: "This browser can't encode the AAC audio this target needs.",
+  audio_only_encode: "Only the soundtrack needs re-encoding, which the web app can't do yet.",
+};
+
+/** Why this browser can't run the engine's plan for a video, in plain words. */
+export function browserVideoRefusal(missing: readonly string[], codec: string | null): string {
+  const reasons = new Set(
+    missing.flatMap((gap) => {
+      const reason = BROWSER_GAPS[gap];
+      return reason ? [reason.replace("{codec}", CODEC_NAMES[codec ?? ""] ?? "this")] : [];
+    }),
+  );
+  const why = reasons.size
+    ? [...reasons].join(" ")
+    : "This video needs re-encoding the web app can't do in this browser.";
+  return `${why} Open it in the Fitifact desktop app.`;
+}

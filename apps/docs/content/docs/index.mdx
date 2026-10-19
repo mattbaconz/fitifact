@@ -18,16 +18,16 @@ Your original is preserved. Files are processed on your device; nothing is uploa
 
 ## Choose your environment
 
-| Environment | Use it for                                | Processing                                  |
-| ----------- | ----------------------------------------- | ------------------------------------------- |
-| Browser     | Photos; video checks and MP4 repackaging  | Local Rust/WASM worker                      |
-| Desktop     | Photos, video, and audio from local paths | Shared UI, Rust engine, native FFmpeg tools |
-| CLI         | Scripts and inspectable JSON reports      | Rust engine with FFmpeg/ffprobe on PATH     |
-| AI client   | An assistant that checks and fits files   | [`fitifact mcp`](./ai-tools/) over stdio    |
+| Environment | Use it for                                     | Processing                                  |
+| ----------- | ---------------------------------------------- | ------------------------------------------- |
+| Browser     | Photos; video checks, MP4 copies, H.264 encodes | Local Rust/WASM worker                      |
+| Desktop     | Photos, video, and audio from local paths      | Shared UI, Rust engine, native FFmpeg tools |
+| CLI         | Scripts and inspectable JSON reports           | Rust engine with FFmpeg/ffprobe on PATH     |
+| AI client   | An assistant that checks and fits files        | [`fitifact mcp`](./ai-tools/) over stdio    |
 
 Every destination's rules, sources, and change history are on its [destination page](./destinations/).
 
-The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC, up to 32 MiB and 24 megapixels. It also checks MP4, MOV, WebM, and MKV video and repackages it into MP4 when no re-encoding is needed; see [video in the browser](./browser-guide/#video-in-the-browser). Video re-encoding and audio require desktop or CLI. Some files may need explicit first-frame approval or may be refused.
+The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC, up to 32 MiB and 24 megapixels. It also checks MP4, MOV, WebM, and MKV video, repackages it into MP4 when no re-encoding is needed, and re-encodes it to H.264 where the browser's own encoders pass Fitifact's checks; see [video in the browser](./browser-guide/#video-in-the-browser). Audio, HDR video, and video the browser can't encode require desktop or CLI. Some files may need explicit first-frame approval or may be refused.
 
 ## Desktop
 

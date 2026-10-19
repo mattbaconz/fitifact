@@ -12,6 +12,46 @@ export type WorkerRequest =
   | { id: number; type: "media_plan"; constraintsJson: string }
   | { id: number; type: "media_adapt"; constraintsJson: string; outputName: string };
 
+/** How a player shows a video track: display size with pixel aspect applied, rotation, mirroring. */
+export interface DisplayGeometry {
+  display_width: number;
+  display_height: number;
+  rotation: number;
+  flip: boolean;
+}
+
+/** The encode the engine asks the worker to try before it judges this browser. */
+export interface MeasureRequest {
+  video: { codec: "avc"; width: number; height: number; bitrate: number };
+  audio: { codec: "aac"; channels: number; sample_rate: number | null; bitrate: number } | null;
+}
+
+/** What the worker measured for a {@link MeasureRequest}. */
+export interface Measured {
+  geometry: DisplayGeometry | null;
+  video_decode: boolean;
+  h264_sample: number[] | null;
+  audio_decode: boolean;
+  aac_encode: boolean;
+}
+
+/** The engine's H.264 ladder for this browser: the exact size and each bitrate to try in order. */
+export interface TranscodeExecution {
+  operation: "media.transcode_video";
+  width: number;
+  height: number;
+  video_bitrates: number[];
+  audio: "copy" | { codec: "aac"; channels: number; bitrate: number };
+  max_bytes: number | null;
+}
+
+/** What this browser does with the engine's plan for a video. */
+export type BrowserVerdict =
+  | { status: "ready"; execution: { operation: "media.remux" } | TranscodeExecution }
+  | { status: "measure"; measure: MeasureRequest }
+  /** `missing` holds the engine's gap codes; the worker adds `reason`, the same in plain words. */
+  | { status: "refused"; missing: string[]; reason: string };
+
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: string; percent: number }
   | { id: number; type: "result"; report: unknown; output?: ArrayBuffer; preview?: ArrayBuffer; constraintsSnapshot?: string }

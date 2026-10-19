@@ -14,7 +14,9 @@ $fixtureNames = @(
     "remux-h264-aac.mkv",
     "corrupt-truncated.mp4",
     "unsupported-extra-video.mp4",
-    "refusal-hdr10-hevc-aac.mp4"
+    "refusal-hdr10-hevc-aac.mp4",
+    "ladder-h264-aac.mp4",
+    "transcode-vp9-opus.webm"
 )
 
 function Assert-Command([string]$Name) {
@@ -46,11 +48,13 @@ Assert-Command "ffprobe"
 Assert-Encoder "libx264" "H.264 fixtures"
 Assert-Encoder "libx265" "HEVC and HDR/10-bit fixtures"
 Assert-Encoder "aac" "AAC fixture audio"
+Assert-Encoder "libvpx-vp9" "the VP9 transcode fixture"
+Assert-Encoder "libopus" "the Opus transcode fixture"
 
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $existing = @($fixtureNames | ForEach-Object { Join-Path $out $_ } | Where-Object { Test-Path -LiteralPath $_ })
 if ($existing.Count -gt 0 -and -not $Force) {
-    throw "Fixture outputs already exist. Re-run with -Force to replace only the seven known fixture files."
+    throw "Fixture outputs already exist. Re-run with -Force to replace only the nine known fixture files."
 }
 if ($Force) {
     foreach ($path in $existing) {
@@ -129,6 +133,39 @@ $hdrInput = @(
     (Join-Path $out "refusal-hdr10-hevc-aac.mp4")
 )
 Invoke-Ffmpeg $hdrInput "HDR/10-bit HEVC refusal input"
+
+$ladderInput = @(
+    "-nostdin", "-hide_banner", "-loglevel", "error", "-n",
+    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10:duration=1",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+    "-map", "0:v:0", "-map", "1:a:0", "-map_metadata", "-1",
+    "-metadata", "creation_time=1970-01-01T00:00:00Z",
+    "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
+    "-threads", "1", "-c:a", "aac", "-b:a", "48k",
+    "-vf", "noise=alls=12:allf=t:all_seed=7",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+    "-x264-params", "threads=1:lookahead_threads=1:sliced_threads=0",
+    "-b:v", "480k", "-maxrate", "480k", "-bufsize", "480k",
+    "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709",
+    "-color_primaries", "bt709", "-movflags", "+faststart",
+    (Join-Path $out "ladder-h264-aac.mp4")
+)
+Invoke-Ffmpeg $ladderInput "H.264/AAC input over a small byte limit"
+
+$vp9Input = @(
+    "-nostdin", "-hide_banner", "-loglevel", "error", "-n",
+    "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10:duration=0.6",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.6",
+    "-map", "0:v:0", "-map", "1:a:0", "-map_metadata", "-1",
+    "-metadata", "creation_time=1970-01-01T00:00:00Z",
+    "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
+    "-threads", "1", "-c:a", "libopus", "-b:a", "48k",
+    "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-row-mt", "0",
+    "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709",
+    "-color_primaries", "bt709",
+    (Join-Path $out "transcode-vp9-opus.webm")
+)
+Invoke-Ffmpeg $vp9Input "VP9/Opus WebM transcode input"
 
 $source = Join-Path $out "compatible-h264-aac.mp4"
 $truncated = Join-Path $out "corrupt-truncated.mp4"

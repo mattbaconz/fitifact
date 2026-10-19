@@ -8,6 +8,7 @@ import { isErrorReport } from "../types";
 import type { FileKind } from "./destinations";
 import type { DesktopTarget } from "./desktop";
 import { WorkerFailure } from "../worker/client";
+import type { BrowserVerdict } from "../worker/protocol";
 
 export interface ProgressPayload {
   stage: string;
@@ -67,13 +68,13 @@ export interface DesktopPlanOutcome {
 
 /** `plan_media_probe`: the engine's plan for a video the browser worker probed. */
 export interface MediaPlanReport {
-  schema: "fitifact.web-media-plan/v1";
+  schema: "fitifact.web-media-plan/v2";
   inspection: DesktopArtifact;
   constraints: ConstraintSet;
   report: CompatibilityReport;
   outcome: DesktopPlanOutcome;
-  /** A plan exists, but only with an encoder this browser does not run. */
-  needs_encoder: boolean;
+  /** Whether this browser runs the plan; `null` when the file fits or no plan exists. */
+  browser: BrowserVerdict | null;
 }
 
 export interface DesktopAdaptResult {
