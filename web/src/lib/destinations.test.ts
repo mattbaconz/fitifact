@@ -73,7 +73,8 @@ describe("destination catalog", () => {
       "Discord Nitro file · 1 GB",
     );
     expect(chipSubtitle("discord", "nitro")).toBe("1 GB (the cap you set)");
-    expect(chipSubtitle("whatsapp", "free")).toBe("16 MB photo, 64 MB video");
+    expect(chipSubtitle("whatsapp", "free")).toBe("JPEG photo, 64 MB video");
+    expect(profilePlainSummary("whatsapp/photo", "free")).toBe("WhatsApp photo · JPEG");
     expect(profilePlainSummary("discord/file-upload", "free")).toBe("Discord free file · 20 MB");
     expect(profilePlainSummary("slack/file-upload", "free")).toBe("Slack file · 1 GB");
     expect(profilePlainSummary("generic/web-image", "free")).toBe("Web image · JPEG PNG WebP · 8 MB");

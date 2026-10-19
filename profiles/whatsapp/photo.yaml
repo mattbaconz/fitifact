@@ -1,7 +1,7 @@
 schema: fitifact.profile/v1
 id: whatsapp/photo
 name: WhatsApp photo
-revision: 2
+revision: 3
 last_verified: 2026-08-28
 
 scope:
@@ -15,11 +15,6 @@ constraints:
     op: in
     value: [jpeg]
     source: src-photo
-  - id: bytes
-    field: file.bytes
-    op: lte
-    value: 16000000
-    source: src-photo
 
 preferences:
   preserve:
@@ -30,13 +25,16 @@ sources:
     type: official-doc
     url: https://faq.whatsapp.com/1317564962315842
     observed_at: 2026-08-28
-    note: Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes. On 2026-10-17 this URL showed an unrelated article, and the current media FAQ states no photo cap, so the 16 MB rule is unverified and shown as stale.
+    note: Meta used to document sending photos up to 16 MB here. On 2026-10-17 this URL showed an unrelated article, and the current WhatsApp media FAQ lists video and document limits but no photo limit, so this profile sets no size limit. WhatsApp may recompress photos on the wire.
 
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
 
 history:
+  - revision: 3
+    date: 2026-10-19
+    change: "Removed the 16 MB limit: WhatsApp's media FAQ lists no photo limit, so Fitifact applies none."
   - revision: 2
     date: 2026-10-17
     change: "The cited WhatsApp page no longer shows a photo limit, so the 16 MB rule is kept but unverified."

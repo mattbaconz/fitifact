@@ -799,6 +799,11 @@
     {
       "history": [
         {
+          "change": "Removed the 16 MB limit: WhatsApp's media FAQ lists no photo limit, so Fitifact applies none.",
+          "date": "2026-10-19",
+          "revision": 3
+        },
+        {
           "change": "The cited WhatsApp page no longer shows a photo limit, so the 16 MB rule is kept but unverified.",
           "date": "2026-10-17",
           "revision": 2
@@ -812,7 +817,7 @@
       "id": "whatsapp/photo",
       "last_verified": "2026-08-28",
       "name": "WhatsApp photo",
-      "revision": 2,
+      "revision": 3,
       "rules": [
         {
           "field": "image.format",
@@ -825,22 +830,12 @@
           "value": [
             "jpeg"
           ]
-        },
-        {
-          "field": "file.bytes",
-          "id": "bytes",
-          "observed_at": "2026-08-28",
-          "op": "lte",
-          "source": "src-photo",
-          "source_type": "official-doc",
-          "source_url": "https://faq.whatsapp.com/1317564962315842",
-          "value": 16000000
         }
       ],
       "sources": [
         {
           "id": "src-photo",
-          "note": "Meta documents sending photos up to 16 MB. WhatsApp may recompress on the wire. This profile is the send ceiling, not a promise the compressed preview matches these bytes. On 2026-10-17 this URL showed an unrelated article, and the current media FAQ states no photo cap, so the 16 MB rule is unverified and shown as stale.",
+          "note": "Meta used to document sending photos up to 16 MB here. On 2026-10-17 this URL showed an unrelated article, and the current WhatsApp media FAQ lists video and document limits but no photo limit, so this profile sets no size limit. WhatsApp may recompress photos on the wire.",
           "observed_at": "2026-08-28",
           "type": "official-doc",
           "url": "https://faq.whatsapp.com/1317564962315842"

@@ -115,7 +115,8 @@ export function chipSubtitle(family: DestinationFamily, cap: DiscordCap): string
   if (family === "github") return `${byteCapLabel("github/comment-image")} comment`;
   if (family === "slack") return `${byteCapLabel("slack/file-upload")} file`;
   if (family === "whatsapp") {
-    return `${byteCapLabel("whatsapp/photo")} photo, ${byteCapLabel("whatsapp/video")} video`;
+    const photo = byteCap("whatsapp/photo") === null ? "JPEG" : byteCapLabel("whatsapp/photo");
+    return `${photo} photo, ${byteCapLabel("whatsapp/video")} video`;
   }
   if (family === "x") return `${byteCapLabel("x/image")} photo, ${byteCapLabel("x/video")} video`;
   if (family === "jpeg") return `JPEG PNG WebP · ${byteCapLabel("generic/web-image")}`;
@@ -233,7 +234,7 @@ export function profilePlainSummary(id: string, cap: DiscordCap): string {
   if (family === "whatsapp") {
     if (isVideoProfile(id)) return `WhatsApp video · ${size}`;
     if (id.endsWith("/audio")) return `WhatsApp audio · ${size}`;
-    return `WhatsApp photo · ${size} JPEG`;
+    return byteCap(id) === null ? "WhatsApp photo · JPEG" : `WhatsApp photo · ${size} JPEG`;
   }
   if (family === "x") return `X ${isVideoProfile(id) ? "video" : "image"} · ${size}`;
   if (family === "jpeg") return `Web image · JPEG PNG WebP · ${size}`;
