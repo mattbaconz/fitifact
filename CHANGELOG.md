@@ -25,6 +25,13 @@ never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
 - Video re-encoded from a source with no color tags (common for screen
   recordings and generated clips) is now tagged BT.709, so it passes validation
   instead of failing every Discord fit.
+- Desktop and CLI: video a phone stored sideways with a rotation flag is sized,
+  scaled, and checked the way players show it. Before, fitting it to a
+  dimension or size limit could squash the picture into the wrong shape and
+  still pass validation, and re-encoding it at full size always failed
+  validation. Validation now also refuses any re-encode that changes the shape
+  of the picture or of its pixels, and a mirrored video is copied but never
+  re-encoded.
 
 ### [added]
 

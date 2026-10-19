@@ -945,3 +945,251 @@ fn live_audio_cannot_satisfy_a_video_destination() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A 96x160 portrait, shown red, lime, blue, and white by quadrant in reading order.
+const QUADRANTS: &str = "color=c=red:s=48x80:d=1:r=10[a];color=c=lime:s=48x80:d=1:r=10[b];\
+    color=c=blue:s=48x80:d=1:r=10[c];color=c=white:s=48x80:d=1:r=10[d];\
+    [a][b]hstack[top];[c][d]hstack[bottom];[top][bottom]vstack";
+const UPRIGHT: [&str; 4] = ["red", "lime", "blue", "white"];
+
+/// Stores the quadrant portrait changed by `store`, then gives it the display matrix `display`
+/// that undoes the change (`-display_rotation` turns counterclockwise), the way a phone writes
+/// a clip it held sideways. The engine plays no part in making the picture.
+fn turned_clip(dir: &Path, name: &str, store: &str, display: &[&str], codec: &[&str]) -> PathBuf {
+    let mut extra = codec.to_vec();
+    extra.extend_from_slice(&["-c:a", "aac"]);
+    extra.extend_from_slice(SDR_BT709);
+    let stored = generate_at(
+        dir,
+        &format!("stored-{name}"),
+        &format!("{QUADRANTS},{store}[out0]"),
+        "sine=frequency=440:duration=1",
+        &extra,
+    );
+    let turned = dir.join(name);
+    let status = Command::new("ffmpeg")
+        .args(["-nostdin", "-y"])
+        .args(display)
+        .arg("-i")
+        .arg(&stored)
+        .args(["-c", "copy"])
+        .arg(&turned)
+        .status()
+        .unwrap();
+    assert!(status.success(), "giving {name} a display matrix failed");
+    turned
+}
+
+/// The colors at the quadrant centers of the first frame, as FFmpeg shows it.
+fn quadrant_colors(path: &Path, (width, height): (u32, u32)) -> [&'static str; 4] {
+    let output = Command::new("ffmpeg")
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(path)
+        .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+        .output()
+        .unwrap();
+    let rgb = output.stdout;
+    assert_eq!(rgb.len(), (width * height * 3) as usize, "shown frame size");
+    let color = |x: u32, y: u32| {
+        let at = ((y * width + x) * 3) as usize;
+        match (rgb[at] > 160, rgb[at + 1] > 160, rgb[at + 2] > 160) {
+            (true, false, false) => "red",
+            (false, true, false) => "lime",
+            (false, false, true) => "blue",
+            (true, true, true) => "white",
+            _ => "other",
+        }
+    };
+    let (left, right, top, bottom) = (width / 4, width * 3 / 4, height / 4, height * 3 / 4);
+    [
+        color(left, top),
+        color(right, top),
+        color(left, bottom),
+        color(right, bottom),
+    ]
+}
+
+fn adapt_in(
+    dir: &Path,
+    input: &Path,
+    constraints: fitifact::ConstraintSet,
+) -> fitifact::AdaptationResult {
+    let output = input.with_extension("adapted.mp4");
+    let _ = std::fs::remove_file(&output);
+    adapt(AdaptRequest {
+        input,
+        constraints,
+        output: Some(output),
+        catalog: None,
+        inspector: &FfprobeInspector::default(),
+        provider: Some(&FfmpegProvider::default()),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(60),
+            temp_dir: Some(dir.to_path_buf()),
+        },
+    })
+    .unwrap()
+}
+
+/// Phones store a clip held sideways as a landscape picture plus a display matrix. Fitted to a
+/// width limit, the output must come out upright, in proportion, and the right way around.
+#[test]
+#[ignore]
+fn live_turned_video_fits_a_width_limit_upright() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-turned-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let width_48 = || {
+        compile(ConstraintInput {
+            container: Some(vec!["mp4".into()]),
+            video_codec: Some(vec!["h264".into()]),
+            audio_codec: Some(vec!["aac".into()]),
+            max_width: Some(48),
+            ..ConstraintInput::default()
+        })
+        .unwrap()
+    };
+    for (name, store, degrees) in [
+        ("turned-90.mp4", "transpose=clock", "90"),
+        ("turned-270.mp4", "transpose=cclock", "-90"),
+        ("turned-180.mp4", "hflip,vflip", "180"),
+    ] {
+        let input = turned_clip(
+            &dir,
+            name,
+            store,
+            &["-display_rotation", degrees],
+            &["-c:v", "libx264"],
+        );
+        let source = FfprobeInspector::default().inspect(&input).unwrap();
+        let shown = source.first_video().unwrap();
+        assert_eq!((shown.width, shown.height), (Some(96), Some(160)), "{name}");
+        assert_eq!(
+            quadrant_colors(&input, (96, 160)),
+            UPRIGHT,
+            "{name} fixture"
+        );
+
+        let result = adapt_in(&dir, &input, width_48());
+        assert_eq!(
+            result.status,
+            AdaptationStatus::Adapted,
+            "{name}: {result:?}"
+        );
+        let validation = result.validation.as_ref().expect("validation");
+        assert_eq!(
+            validation.status,
+            fitifact::ValidationStatus::Pass,
+            "{name}"
+        );
+        let video = validation.artifact.first_video().unwrap();
+        assert_eq!((video.width, video.height), (Some(48), Some(80)), "{name}");
+        assert_eq!(video.display_matrix, None, "{name} must be stored upright");
+        assert!(
+            validation
+                .integrity
+                .iter()
+                .any(|check| check.id == "display_aspect"
+                    && check.status == fitifact::ValidationStatus::Pass),
+            "{name}"
+        );
+        assert_eq!(
+            quadrant_colors(result.output.as_deref().unwrap(), (48, 80)),
+            UPRIGHT,
+            "{name}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A turned HEVC clip re-encodes upright at full size, a copy keeps its display matrix, and a
+/// mirrored clip is never re-encoded.
+#[test]
+#[ignore]
+fn live_turned_video_copies_keep_the_matrix_and_mirrors_are_not_re_encoded() {
+    require_tools();
+    assert!(
+        encoder_ok("libx265") && encoder_ok("libx264"),
+        "need libx265 and libx264"
+    );
+    let dir =
+        std::env::temp_dir().join(format!("fitifact-live-turned-copy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let hevc = turned_clip(
+        &dir,
+        "turned-hevc.mp4",
+        "transpose=cclock",
+        &["-display_rotation", "-90"],
+        &["-c:v", "libx265", "-tag:v", "hvc1"],
+    );
+    let result = adapt_in(&dir, &hevc, media_h264_mp4_aac());
+    assert_eq!(result.status, AdaptationStatus::Adapted, "{result:?}");
+    let video = result
+        .validation
+        .as_ref()
+        .unwrap()
+        .artifact
+        .first_video()
+        .unwrap();
+    assert_eq!((video.width, video.height), (Some(96), Some(160)));
+    assert_eq!(video.display_matrix, None);
+    assert_eq!(
+        quadrant_colors(result.output.as_deref().unwrap(), (96, 160)),
+        UPRIGHT
+    );
+
+    let mov = turned_clip(
+        &dir,
+        "turned.mov",
+        "transpose=clock",
+        &["-display_rotation", "90"],
+        &["-c:v", "libx264"],
+    );
+    let source = FfprobeInspector::default().inspect(&mov).unwrap();
+    assert!(source.first_video().unwrap().display_matrix.is_some());
+    let result = adapt_in(&dir, &mov, media_h264_mp4_aac());
+    assert_eq!(result.status, AdaptationStatus::Adapted, "{result:?}");
+    assert_eq!(
+        result.plan.as_ref().unwrap().steps[0].operation,
+        TransformId::Remux
+    );
+    let copied = &result.validation.as_ref().unwrap().artifact;
+    assert_eq!(
+        copied.first_video().unwrap().display_matrix,
+        source.first_video().unwrap().display_matrix
+    );
+    assert_eq!(
+        quadrant_colors(result.output.as_deref().unwrap(), (96, 160)),
+        UPRIGHT
+    );
+
+    // ffprobe's `rotation` reads -180 for a mirror, the same as a half turn.
+    let mirrored = turned_clip(
+        &dir,
+        "mirrored.mp4",
+        "hflip",
+        &["-display_hflip"],
+        &["-c:v", "libx264"],
+    );
+    let artifact = FfprobeInspector::default().inspect(&mirrored).unwrap();
+    assert_eq!(
+        artifact.first_video().unwrap().display_matrix,
+        Some(fitifact::artifact::DisplayMatrix {
+            rotation: Some(180),
+            mirrored: true
+        })
+    );
+    assert_eq!(quadrant_colors(&mirrored, (96, 160)), UPRIGHT);
+    let narrow = compile(ConstraintInput {
+        max_width: Some(48),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    assert_eq!(
+        create_plan(&artifact, &narrow, &default_catalog()).blocking_codes(),
+        vec![BlockingCode::DisplayTransformUnsupported]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

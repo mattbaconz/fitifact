@@ -290,6 +290,7 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
                     | Some(VideoCodec::Vp8)
                     | Some(VideoCodec::Av1)
             ) || !transcode_expected_shape(&step.expected)
+                || !video.encodable_orientation()
             {
                 return Err(forged_plan());
             }
@@ -823,6 +824,13 @@ mod tests {
         .plan()
         .unwrap()
         .clone();
+        let mut mirrored = mp4_hevc.clone();
+        mirrored.first_video_mut().unwrap().display_matrix = Some(crate::artifact::DisplayMatrix {
+            rotation: Some(0),
+            mirrored: true,
+        });
+        let error = validate_plan_for_execution(&plan, &mirrored).unwrap_err();
+        assert_eq!(error.code, ErrorCode::SecurityBlocked);
         let mut unknown = mp4_hevc;
         unknown.container = Some(Container::Unknown("ambiguous".into()));
         let error = validate_plan_for_execution(&plan, &unknown).unwrap_err();
