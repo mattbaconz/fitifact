@@ -60,11 +60,13 @@ never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
   the same bitrate ladder and quality floor as the desktop app; AAC that already
   passes is copied, other audio is encoded to AAC. Each output is re-read and
   validated against the same rules as the desktop app before it is offered. The
-  engine first checks the browser's encoders with a one-frame test encode; a
-  browser missing one the plan needs, HDR video, video stored rotated, mirrored,
-  or stretched, and a soundtrack-only re-encode are refused in plain words with
-  a link to the desktop app. The video tools (Mediabunny 1.61.1) load only when
-  a video is opened.
+  engine first has the browser encode the video's first half second exactly as
+  planned. A browser missing an encoder the plan needs or unable to finish that
+  trial, HDR video, video stored rotated, mirrored, or stretched, and a
+  soundtrack-only re-encode are refused in plain words with a link to the
+  desktop app. An encode that makes no progress for 30 seconds stops with a
+  plain error instead of hanging. The video tools (Mediabunny 1.61.1) load only
+  when a video is opened.
 - Desktop and CLI video: WebM/MKV sources, AAC audio encode, scale-to-fit, and
   VP8/VP9/AV1 transcode to H.264 when the destination needs it.
 - Desktop and CLI: audio-only inspect/adapt/verify. Size-only destinations

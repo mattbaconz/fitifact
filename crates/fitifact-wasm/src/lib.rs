@@ -202,8 +202,9 @@ struct Measured {
     geometry: Option<Geometry>,
     /// Whether a decoder accepts the source's video track.
     video_decode: bool,
-    /// The AVCDecoderConfigurationRecord the browser's H.264 encoder wrote for a one-frame BT.709
-    /// sample at the requested size and bitrate; `null` when it has no such encoder.
+    /// The AVCDecoderConfigurationRecord the browser's H.264 encoder wrote in a trial of the
+    /// planned encode (the source's first half second at the requested size and bitrate); `null`
+    /// when it has no such encoder or the trial did not finish.
     h264_sample: Option<Vec<u8>>,
     /// Whether a decoder accepts the source's audio track.
     audio_decode: bool,

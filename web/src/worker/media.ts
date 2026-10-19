@@ -6,6 +6,7 @@
  */
 import {
   BlobSource,
+  BufferSource,
   BufferTarget,
   Conversion,
   EncodedPacketSink,
@@ -13,12 +14,10 @@ import {
   MATROSKA,
   MP4,
   Mp4OutputFormat,
-  NullTarget,
   Output,
   QTFF,
   Quality,
   VideoSample,
-  VideoSampleSource,
   WEBM,
   canEncodeAudio,
   canEncodeVideo,
@@ -166,7 +165,8 @@ export async function remuxToMp4(file: Blob, onProgress: (fraction: number) => v
 
 /**
  * What the engine asked to know before it judges an encode here: how the source is shown,
- * whether this browser decodes its streams, and the H.264 configuration its encoder writes.
+ * whether this browser decodes its streams, and the H.264 configuration its encoder writes in a
+ * short real run.
  */
 export async function measure(file: Blob, request: MeasureRequest): Promise<Measured> {
   const input = open(file);
@@ -177,7 +177,7 @@ export async function measure(file: Blob, request: MeasureRequest): Promise<Meas
     return {
       geometry: video ? await displayGeometry(video) : null,
       video_decode: video ? await supported(() => video.canDecode()) : false,
-      h264_sample: await h264Sample(request.video),
+      h264_sample: video ? await trialSample(file, request) : null,
       audio_decode: encode && audio ? await supported(() => audio.canDecode()) : false,
       aac_encode: encode
         ? await supported(() =>
@@ -202,47 +202,77 @@ async function supported(check: () => Promise<boolean>): Promise<boolean> {
   }
 }
 
-/** The decoder configuration this browser's H.264 encoder writes for one BT.709 frame. */
-async function h264Sample({ width, height, bitrate }: MeasureRequest["video"]): Promise<number[] | null> {
+/** How much of the source the trial encodes, and how long a run may go without progress. */
+const TRIAL_SECONDS = 0.5;
+const TRIAL_IDLE_MS = 15_000;
+const ENCODE_IDLE_MS = 30_000;
+
+/**
+ * The decoder configuration this browser's H.264 encoder writes in a trial of the planned encode:
+ * the source's first half second through the same decoder, colour conversion, and encoders. A
+ * single synthetic frame passed where a full run stalled (WebKit on Linux), so the trial is real.
+ * `null` when there is no such encoder or the trial doesn't finish.
+ */
+async function trialSample(file: Blob, request: MeasureRequest): Promise<number[] | null> {
+  const { width, height, bitrate } = request.video;
   if (!(await supported(() => canEncodeVideo("avc", { width, height, bitrate })))) return null;
-  let description: Uint8Array | null = null;
-  const source = new VideoSampleSource({
-    codec: "avc",
-    quality: new Quality({ bitrate }),
-    onEncodedPacket: (_, meta) => {
-      const config = meta?.decoderConfig?.description;
-      if (config && !description) description = bytesOf(config).slice();
-    },
-  });
-  const output = new Output({ format: new Mp4OutputFormat(), target: new NullTarget() });
-  output.addVideoTrack(source);
-  const sample = bt709Sample(new Uint8Array((width * height * 3) / 2).fill(128), width, height, 0, 1 / 30);
-  let timer = 0;
-  // One small frame takes well under a second; an encoder that never answers is not usable.
-  const stalled = new Promise<"stalled">((resolve) => {
-    timer = self.setTimeout(() => resolve("stalled"), SAMPLE_TIMEOUT_MS);
-  });
+  const input = open(file);
   try {
-    const encoded = (async () => {
-      await output.start();
-      await source.add(sample);
-      await output.finalize();
-    })();
-    encoded.catch(() => undefined); // a stalled encode may still fail after the race
-    if ((await Promise.race([encoded, stalled])) === "stalled") {
-      void output.cancel();
-      return null;
+    const start = Math.max(await input.getFirstTimestamp(), 0);
+    const target = new BufferTarget();
+    const conversion = await plannedEncode(
+      input,
+      target,
+      { width, height, bitrate, audio: request.audio ?? "copy" },
+      { start, end: start + TRIAL_SECONDS },
+    );
+    if (!conversion.isValid || conversion.discardedTracks.length) return null;
+    if (!(await finishes(conversion, TRIAL_IDLE_MS)) || !target.buffer) return null;
+    const written = new Input({ formats: [MP4], source: new BufferSource(target.buffer) });
+    try {
+      const config = await (await written.getPrimaryVideoTrack())?.getDecoderConfig();
+      return config?.description ? Array.from(bytesOf(config.description)) : null;
+    } finally {
+      written.dispose();
     }
   } catch {
     return null;
   } finally {
-    self.clearTimeout(timer);
-    sample.close();
+    input.dispose();
   }
-  return description ? Array.from(description) : null;
 }
 
-const SAMPLE_TIMEOUT_MS = 15_000;
+/**
+ * Runs a conversion and says whether it finished. Some WebCodecs implementations accept frames
+ * and then never answer, and Mediabunny would wait on them forever, so a run that makes no
+ * progress for `idleMs` is cancelled instead.
+ */
+export async function finishes(
+  conversion: Pick<Conversion, "execute" | "cancel" | "onProgress">,
+  idleMs: number,
+  onProgress: (fraction: number) => void = () => undefined,
+): Promise<boolean> {
+  let last = performance.now();
+  conversion.onProgress = (fraction) => {
+    last = performance.now();
+    onProgress(fraction);
+  };
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stalled = new Promise<"stalled">((resolve) => {
+    timer = setInterval(() => {
+      if (performance.now() - last > idleMs) resolve("stalled");
+    }, Math.min(idleMs, 1_000));
+  });
+  const executed = conversion.execute();
+  executed.catch(() => undefined); // a cancelled run may still reject after the race
+  try {
+    if ((await Promise.race([executed, stalled])) !== "stalled") return true;
+    conversion.cancel().catch(() => undefined);
+    return false;
+  } finally {
+    clearInterval(timer);
+  }
+}
 
 const BT709: VideoColorSpaceInit = { primaries: "bt709", transfer: "bt709", matrix: "bt709", fullRange: false };
 
@@ -292,42 +322,57 @@ async function encodeOnce(
   const input = open(file);
   try {
     const target = new BufferTarget();
-    const conversion = await Conversion.init({
-      input,
-      output: new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target }),
-      video: {
-        codec: "avc",
-        width,
-        height,
-        fit: "fill",
-        quality: new Quality({ bitrate }),
-        forceTranscode: true,
-        process: (sample) => toBt709(sample, width, height),
-      },
-      audio:
-        audio === "copy"
-          ? undefined
-          : {
-              codec: "aac",
-              numberOfChannels: audio.channels,
-              quality: new Quality({ bitrate: audio.bitrate }),
-              forceTranscode: true,
-            },
-      showWarnings: false,
-    });
+    const conversion = await plannedEncode(input, target, { width, height, bitrate, audio });
     if (!conversion.isValid || conversion.discardedTracks.length) {
       throw new MediaFailure(
         "NO_VALID_PLAN",
         "This browser can't re-encode every stream in this video. Open it in the Fitifact desktop app.",
       );
     }
-    conversion.onProgress = (fraction) => onProgress(fraction);
-    await conversion.execute();
+    if (!(await finishes(conversion, ENCODE_IDLE_MS, onProgress))) {
+      throw new MediaFailure(
+        "EXECUTION_FAILED",
+        "This browser stopped encoding the video partway through. Open it in the Fitifact desktop app.",
+      );
+    }
     if (!target.buffer) throw new MediaFailure("EXECUTION_FAILED", "The MP4 was not finished.");
     return target.buffer;
   } finally {
     input.dispose();
   }
+}
+
+/** The engine's H.264 encode as a conversion: its exact size and bitrate, AAC copied or encoded. */
+function plannedEncode(
+  input: Input,
+  target: BufferTarget,
+  { width, height, bitrate, audio }: { width: number; height: number; bitrate: number; audio: TranscodeExecution["audio"] },
+  trim?: { start: number; end: number },
+) {
+  return Conversion.init({
+    input,
+    output: new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target }),
+    video: {
+      codec: "avc",
+      width,
+      height,
+      fit: "fill",
+      quality: new Quality({ bitrate }),
+      forceTranscode: true,
+      process: (sample) => toBt709(sample, width, height),
+    },
+    audio:
+      audio === "copy"
+        ? undefined
+        : {
+            codec: "aac",
+            numberOfChannels: audio.channels,
+            quality: new Quality({ bitrate: audio.bitrate }),
+            forceTranscode: true,
+          },
+    trim,
+    showWarnings: false,
+  });
 }
 
 let canvas: OffscreenCanvasRenderingContext2D | null = null;
