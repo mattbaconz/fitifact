@@ -86,3 +86,13 @@ test("the video tools load only for a video", async ({ page, browserName }) => {
   await expect(page.getByRole("heading", { name: "Already compatible. Nothing changed." })).toBeVisible();
   expect(videoTools(requested)).toBe(true);
 });
+
+test("video tools that fail to load get a plain refusal", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Only Chromium routes a worker's module imports.");
+  await page.context().route(/\/assets\/media-[\w-]+\.js$/, (route) => route.abort());
+  await page.goto("/");
+  await page.locator("input[type=file]").setInputFiles(path.join(media, "remux-h264-aac.mov"));
+  await expect(
+    page.getByText("This browser couldn't load the web app's video tools. Open the video in the Fitifact desktop app.").first(),
+  ).toBeVisible({ timeout: 30_000 });
+});

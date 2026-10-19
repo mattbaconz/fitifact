@@ -341,7 +341,13 @@ let mediaGeneration = 0;
 async function mediaTools(id: number): Promise<MediaTools> {
   if (!mediaToolsPromise) {
     progress(id, "Loading the local video tools", 10);
-    mediaToolsPromise = import("./media");
+    mediaToolsPromise = import("./media").catch(() => {
+      mediaToolsPromise = null;
+      throw localFailure(
+        "INSPECTION_UNSUPPORTED",
+        "This browser couldn't load the web app's video tools. Open the video in the Fitifact desktop app.",
+      );
+    });
   }
   return mediaToolsPromise;
 }
@@ -397,12 +403,6 @@ async function mediaAdapt(request: Extract<WorkerRequest, { type: "media_adapt" 
     progress(request.id, "Proving every stream was copied", 85);
     const source = await tools.streamFacts(selected.file);
     const copied = await tools.streamFacts(outputFile);
-    if (source.geometry !== copied.geometry) {
-      throw localFailure(
-        "VALIDATION_FAILED",
-        "The MP4 would show the picture at a different size, angle, or mirroring, so it was not offered.",
-      );
-    }
     const report = parseReport<{ status: string }>(
       wasm.adapt_media_probe(
         selected.probeJson,
@@ -413,6 +413,8 @@ async function mediaAdapt(request: Extract<WorkerRequest, { type: "media_adapt" 
           probe: outputProbe,
           source_hashes: source.hashes,
           output_hashes: copied.hashes,
+          source_geometry: source.geometry,
+          output_geometry: copied.geometry,
         }),
       ),
     );

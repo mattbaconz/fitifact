@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use fitifact::error::ErrorEnvelope;
 use fitifact::{
     CapabilityCatalog, ConstraintSet, ExternalOutput, ImageAdaptOptions, NeverCancelled,
-    PlanOutcome, StreamHashes, TransformId, adapt_external, artifact_from_browser_probe,
-    default_catalog, execute_image_adaptation, image_artifact_from_bytes, parse_image_requirements,
-    plan_image_adaptation,
+    PlanOutcome, StreamHashes, TransformId, ValidationCheck, ValidationStatus, adapt_external,
+    artifact_from_browser_probe, default_catalog, execute_image_adaptation,
+    image_artifact_from_bytes, parse_image_requirements, plan_image_adaptation,
 };
 use image::{DynamicImage, ImageFormat as EncoderFormat, RgbImage, RgbaImage};
 
@@ -182,7 +182,12 @@ pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -
     }
 }
 
-/// The default catalog narrowed to the transforms this browser measured it can run.
+/// What the browser can execute in this slice: a stream copy. Encodes wait for the H.264
+/// bitrate ladder, so none is planned here even when a browser reports an encoder.
+const BROWSER_TRANSFORMS: [TransformId; 1] = [TransformId::Remux];
+
+/// The default catalog narrowed to the transforms this browser measured it can run and the
+/// browser executor implements.
 fn media_catalog(transforms_json: &str) -> Result<CapabilityCatalog, fitifact::Error> {
     let allowed: Vec<TransformId> = serde_json::from_str(transforms_json).map_err(|error| {
         fitifact::Error::new(
@@ -191,9 +196,9 @@ fn media_catalog(transforms_json: &str) -> Result<CapabilityCatalog, fitifact::E
         )
     })?;
     let mut catalog = default_catalog();
-    catalog
-        .capabilities
-        .retain(|capability| allowed.contains(&capability.id));
+    catalog.capabilities.retain(|capability| {
+        allowed.contains(&capability.id) && BROWSER_TRANSFORMS.contains(&capability.id)
+    });
     Ok(catalog)
 }
 
@@ -274,8 +279,13 @@ fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact
         return Ok(None);
     }
     let hashes = |key: &str| {
-        serde_json::from_value::<StreamHashes>(output[key].clone())
-            .map_err(|error| invalid(format!("{key}: {error}")))
+        let hashes = serde_json::from_value::<StreamHashes>(output[key].clone())
+            .map_err(|error| invalid(format!("{key}: {error}")))?;
+        let mut digests = std::iter::once(&hashes.video).chain(&hashes.audio);
+        if hashes.algorithm != "sha256" || !digests.all(|digest| is_sha256(digest)) {
+            return Err(invalid(format!("{key} must be SHA-256 hex digests")));
+        }
+        Ok(hashes)
     };
     let name = output["name"]
         .as_str()
@@ -286,12 +296,64 @@ fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact
             error.message
         ))
     })?;
+    let geometry = |key: &str| {
+        display_geometry(&output[key]).map_err(|error| invalid(format!("{key}: {error}")))
+    };
+    let (source, copied) = (geometry("source_geometry")?, geometry("output_geometry")?);
+    let integrity = if source.is_none() && copied.is_none() {
+        Vec::new()
+    } else {
+        let describe = |value: Option<String>| value.unwrap_or_else(|| "unknown".into());
+        vec![ValidationCheck {
+            id: "display_geometry".into(),
+            status: if source.is_some() && source == copied {
+                ValidationStatus::Pass
+            } else {
+                ValidationStatus::Fail
+            },
+            expected: describe(source),
+            actual: describe(copied),
+        }]
+    };
     Ok(Some(ExternalOutput {
         path: PathBuf::from(name),
         artifact,
         source_hashes: hashes("source_hashes")?,
         output_hashes: hashes("output_hashes")?,
+        integrity,
     }))
+}
+
+fn is_sha256(digest: &str) -> bool {
+    digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// How a player shows the picture, `{display_width, display_height, rotation, flip}`, as one
+/// comparable description; `null` when the file has no video track.
+fn display_geometry(value: &serde_json::Value) -> Result<Option<String>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    let facts = value
+        .as_object()
+        .filter(|facts| facts.len() == 4)
+        .ok_or("expected display_width, display_height, rotation, and flip")?;
+    let number = |key: &str| {
+        facts
+            .get(key)
+            .and_then(serde_json::Value::as_u64)
+            .ok_or(format!("{key} is missing"))
+    };
+    let flip = facts
+        .get("flip")
+        .and_then(serde_json::Value::as_bool)
+        .ok_or("flip is missing")?;
+    Ok(Some(format!(
+        "{}x{}, rotated {}, flipped {flip}",
+        number("display_width")?,
+        number("display_height")?,
+        number("rotation")?
+    )))
 }
 
 #[allow(clippy::chunks_exact_to_as_chunks)]

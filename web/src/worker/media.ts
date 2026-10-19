@@ -168,7 +168,7 @@ export async function streamFacts(file: Blob) {
         video: video ? await hashPackets(video) : "",
         audio: audio ? await hashPackets(audio) : null,
       },
-      geometry: video ? await displayGeometry(video) : "",
+      geometry: video ? await displayGeometry(video) : null,
     };
   } finally {
     input.dispose();
@@ -176,14 +176,13 @@ export async function streamFacts(file: Blob) {
 }
 
 /** How a player shows the picture: display size (pixel aspect applied), rotation, and mirroring. */
-async function displayGeometry(track: InputVideoTrack): Promise<string> {
-  const facts = [
-    await track.getDisplayWidth(),
-    await track.getDisplayHeight(),
-    await track.getRotation(),
-    await track.getFlip(),
-  ];
-  return facts.join(" ");
+async function displayGeometry(track: InputVideoTrack) {
+  return {
+    display_width: await track.getDisplayWidth(),
+    display_height: await track.getDisplayHeight(),
+    rotation: await track.getRotation(),
+    flip: await track.getFlip(),
+  };
 }
 
 async function hashPackets(track: InputTrack): Promise<string> {

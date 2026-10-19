@@ -30,6 +30,14 @@ pub struct ValidationReport {
     pub provenance: Vec<ProvenanceCheck>,
 }
 
+impl ValidationReport {
+    /// Adds an integrity check made outside [`validate_adapted_artifact`] and folds in its status.
+    pub fn add_integrity(&mut self, check: ValidationCheck) {
+        self.status = combine_status(self.status, check.status);
+        self.integrity.push(check);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationCheck {
     pub id: String,

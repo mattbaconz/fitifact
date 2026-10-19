@@ -14,7 +14,8 @@ use crate::plan::{BlockingReason, Plan, PlanOutcome, plan};
 use crate::report::{Explanation, explain_plan};
 use crate::runtime::{ExecutionContext, StreamHashes, TransformProvider, execute};
 use crate::validate::{
-    ValidationReport, ValidationStatus, validate_adaptation, validate_adapted_artifact,
+    ValidationCheck, ValidationReport, ValidationStatus, validate_adaptation,
+    validate_adapted_artifact,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -359,6 +360,9 @@ pub struct ExternalOutput {
     pub artifact: Artifact,
     pub source_hashes: StreamHashes,
     pub output_hashes: StreamHashes,
+    /// Source-against-output checks on facts an [`Artifact`] does not model, such as the
+    /// display geometry the browser measures.
+    pub integrity: Vec<ValidationCheck>,
 }
 
 /// The [`adapt`] contract for a plan another runtime executes: plan again from the source facts
@@ -396,7 +400,7 @@ pub fn adapt_external(
             None,
         );
     };
-    let validation = validate_adapted_artifact(
+    let mut validation = validate_adapted_artifact(
         output.artifact,
         constraints,
         &artifact,
@@ -404,6 +408,9 @@ pub fn adapt_external(
         &output.source_hashes,
         &output.output_hashes,
     );
+    for check in output.integrity {
+        validation.add_integrity(check);
+    }
     if validation.status != ValidationStatus::Pass {
         return failed(
             original,
