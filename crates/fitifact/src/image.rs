@@ -336,13 +336,13 @@ pub fn unrecognized_input(bytes: &[u8]) -> Error {
     if looks_like_audio(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is audio. The web app adapts photos. Open it in the Fitifact desktop app.",
+            "This is audio. The web app handles photos and video. Open sound files in the Fitifact desktop app.",
         );
     }
     if looks_like_video(bytes) {
         return Error::new(
             ErrorCode::InspectionUnsupported,
-            "This is a video. The web app adapts photos. Open it in the Fitifact desktop app.",
+            "This video can't be opened in the web app. Open it in the Fitifact desktop app.",
         );
     }
     if looks_like_pdf(bytes) {

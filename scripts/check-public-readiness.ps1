@@ -43,6 +43,7 @@ try {
         "fixtures/media/corrupt-truncated.mp4",
         "fixtures/media/mismatch-hevc-aac.mp4",
         "fixtures/media/refusal-hdr10-hevc-aac.mp4",
+        "fixtures/media/remux-h264-aac.mkv",
         "fixtures/media/remux-h264-aac.mov",
         "fixtures/media/unsupported-extra-video.mp4",
         "fixtures/image/compatible-jpeg.jpg",

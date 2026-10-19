@@ -14,7 +14,7 @@ async function openEditor(page: Page) {
 test("drop zone is visible on first paint without a requirements placeholder", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Make your file work there." })).toBeVisible();
-  await expect(page.getByText(/Photos ·.*max 32 MiB or 24 megapixels/)).toBeVisible();
+  await expect(page.getByText(/Photos and video ·.*photos up to 32 MiB or 24 megapixels/)).toBeVisible();
   await expect(page.locator(".drop-zone")).toBeInViewport();
   await expect(page.getByRole("button", { name: "Try a sample image" }).first()).toBeVisible();
   await expect(page.getByRole("contentinfo")).toContainText("Local · nothing is uploaded");
@@ -319,13 +319,13 @@ test("JPG PNG or WebP paste can keep WebP", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Already compatible. Nothing changed." })).toBeVisible();
 });
 
-test("video and PDF drops refuse in one sentence", async ({ page }) => {
+test("unreadable video and document drops refuse in one sentence", async ({ page }) => {
   await page.goto("/");
   const mp4 = Buffer.alloc(16);
   mp4.writeUInt32BE(16, 0);
   mp4.write("ftypisom", 4, "ascii");
   await page.locator("input[type=file]").setInputFiles({ name: "clip.mp4", mimeType: "video/mp4", buffer: mp4 });
-  await expect(page.getByText("This is a video. The web app adapts photos. Open it in the Fitifact desktop app.")).toBeVisible();
+  await expect(page.getByText("The web app couldn't read this video. It may be damaged, or only the Fitifact desktop app can open it.")).toBeVisible();
   await expect(page.locator(".reject-card").getByRole("link", { name: "Get the desktop app" })).toHaveAttribute("href", "/docs/#desktop");
   await page.locator("input[type=file]").setInputFiles({
     name: "doc.pdf",

@@ -10,10 +10,12 @@ use crate::constraints::ConstraintSet;
 use crate::contract::AdaptationSchema;
 use crate::error::{Error, ErrorCode, ErrorEnvelope, Result};
 use crate::inspect::Inspector;
-use crate::plan::{Plan, PlanOutcome, plan};
+use crate::plan::{BlockingReason, Plan, PlanOutcome, plan};
 use crate::report::{Explanation, explain_plan};
-use crate::runtime::{ExecutionContext, TransformProvider, execute};
-use crate::validate::{ValidationReport, ValidationStatus, validate_adaptation};
+use crate::runtime::{ExecutionContext, StreamHashes, TransformProvider, execute};
+use crate::validate::{
+    ValidationReport, ValidationStatus, validate_adaptation, validate_adapted_artifact,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,58 +84,16 @@ fn adapt_inner(
     let explanation = explain_plan(&artifact, &report, &outcome);
 
     match outcome {
-        PlanOutcome::Compatible { .. } => Ok(AdaptationResult {
-            schema: AdaptationSchema,
-            status: AdaptationStatus::Compatible,
+        PlanOutcome::Compatible { .. } => {
+            Ok(compatible_result(original, artifact, report, explanation))
+        }
+        PlanOutcome::CannotSatisfy { blocking, .. } => Ok(cannot_satisfy_result(
             original,
-            output: None,
             artifact,
             report,
-            plan: None,
-            validation: None,
             explanation,
-            error: None,
-            cleanup_warning: None,
-        }),
-        PlanOutcome::CannotSatisfy { blocking, .. } => Ok(AdaptationResult {
-            schema: AdaptationSchema,
-            status: AdaptationStatus::CannotSatisfy,
-            original,
-            output: None,
-            artifact,
-            report,
-            plan: None,
-            validation: None,
-            explanation: Explanation {
-                summary: explanation.summary,
-                details: {
-                    let mut d = explanation.details;
-                    if !blocking.is_empty() {
-                        d.push(format!(
-                            "Blocking: {}",
-                            blocking
-                                .iter()
-                                .map(|reason| reason.message.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ));
-                    }
-                    d
-                },
-            },
-            error: Some({
-                let mut envelope = ErrorEnvelope::from(Error::new(
-                    ErrorCode::NoValidPlan,
-                    "no acceptable plan satisfies the hard constraints",
-                ));
-                envelope.details.insert(
-                    "blocking".into(),
-                    serde_json::to_value(&blocking).unwrap_or(serde_json::Value::Null),
-                );
-                envelope
-            }),
-            cleanup_warning: None,
-        }),
+            &blocking,
+        )),
         PlanOutcome::Planned { plan, .. } => {
             let Some(provider) = request.provider else {
                 return Ok(failed(
@@ -389,6 +349,152 @@ fn adapt_inner(
                 }
             }
         }
+    }
+}
+
+/// An output produced outside this process, such as by the browser worker, and freshly
+/// re-inspected there.
+pub struct ExternalOutput {
+    pub path: PathBuf,
+    pub artifact: Artifact,
+    pub source_hashes: StreamHashes,
+    pub output_hashes: StreamHashes,
+}
+
+/// The [`adapt`] contract for a plan another runtime executes: plan again from the source facts
+/// and only call the output adapted once it validates against the same constraints.
+pub fn adapt_external(
+    original: PathBuf,
+    artifact: Artifact,
+    constraints: &ConstraintSet,
+    catalog: &CapabilityCatalog,
+    output: Option<ExternalOutput>,
+) -> AdaptationResult {
+    let report = check(&artifact, constraints);
+    let outcome = plan(&artifact, constraints, catalog);
+    let explanation = explain_plan(&artifact, &report, &outcome);
+    let plan = match outcome {
+        PlanOutcome::Compatible { .. } => {
+            return compatible_result(original, artifact, report, explanation);
+        }
+        PlanOutcome::CannotSatisfy { blocking, .. } => {
+            return cannot_satisfy_result(original, artifact, report, explanation, &blocking);
+        }
+        PlanOutcome::Planned { plan, .. } => plan,
+    };
+    let Some(output) = output else {
+        return failed(
+            original,
+            artifact,
+            report,
+            Some(plan),
+            explanation,
+            Error::new(
+                ErrorCode::ProviderMissing,
+                "a transform provider is required to execute a plan",
+            ),
+            None,
+        );
+    };
+    let validation = validate_adapted_artifact(
+        output.artifact,
+        constraints,
+        &artifact,
+        &plan,
+        &output.source_hashes,
+        &output.output_hashes,
+    );
+    if validation.status != ValidationStatus::Pass {
+        return failed(
+            original,
+            artifact,
+            report,
+            Some(plan),
+            explanation,
+            Error::new(
+                ErrorCode::ValidationFailed,
+                "output did not satisfy the same hard constraints",
+            ),
+            Some(validation),
+        );
+    }
+    AdaptationResult {
+        schema: AdaptationSchema,
+        status: AdaptationStatus::Adapted,
+        original,
+        output: Some(output.path),
+        artifact,
+        report,
+        plan: Some(plan),
+        validation: Some(validation),
+        explanation,
+        error: None,
+        cleanup_warning: None,
+    }
+}
+
+fn compatible_result(
+    original: PathBuf,
+    artifact: Artifact,
+    report: CompatibilityReport,
+    explanation: Explanation,
+) -> AdaptationResult {
+    AdaptationResult {
+        schema: AdaptationSchema,
+        status: AdaptationStatus::Compatible,
+        original,
+        output: None,
+        artifact,
+        report,
+        plan: None,
+        validation: None,
+        explanation,
+        error: None,
+        cleanup_warning: None,
+    }
+}
+
+fn cannot_satisfy_result(
+    original: PathBuf,
+    artifact: Artifact,
+    report: CompatibilityReport,
+    explanation: Explanation,
+    blocking: &[BlockingReason],
+) -> AdaptationResult {
+    let mut details = explanation.details;
+    if !blocking.is_empty() {
+        details.push(format!(
+            "Blocking: {}",
+            blocking
+                .iter()
+                .map(|reason| reason.message.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    let mut envelope = ErrorEnvelope::from(Error::new(
+        ErrorCode::NoValidPlan,
+        "no acceptable plan satisfies the hard constraints",
+    ));
+    envelope.details.insert(
+        "blocking".into(),
+        serde_json::to_value(blocking).unwrap_or(serde_json::Value::Null),
+    );
+    AdaptationResult {
+        schema: AdaptationSchema,
+        status: AdaptationStatus::CannotSatisfy,
+        original,
+        output: None,
+        artifact,
+        report,
+        plan: None,
+        validation: None,
+        explanation: Explanation {
+            summary: explanation.summary,
+            details,
+        },
+        error: Some(envelope),
+        cleanup_warning: None,
     }
 }
 

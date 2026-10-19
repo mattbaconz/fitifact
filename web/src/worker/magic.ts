@@ -102,11 +102,11 @@ export function classifyInput(bytes: Uint8Array): InputKind {
 export function refuseMessage(kind: InputKind): string {
   switch (kind) {
     case "video":
-      return "This is a video. The web app adapts photos. Open it in the Fitifact desktop app.";
+      return "This video can't be opened in the web app. Open it in the Fitifact desktop app.";
     case "matroska":
-      return "This is WebM or MKV. The web app adapts photos. Open it in the Fitifact desktop app.";
+      return "This WebM or MKV file can't be opened in the web app. Open it in the Fitifact desktop app.";
     case "audio":
-      return "This is audio. The web app adapts photos. Open it in the Fitifact desktop app.";
+      return "This is audio. The web app handles photos and video. Open sound files in the Fitifact desktop app.";
     case "pdf":
       return "This is a PDF. Fitifact adapts photos, video, and sound files, not documents.";
     case "zip":

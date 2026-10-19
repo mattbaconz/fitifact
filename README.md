@@ -18,8 +18,9 @@ no-op. Nothing is uploaded.
 
 ![The Fitifact desktop app: a 38 MB HEVC phone clip fitted to Discord's 20 MB limit as an H.264 MP4, verified 7 of 7, ready to paste with Copy file](docs/screenshots/desktop-discord-video.png)
 
-The public web app adapts still photos locally in the browser. The desktop
-interface adds video and audio using bundled FFmpeg tools. Published release
+The public web app adapts still photos locally in the browser and checks video
+there too, repackaging it into MP4 when no re-encoding is needed. The desktop
+interface adds video re-encoding and audio using bundled FFmpeg tools. Published release
 archives currently verified are CLI builds, not desktop installers. See the
 [desktop guide](https://mattbaconz.github.io/fitifact/docs/desktop-guide/) for
 build and download guidance. Desktop installers are not code-signed yet; see the
@@ -166,8 +167,9 @@ refused. The transform timeout defaults to 1800 seconds and can be set from 1
 through 86400 seconds with `--timeout-seconds`.
 
 Desktop packaging lives in [`apps/desktop/README.md`](apps/desktop/README.md).
-The web UI is still-image only on GitHub Pages; the desktop host adds MP4, MOV,
-WebM, MKV, and common audio (MP3, WAV, FLAC, M4A).
+On GitHub Pages the web UI adapts still images and checks MP4, MOV, WebM, and MKV
+video, repackaging H.264/AAC video into MP4 without re-encoding. The desktop host
+adds video re-encoding and common audio (MP3, WAV, FLAC, M4A).
 
 `--max-size` accepts exact whole bytes, decimal `MB`, or binary `MiB` (for
 example `25000000`, `25 MB`, or `25 MiB`). `--max-base64-size` limits the

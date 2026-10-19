@@ -99,7 +99,7 @@ export function SettingsDrawer({ session }: { session: FitifactSession }) {
             Version {__FITIFACT_VERSION__} · Images are processed locally.{" "}
             {desktop
               ? "Video and audio use FFmpeg shipped with this app."
-              : "Video and audio use the desktop app."}
+              : "Video is checked and repackaged in this browser. Re-encoding and audio use the desktop app."}
           </p>
           <a href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`}>
             Third-party notices

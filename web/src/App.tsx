@@ -190,7 +190,7 @@ export function App() {
                   <p id="image-help">
                     {desktop
                       ? "Photos, video, and audio · JPEG PNG WebP HEIC TIFF BMP GIF · MP4 MOV WebM MKV · MP3 WAV FLAC M4A"
-                      : "Photos · JPEG PNG WebP HEIC TIFF BMP GIF · max 32 MiB or 24 megapixels"}
+                      : "Photos and video · JPEG PNG WebP HEIC TIFF BMP GIF · MP4 MOV WebM MKV · photos up to 32 MiB or 24 megapixels"}
                   </p>
                   {desktop ? (
                     <button
@@ -235,9 +235,9 @@ export function App() {
                     "Photos, video, and audio. All on this computer."
                   ) : (
                     <>
-                      Photos in this browser.{" "}
+                      Photos and video in this browser.{" "}
                       <a href={desktopGuideHref()}>
-                        Video and audio on desktop.
+                        Re-encoding and audio on desktop.
                       </a>
                     </>
                   )}

@@ -9,6 +9,7 @@ $expectedNames = @(
     "corrupt-truncated.mp4",
     "mismatch-hevc-aac.mp4",
     "refusal-hdr10-hevc-aac.mp4",
+    "remux-h264-aac.mkv",
     "remux-h264-aac.mov",
     "unsupported-extra-video.mp4"
 )
@@ -26,10 +27,10 @@ foreach ($line in Get-Content -LiteralPath $manifest) {
 }
 
 $actualNames = @(Get-ChildItem -LiteralPath $media -File | Where-Object {
-    $_.Extension -in @(".mp4", ".mov")
+    $_.Extension -in @(".mp4", ".mov", ".mkv")
 } | ForEach-Object Name | Sort-Object)
 if (Compare-Object ($expectedNames | Sort-Object) $actualNames) {
-    throw "Fixture directory does not contain exactly the six canonical media binaries"
+    throw "Fixture directory does not contain exactly the seven canonical media binaries"
 }
 
 foreach ($name in $expectedNames) {

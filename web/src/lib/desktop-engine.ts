@@ -65,6 +65,17 @@ export interface DesktopPlanOutcome {
   warnings?: string[];
 }
 
+/** `plan_media_probe`: the engine's plan for a video the browser worker probed. */
+export interface MediaPlanReport {
+  schema: "fitifact.web-media-plan/v1";
+  inspection: DesktopArtifact;
+  constraints: ConstraintSet;
+  report: CompatibilityReport;
+  outcome: DesktopPlanOutcome;
+  /** A plan exists, but only with an encoder this browser does not run. */
+  needs_encoder: boolean;
+}
+
 export interface DesktopAdaptResult {
   status: "compatible" | "adapted" | "cannot_satisfy" | "failed";
   output?: string | null;

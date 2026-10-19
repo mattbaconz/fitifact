@@ -1,14 +1,18 @@
-//! Constraint-driven local image bindings for the static consumer product.
+//! Constraint-driven local bindings for the static consumer product: still images in-process,
+//! and plans plus validation for media the browser worker probed and executed itself.
 //!
 //! Destination policy stays in `fitifact`. This crate only translates bytes and JSON across the
 //! WASM boundary. It never constructs a media transform provider or performs network activity.
 
 use std::io::Cursor;
+use std::path::PathBuf;
 
 use fitifact::error::ErrorEnvelope;
 use fitifact::{
-    ConstraintSet, ImageAdaptOptions, NeverCancelled, execute_image_adaptation,
-    image_artifact_from_bytes, parse_image_requirements, plan_image_adaptation,
+    CapabilityCatalog, ConstraintSet, ExternalOutput, ImageAdaptOptions, NeverCancelled,
+    PlanOutcome, StreamHashes, TransformId, adapt_external, artifact_from_browser_probe,
+    default_catalog, execute_image_adaptation, image_artifact_from_bytes, parse_image_requirements,
+    plan_image_adaptation,
 };
 use image::{DynamicImage, ImageFormat as EncoderFormat, RgbImage, RgbaImage};
 
@@ -178,6 +182,118 @@ pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -
     }
 }
 
+/// The default catalog narrowed to the transforms this browser measured it can run.
+fn media_catalog(transforms_json: &str) -> Result<CapabilityCatalog, fitifact::Error> {
+    let allowed: Vec<TransformId> = serde_json::from_str(transforms_json).map_err(|error| {
+        fitifact::Error::new(
+            fitifact::ErrorCode::InputInvalid,
+            format!("media.transforms_invalid: {error}"),
+        )
+    })?;
+    let mut catalog = default_catalog();
+    catalog
+        .capabilities
+        .retain(|capability| allowed.contains(&capability.id));
+    Ok(catalog)
+}
+
+pub fn inspect_media_probe(probe_json: &str) -> String {
+    match artifact_from_browser_probe(probe_json) {
+        Ok(artifact) => serde_json::to_string(&artifact).expect("artifact report serializes"),
+        Err(error) => json_error(error),
+    }
+}
+
+pub fn plan_media_probe(probe_json: &str, constraints_json: &str, transforms_json: &str) -> String {
+    let result = parse_constraints(constraints_json).and_then(|constraints| {
+        let catalog = media_catalog(transforms_json)?;
+        let artifact = artifact_from_browser_probe(probe_json)?;
+        let report = fitifact::check(&artifact, &constraints);
+        let outcome = fitifact::plan(&artifact, &constraints, &catalog);
+        // The full catalog (with an FFmpeg that can tone-map) finds a plan this browser cannot run.
+        let needs_encoder = matches!(outcome, PlanOutcome::CannotSatisfy { .. })
+            && fitifact::plan(
+                &artifact,
+                &constraints,
+                &default_catalog().with_hdr_tone_mapping(true),
+            )
+            .plan()
+            .is_some();
+        Ok(serde_json::json!({
+            "schema": "fitifact.web-media-plan/v1",
+            "inspection": artifact,
+            "constraints": constraints,
+            "report": report,
+            "outcome": outcome,
+            "needs_encoder": needs_encoder,
+        }))
+    });
+    match result {
+        Ok(report) => serde_json::to_string(&report).expect("plan report serializes"),
+        Err(error) => json_error(error),
+    }
+}
+
+/// `output_json` is `null` when nothing ran, or `{name, probe, source_hashes, output_hashes}`
+/// describing the re-probed output and SHA-256 digests of each stream's packet payloads.
+pub fn adapt_media_probe(
+    probe_json: &str,
+    constraints_json: &str,
+    transforms_json: &str,
+    output_json: &str,
+) -> String {
+    let result = parse_constraints(constraints_json).and_then(|constraints| {
+        let catalog = media_catalog(transforms_json)?;
+        let artifact = artifact_from_browser_probe(probe_json)?;
+        let output = external_output(output_json)?;
+        let original = artifact.path.clone().unwrap_or_default();
+        Ok(adapt_external(
+            original,
+            artifact,
+            &constraints,
+            &catalog,
+            output,
+        ))
+    });
+    match result {
+        Ok(result) => serde_json::to_string(&result).expect("adaptation report serializes"),
+        Err(error) => json_error(error),
+    }
+}
+
+fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact::Error> {
+    let invalid = |message: String| {
+        fitifact::Error::new(
+            fitifact::ErrorCode::ValidationFailed,
+            format!("media.output_invalid: {message}"),
+        )
+    };
+    let output: serde_json::Value =
+        serde_json::from_str(output_json).map_err(|error| invalid(error.to_string()))?;
+    if output.is_null() {
+        return Ok(None);
+    }
+    let hashes = |key: &str| {
+        serde_json::from_value::<StreamHashes>(output[key].clone())
+            .map_err(|error| invalid(format!("{key}: {error}")))
+    };
+    let name = output["name"]
+        .as_str()
+        .ok_or_else(|| invalid("name is missing".into()))?;
+    let artifact = artifact_from_browser_probe(&output["probe"].to_string()).map_err(|error| {
+        invalid(format!(
+            "the output could not be freshly inspected: {}",
+            error.message
+        ))
+    })?;
+    Ok(Some(ExternalOutput {
+        path: PathBuf::from(name),
+        artifact,
+        source_hashes: hashes("source_hashes")?,
+        output_hashes: hashes("output_hashes")?,
+    }))
+}
+
 #[allow(clippy::chunks_exact_to_as_chunks)]
 fn rgba_as_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, fitifact::Error> {
     fitifact::image::enforce_decoded_limit(width, height)?;
@@ -275,6 +391,30 @@ mod wasm_exports {
     #[wasm_bindgen]
     pub fn plan_bytes(bytes: &[u8], constraints_json: &str) -> String {
         super::plan_bytes(bytes, constraints_json)
+    }
+
+    #[wasm_bindgen]
+    pub fn inspect_media_probe(probe_json: &str) -> String {
+        super::inspect_media_probe(probe_json)
+    }
+
+    #[wasm_bindgen]
+    pub fn plan_media_probe(
+        probe_json: &str,
+        constraints_json: &str,
+        transforms_json: &str,
+    ) -> String {
+        super::plan_media_probe(probe_json, constraints_json, transforms_json)
+    }
+
+    #[wasm_bindgen]
+    pub fn adapt_media_probe(
+        probe_json: &str,
+        constraints_json: &str,
+        transforms_json: &str,
+        output_json: &str,
+    ) -> String {
+        super::adapt_media_probe(probe_json, constraints_json, transforms_json, output_json)
     }
 
     #[wasm_bindgen]

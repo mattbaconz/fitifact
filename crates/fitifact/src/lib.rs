@@ -5,6 +5,7 @@
 pub mod adapt;
 pub mod artifact;
 pub mod bench;
+pub mod browser_probe;
 pub mod capability;
 pub mod check;
 pub mod constraints;
@@ -26,7 +27,8 @@ pub mod runtime;
 pub mod validate;
 
 pub use adapt::{
-    AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, adapt, write_sibling_output,
+    AdaptRequest, AdaptationResult, AdaptationStatus, CleanupWarning, ExternalOutput, adapt,
+    adapt_external, write_sibling_output,
 };
 pub use artifact::{
     Artifact, AudioCodec, AudioStream, Container, Family, ImageFacts, ImageFormat, VideoCodec,
@@ -36,6 +38,7 @@ pub use bench::{
     BenchOptions, BenchReport, find_lockfile, network_crates_in_lockfile, resolve_fixtures,
     run_bench,
 };
+pub use browser_probe::{BROWSER_PROBE_SCHEMA, artifact_from_browser_probe};
 pub use capability::{CapabilityCatalog, TransformId, default_catalog};
 pub use check::{CheckResult, CompatibilityReport, check};
 pub use constraints::{
@@ -81,7 +84,7 @@ pub use runtime::{
 };
 pub use validate::{
     DURATION_TOLERANCE_MS, ProvenanceCheck, ValidationCheck, ValidationReport, ValidationStatus,
-    validate, validate_adaptation,
+    validate, validate_adaptation, validate_adapted_artifact,
 };
 
 pub mod cancellation;

@@ -1,6 +1,6 @@
 ---
 title: Browser guide
-description: From a local photo to a checked result, without an upload.
+description: From a local photo or video to a checked result, without an upload.
 ---
 
 ## Choose a source
@@ -42,6 +42,17 @@ A file that already fits shows **Already compatible. Nothing changed.** and **Us
 ## Save a target
 
 Choose **Saved targets**, give the current confirmed requirements a name, and save. You can rename it or undo a removal. Targets live in this browser’s local storage. If storage is unavailable, the working session remains usable, but changes may not survive closing the tab.
+
+## Video in the browser
+
+You can also add an MP4, MOV, WebM, or MKV video. The browser reads its container and stream details without decoding frames, then checks them against the destination.
+
+- A video that already fits shows **Already compatible. Nothing changed.** and keeps the original bytes.
+- An H.264 video with AAC audio (or none) in MOV, MKV, or WebM that only needs an MP4 container is copied into MP4 without re-encoding. The copy is read again and validated against the same rules before you can download it.
+- A video that would need re-encoding is refused with a link to the [desktop app](../desktop-guide/). Audio-only files are refused the same way.
+- A video with subtitle, data, or attachment tracks is refused rather than losing them.
+
+Repackaging in the browser handles videos up to 1 GiB. The video tools load only when you open a video, so photo-only visits never download them.
 
 ## When something fails
 
