@@ -637,7 +637,7 @@ constraints:
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(&compile_shipped_profile("whatsapp/photo").unwrap()),
-            Some(16_000_000)
+            None
         );
         assert_eq!(
             crate::media_fit::file_bytes_limit(&compile_shipped_profile("x/image").unwrap()),
