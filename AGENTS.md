@@ -54,6 +54,10 @@ The executable adaptation catalog is deliberately small:
 - JPEG/PNG/still WebP/TIFF/BMP/GIF/single-image HEIC can be adapted in-process
   under D-026/D-029 format, byte, dimension, crop, and first-frame constraints
   to JPEG or PNG, plus WebP when the confirmed target names it;
+- in the web app (D-037 slice 1), video gets the no-op check and the
+  MOV/MKV/WebM H.264+AAC remux to MP4 only: Mediabunny, loaded lazily in the
+  worker, probes and copies streams, the Rust engine plans and validates, and
+  a plan that needs an encode is refused with a pointer to the desktop app;
 - every mutation outside that catalog is refused explicitly.
 
 A provider returning success is not proof of
@@ -121,7 +125,8 @@ External tools are **providers**. Fitifact is the orchestration and compatibilit
 
 Current implementation: Rust domain core and native runtime with system
 FFmpeg/ffprobe as the media provider, `fitifact-wasm` plus a static drop-first
-web surface for the still-image matrix, and a thin Tauri 2 host in
+web surface for the still-image matrix and browser video stream copy
+(Mediabunny in a lazy worker chunk), and a thin Tauri 2 host in
 `apps/desktop/` that reuses that UI. The desktop package stays out of the
 workspace lockfile.
 

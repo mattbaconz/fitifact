@@ -43,8 +43,13 @@ fn generic() -> String {
     compile_profile("generic/video-upload")
 }
 
-fn hashes(video: &str) -> Value {
-    json!({ "algorithm": "sha256", "video": video, "audio": "audio-a" })
+/// SHA-256 hex digests of each stream's packets; `video` picks the video digest.
+fn hashes(video: char) -> Value {
+    json!({ "algorithm": "sha256", "video": video.to_string().repeat(64), "audio": "c".repeat(64) })
+}
+
+fn geometry(rotation: u32) -> Value {
+    json!({ "display_width": 320, "display_height": 240, "rotation": rotation, "flip": false })
 }
 
 #[test]
@@ -85,12 +90,14 @@ fn mov_and_mkv_with_h264_aac_plan_a_remux() {
 #[test]
 fn remuxed_output_must_validate_before_it_counts() {
     let source = probe("clip.mov", "isobmff", Some("qt  "), "avc", &[]).to_string();
-    let output = |video_hash: &str| {
+    let output = |video_hash: char| {
         json!({
             "name": "clip.fitifact.mp4",
             "probe": probe("clip.fitifact.mp4", "isobmff", Some("isom"), "avc", &[]),
-            "source_hashes": hashes("video-a"),
+            "source_hashes": hashes('a'),
             "output_hashes": hashes(video_hash),
+            "source_geometry": geometry(0),
+            "output_geometry": geometry(0),
         })
         .to_string()
     };
@@ -99,7 +106,7 @@ fn remuxed_output_must_validate_before_it_counts() {
         &source,
         &generic(),
         REMUX_ONLY,
-        &output("video-a"),
+        &output('a'),
     ));
     assert_eq!(adapted["status"], "adapted", "{adapted}");
     assert_eq!(adapted["output"], "clip.fitifact.mp4");
@@ -110,7 +117,7 @@ fn remuxed_output_must_validate_before_it_counts() {
         &source,
         &generic(),
         REMUX_ONLY,
-        &output("video-b"),
+        &output('b'),
     ));
     assert_eq!(altered["status"], "failed");
     assert_eq!(altered["error"]["code"], "VALIDATION_FAILED");
@@ -123,8 +130,10 @@ fn remuxed_output_must_validate_before_it_counts() {
     let unreadable = json!({
         "name": "clip.fitifact.mp4",
         "probe": { "schema": "fitifact.browser-probe/v1" },
-        "source_hashes": hashes("video-a"),
-        "output_hashes": hashes("video-a"),
+        "source_hashes": hashes('a'),
+        "output_hashes": hashes('a'),
+        "source_geometry": geometry(0),
+        "output_geometry": geometry(0),
     });
     let refused = parse(&adapt_media_probe(
         &source,
@@ -176,4 +185,55 @@ fn malformed_inputs_return_structured_errors() {
     assert_eq!(bad_transforms["code"], "INPUT_INVALID");
     let bad_probe = parse(&inspect_media_probe("{}"));
     assert_eq!(bad_probe["code"], "INPUT_INVALID");
+}
+
+#[test]
+fn a_copy_shown_differently_or_without_real_digests_is_not_adapted() {
+    let source = probe("clip.mov", "isobmff", Some("qt  "), "avc", &[]).to_string();
+    let output = |source_hashes: Value, rotation: u32| {
+        json!({
+            "name": "clip.fitifact.mp4",
+            "probe": probe("clip.fitifact.mp4", "isobmff", Some("isom"), "avc", &[]),
+            "source_hashes": source_hashes,
+            "output_hashes": hashes('a'),
+            "source_geometry": geometry(0),
+            "output_geometry": geometry(rotation),
+        })
+        .to_string()
+    };
+
+    let turned = parse(&adapt_media_probe(
+        &source,
+        &generic(),
+        REMUX_ONLY,
+        &output(hashes('a'), 90),
+    ));
+    assert_eq!(turned["status"], "failed", "{turned}");
+    assert_eq!(turned["error"]["code"], "VALIDATION_FAILED");
+    let rows = turned["validation"]["integrity"].as_array().unwrap();
+    let row = rows
+        .iter()
+        .find(|row| row["id"] == "display_geometry")
+        .unwrap();
+    assert_eq!(row["status"], "fail");
+    assert_eq!(row["actual"], "320x240, rotated 90, flipped false");
+
+    // Equal but empty digests would prove nothing.
+    let empty = json!({ "algorithm": "sha256", "video": "", "audio": null });
+    let refused = parse(&adapt_media_probe(
+        &source,
+        &generic(),
+        REMUX_ONLY,
+        &output(empty, 0),
+    ));
+    assert_eq!(refused["code"], "VALIDATION_FAILED", "{refused}");
+}
+
+#[test]
+fn the_browser_never_plans_an_encode_even_when_offered_one() {
+    let source = probe("clip.mp4", "isobmff", Some("isom"), "hevc", &[]).to_string();
+    let every = r#"["media.remux", "media.transcode_video", "media.transcode_audio"]"#;
+    let plan = parse(&plan_media_probe(&source, &generic(), every));
+    assert_eq!(plan["outcome"]["kind"], "cannot_satisfy", "{plan}");
+    assert_eq!(plan["needs_encoder"], true);
 }
