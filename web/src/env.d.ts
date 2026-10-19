@@ -36,6 +36,14 @@ declare module "*fitifact_wasm.js" {
     take_output(): Uint8Array | undefined;
     free(): void;
   }
+  export function inspect_media_probe(probe: string): string;
+  export function plan_media_probe(probe: string, constraints: string, transforms: string): string;
+  export function adapt_media_probe(
+    probe: string,
+    constraints: string,
+    transforms: string,
+    output: string,
+  ): string;
 }
 
 declare module "libheif-js/wasm-bundle";
