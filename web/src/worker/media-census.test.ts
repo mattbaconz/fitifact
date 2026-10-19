@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CensusFailure, Sha256, trackCensus } from "./media-census";
-import { MEDIABUNNY_VERSION, rgbaToI420 } from "./media";
+import { MEDIABUNNY_VERSION, finishes, rgbaToI420 } from "./media";
 
 async function fixture(name: string) {
   const path = fileURLToPath(new URL(`../../../fixtures/media/${name}`, import.meta.url));
@@ -124,4 +124,38 @@ it("redraws frames as limited-range BT.709 4:2:0, one chroma sample per 2x2 bloc
     63, 63, 32, 32, 63, 63, 32, 32, 102, 240, 240, 118,
   ]);
   expect([...rgbaToI420(rgba(white, white, white, white), 2, 2)]).toEqual([235, 235, 235, 235, 128, 128]);
+});
+
+describe("conversion watchdog", () => {
+  it("cancels a run that stops making progress", async () => {
+    let cancelled = false;
+    const stuck = {
+      onProgress: undefined,
+      execute: () => new Promise<void>(() => undefined),
+      cancel: async () => {
+        cancelled = true;
+      },
+    };
+    expect(await finishes(stuck, 20)).toBe(false);
+    expect(cancelled).toBe(true);
+  });
+
+  it("lets a slow run finish while it keeps making progress", async () => {
+    const seen: number[] = [];
+    const slow = {
+      onProgress: undefined as ((fraction: number) => unknown) | undefined,
+      execute: async () => {
+        for (let step = 1; step <= 8; step++) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          slow.onProgress?.(step / 8);
+        }
+      },
+      cancel: async () => {
+        throw new Error("a live run was cancelled");
+      },
+    };
+    // 200 ms in all, longer than the 100 ms limit, but never 100 ms without progress
+    expect(await finishes(slow, 100, (fraction) => seen.push(fraction))).toBe(true);
+    expect(seen).toEqual([0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]);
+  });
 });
