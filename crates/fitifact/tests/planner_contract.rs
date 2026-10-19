@@ -1,5 +1,6 @@
 use fitifact::artifact::{
-    Artifact, AudioCodec, Container, HdrStatus, OtherStream, Stream, StreamDetails, VideoCodec,
+    Artifact, AudioCodec, Container, DisplayMatrix, HdrStatus, OtherStream, Stream, StreamDetails,
+    VideoCodec,
 };
 use fitifact::capability::{TransformId, default_catalog};
 use fitifact::constraints::{
@@ -118,6 +119,8 @@ fn refuses_additional_or_non_av_stream_topologies() {
                 color_transfer: Some("bt709".into()),
                 color_primaries: None,
                 hdr: HdrStatus::Sdr,
+                sample_aspect_ratio: None,
+                display_matrix: None,
             },
         },
         StreamDetails::Audio {
@@ -156,6 +159,63 @@ fn refuses_additional_or_non_av_stream_topologies() {
             vec![BlockingCode::UnsafeStreamTopology]
         );
     }
+}
+
+#[test]
+fn turned_video_plans_at_its_shown_size_and_mirrored_video_is_only_copied() {
+    // Inspection reports a quarter-turned phone clip at its shown size.
+    let mut portrait = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let video = portrait.first_video_mut().unwrap();
+    (video.width, video.height) = (Some(1080), Some(1920));
+    video.display_matrix = Some(DisplayMatrix {
+        rotation: Some(90),
+        mirrored: false,
+    });
+    let box_1280 = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_width: Some(1280),
+        max_height: Some(1280),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&portrait, &box_1280, &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert_eq!(
+        (step.target.width, step.target.height),
+        (Some(720), Some(1280))
+    );
+
+    // Mirrored: no encode, but a copy that keeps the matrix, or no change at all, is fine.
+    let mirrored = Some(DisplayMatrix {
+        rotation: Some(180),
+        mirrored: true,
+    });
+    portrait.first_video_mut().unwrap().display_matrix = mirrored;
+    assert_eq!(
+        blocking(&portrait, &media_h264_mp4_aac()),
+        vec![BlockingCode::DisplayTransformUnsupported]
+    );
+    let mut mov = Artifact::media(
+        Container::Mov,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    mov.first_video_mut().unwrap().display_matrix = mirrored;
+    assert_eq!(
+        plan(&mov, &media_h264_mp4_aac(), &default_catalog()).steps()[0].operation,
+        TransformId::Remux
+    );
+    mov.container = Some(Container::Mp4);
+    assert!(plan(&mov, &media_h264_mp4_aac(), &default_catalog()).is_compatible());
 }
 
 #[test]

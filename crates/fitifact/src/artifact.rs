@@ -364,7 +364,10 @@ impl HdrStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VideoStream {
     pub codec: Option<VideoCodec>,
+    /// Width as players show it. Inspection swaps the stored size of a quarter-turned picture,
+    /// as FFmpeg turns the frames upright before any filter (see `display_matrix`).
     pub width: Option<u32>,
+    /// Height as players show it, like `width`.
     pub height: Option<u32>,
     pub frame_rate: Option<Rational>,
     pub pixel_format: Option<String>,
@@ -374,6 +377,33 @@ pub struct VideoStream {
     pub color_transfer: Option<String>,
     pub color_primaries: Option<String>,
     pub hdr: HdrStatus,
+    /// Width over height of one stored pixel; absent when the file does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_aspect_ratio: Option<Rational>,
+    /// How the container's display matrix turns the stored picture; absent when it is shown as
+    /// stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_matrix: Option<DisplayMatrix>,
+}
+
+/// How a player turns the stored picture before showing it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DisplayMatrix {
+    /// Clockwise degrees: 0, 90, 180, or 270. `None` when the matrix does anything else (another
+    /// angle, scaling, or shear); the shown size is then unknown.
+    pub rotation: Option<u16>,
+    /// The matrix also mirrors the picture.
+    pub mirrored: bool,
+}
+
+impl VideoStream {
+    /// True when an encode can reproduce what a player shows: FFmpeg bakes a plain right-angle
+    /// turn into upright frames, but mirroring and other transforms are not proven to come out
+    /// right.
+    pub fn encodable_orientation(&self) -> bool {
+        self.display_matrix
+            .is_none_or(|matrix| matrix.rotation.is_some() && !matrix.mirrored)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -532,6 +562,8 @@ impl Artifact {
                     color_transfer: Some("bt709".into()),
                     color_primaries: Some("bt709".into()),
                     hdr: HdrStatus::Sdr,
+                    sample_aspect_ratio: None,
+                    display_matrix: None,
                 },
             },
         }];

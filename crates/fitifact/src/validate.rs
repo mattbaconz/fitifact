@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::artifact::{Artifact, Family};
+use crate::artifact::{Artifact, DisplayMatrix, Family};
 use crate::capability::TransformId;
 use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, Field};
@@ -186,6 +186,24 @@ pub fn validate_adapted_artifact(
                     artifact.first_video().and_then(|video| video.height),
                 ));
             }
+            // A copy keeps the display matrix; an encode turns the frames upright instead.
+            let encode = operation == TransformId::TranscodeVideo;
+            let expected_matrix = source
+                .first_video()
+                .and_then(|video| video.display_matrix)
+                .filter(|_| !encode);
+            let actual_matrix = artifact
+                .first_video()
+                .and_then(|video| video.display_matrix);
+            integrity.push(simple_check(
+                "display_matrix",
+                expected_matrix == actual_matrix,
+                describe_matrix(expected_matrix),
+                describe_matrix(actual_matrix),
+            ));
+            if encode {
+                integrity.push(display_aspect_check(source, &artifact));
+            }
         }
         integrity.push(duration_check(source.duration_ms, artifact.duration_ms));
     }
@@ -349,6 +367,72 @@ fn option_equality_check<T: std::fmt::Debug + PartialEq>(
     }
 }
 
+fn describe_matrix(matrix: Option<DisplayMatrix>) -> String {
+    match matrix {
+        None => "shown as stored".into(),
+        Some(DisplayMatrix {
+            rotation: Some(degrees),
+            mirrored,
+        }) => format!(
+            "turned {degrees} degrees clockwise{}",
+            if mirrored { ", mirrored" } else { "" }
+        ),
+        Some(_) => "an unusual transform".into(),
+    }
+}
+
+/// Rounding the planner may apply to each output edge, in pixels: the first fit rounds by up to
+/// 1.5, and each 3/4 step by up to 2 more, which converges below 8.
+const EDGE_ROUNDING_PX: f64 = 8.0;
+
+/// An encode must keep the shape of the picture players show: the frame's proportions and its
+/// pixels'. FFmpeg's scaler restores a mis-sized frame's shown proportions through the pixel
+/// aspect ratio (a portrait frame squashed to 1280x720 comes out 81:256), so checking either one
+/// alone lets a distorted file pass.
+fn display_aspect_check(source: &Artifact, output: &Artifact) -> ValidationCheck {
+    let shape = |artifact: &Artifact| {
+        let video = artifact.first_video()?;
+        let pixel = video.sample_aspect_ratio.map_or(1.0, |ratio| {
+            f64::from(ratio.numerator) / f64::from(ratio.denominator)
+        });
+        // A quarter turn stands each stored pixel on its side.
+        let quarter_turn = matches!(
+            video.display_matrix,
+            Some(DisplayMatrix {
+                rotation: Some(90 | 270),
+                ..
+            })
+        );
+        let pixel = if quarter_turn { 1.0 / pixel } else { pixel };
+        Some((f64::from(video.width?), f64::from(video.height?), pixel))
+    };
+    let describe = |shape: Option<(f64, f64, f64)>| {
+        shape.map_or_else(
+            || "unknown".into(),
+            |(width, height, pixel)| format!("{width}x{height} frame, pixel aspect {pixel:.3}"),
+        )
+    };
+    let (expected, actual) = (shape(source), shape(output));
+    let status = match (expected, actual) {
+        (Some((source_width, source_height, source_pixel)), Some((width, height, pixel))) => {
+            let tolerance = EDGE_ROUNDING_PX * (1.0 / width + 1.0 / height);
+            let frame = (width / height) / (source_width / source_height);
+            if (frame - 1.0).abs() <= tolerance && (pixel / source_pixel - 1.0).abs() <= tolerance {
+                ValidationStatus::Pass
+            } else {
+                ValidationStatus::Fail
+            }
+        }
+        _ => ValidationStatus::Unknown,
+    };
+    ValidationCheck {
+        id: "display_aspect".into(),
+        status,
+        expected: describe(expected),
+        actual: describe(actual),
+    }
+}
+
 fn duration_check(expected: Option<u64>, actual: Option<u64>) -> ValidationCheck {
     let status = match (expected, actual) {
         (Some(expected), Some(actual)) if expected.abs_diff(actual) <= DURATION_TOLERANCE_MS => {
@@ -455,7 +539,7 @@ fn provenance_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::artifact::{Artifact, AudioCodec, Container, VideoCodec};
+    use crate::artifact::{Artifact, AudioCodec, Container, Rational, VideoCodec};
     use crate::constraints::media_h264_mp4_aac;
     use crate::error::{Error, ErrorCode};
     use std::path::PathBuf;
@@ -558,6 +642,96 @@ mod tests {
         )
         .unwrap();
         assert_eq!(report.status, ValidationStatus::Fail);
+    }
+
+    fn video_shaped(
+        codec: VideoCodec,
+        (width, height): (u32, u32),
+        sample_aspect_ratio: Option<(u32, u32)>,
+        display_matrix: Option<DisplayMatrix>,
+    ) -> Artifact {
+        let mut artifact = Artifact::media(Container::Mp4, codec, Some(AudioCodec::Aac), 10);
+        let video = artifact.first_video_mut().unwrap();
+        (video.width, video.height) = (Some(width), Some(height));
+        video.sample_aspect_ratio =
+            sample_aspect_ratio.and_then(|(width, height)| Rational::new(width, height));
+        video.display_matrix = display_matrix;
+        artifact
+    }
+
+    const QUARTER_TURN: Option<DisplayMatrix> = Some(DisplayMatrix {
+        rotation: Some(90),
+        mirrored: false,
+    });
+
+    /// The bug this guards: FFmpeg turned a portrait clip upright, scaled it into a landscape
+    /// frame planned from the stored size, and kept its shown proportions through the pixels.
+    #[test]
+    fn an_encode_that_squashes_the_shown_picture_fails() {
+        let portrait = video_shaped(VideoCodec::Hevc, (1080, 1920), Some((1, 1)), QUARTER_TURN);
+        let shown = |source: &Artifact, size, pixels| {
+            display_aspect_check(source, &video_shaped(VideoCodec::H264, size, pixels, None)).status
+        };
+        assert_eq!(
+            shown(&portrait, (720, 1280), Some((1, 1))),
+            ValidationStatus::Pass
+        );
+        assert_eq!(
+            shown(&portrait, (1280, 720), Some((81, 256))),
+            ValidationStatus::Fail
+        );
+        // Without a declared pixel shape, the frame alone shows the squash.
+        let undeclared = video_shaped(VideoCodec::Hevc, (1080, 1920), None, QUARTER_TURN);
+        assert_eq!(
+            shown(&undeclared, (1280, 720), None),
+            ValidationStatus::Fail
+        );
+        // A turn ffprobe never reported: the frame matches, the pixels give it away.
+        let hidden = video_shaped(VideoCodec::Hevc, (1920, 1080), Some((1, 1)), None);
+        assert_eq!(
+            shown(&hidden, (1280, 720), Some((81, 256))),
+            ValidationStatus::Fail
+        );
+        // Planner rounding stays within tolerance: 1920x1080 fitted to 1000 wide is 1000x562.
+        assert_eq!(
+            shown(&hidden, (1000, 562), Some((1124, 1125))),
+            ValidationStatus::Pass
+        );
+    }
+
+    #[test]
+    fn a_copy_keeps_the_display_matrix_and_an_encode_drops_it() {
+        let matrix_row = |source: &Artifact, output: Artifact| {
+            let report = validate_adaptation(
+                Path::new("out.mp4"),
+                &media_h264_mp4_aac(),
+                &FakeInspector(output),
+                source,
+                &planned(source),
+                &StreamHashes::new("video-a", Some("audio-a")),
+                &StreamHashes::new("video-a", Some("audio-a")),
+            )
+            .unwrap();
+            let row = report
+                .integrity
+                .iter()
+                .find(|check| check.id == "display_matrix");
+            (report.status, row.unwrap().status)
+        };
+        let mut mov = video_shaped(VideoCodec::H264, (1080, 1920), Some((1, 1)), QUARTER_TURN);
+        mov.container = Some(Container::Mov);
+        let kept = video_shaped(VideoCodec::H264, (1080, 1920), Some((1, 1)), QUARTER_TURN);
+        assert_eq!(
+            matrix_row(&mov, kept),
+            (ValidationStatus::Pass, ValidationStatus::Pass)
+        );
+        // A remux that lost the turn shows the stored picture sideways at the same size.
+        let lost = video_shaped(VideoCodec::H264, (1080, 1920), Some((1, 1)), None);
+        assert_eq!(matrix_row(&mov, lost).1, ValidationStatus::Fail);
+
+        let hevc = video_shaped(VideoCodec::Hevc, (1080, 1920), Some((1, 1)), QUARTER_TURN);
+        let still_turned = video_shaped(VideoCodec::H264, (1080, 1920), Some((1, 1)), QUARTER_TURN);
+        assert_eq!(matrix_row(&hevc, still_turned).1, ValidationStatus::Fail);
     }
 
     #[test]

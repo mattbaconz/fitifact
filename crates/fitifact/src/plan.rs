@@ -147,6 +147,7 @@ pub enum BlockingCode {
     UnsupportedImageTarget,
     AnimationUnsupported,
     BelowMinimumSize,
+    DisplayTransformUnsupported,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -393,12 +394,35 @@ pub fn plan(
                 "this HDR video needs tone mapping to SDR, and this FFmpeg build cannot do it (it lacks the zscale filter)",
             )])
         }
+        None if artifact
+            .first_video()
+            .is_some_and(|video| !video.encodable_orientation())
+            && plan(&shown_as_stored(artifact), constraints, catalog)
+                .plan()
+                .is_some() =>
+        {
+            cannot(vec![blocking(
+                BlockingCode::DisplayTransformUnsupported,
+                initial.blocking_ids(),
+                "this video is mirrored or turned by an unusual angle, and re-encoding it is not proven to keep the picture the right way around",
+            )])
+        }
         None => cannot(vec![blocking(
             BlockingCode::NoProvenPlan,
             initial.blocking_ids(),
             "the bounded v0.1 capability catalog has no proven plan",
         )]),
     }
+}
+
+/// The same file as if its picture were stored as shown, to tell whether the display matrix
+/// alone blocks a plan.
+fn shown_as_stored(artifact: &Artifact) -> Artifact {
+    let mut upright = artifact.clone();
+    if let Some(video) = upright.first_video_mut() {
+        video.display_matrix = None;
+    }
+    upright
 }
 
 /// Refuse rather than pad: nothing in the catalog may grow a file to reach a floor.
@@ -1093,6 +1117,7 @@ fn instantiate_transcode_video(
     let duration_ms = artifact.duration_ms?;
     if !supported_source_container(artifact.container.as_ref())
         || !transcodable_codec(input_video.codec.as_ref())
+        || !input_video.encodable_orientation()
     {
         return None;
     }
@@ -1299,6 +1324,8 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
                 if let Some(height) = step.target.height {
                     video.height = Some(height);
                 }
+                // FFmpeg writes the turned picture upright, without a display matrix.
+                video.display_matrix = None;
                 video.pixel_format = Some("yuv420p".into());
                 video.bit_depth = Some(8);
                 video.color_range = Some("tv".into());
