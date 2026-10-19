@@ -84,6 +84,18 @@ export class ImageWorkerClient {
     return this.call<T>({ type: "adapt", constraintsJson, crop, firstFrameConsent }, [], onProgress);
   }
 
+  mediaInspect<T>(file: File, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "media_inspect", file }, [], onProgress);
+  }
+
+  mediaPlan<T>(constraintsJson: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "media_plan", constraintsJson }, [], onProgress);
+  }
+
+  mediaAdapt<T>(constraintsJson: string, outputName: string, onProgress?: (progress: ProgressUpdate) => void) {
+    return this.call<T>({ type: "media_adapt", constraintsJson, outputName }, [], onProgress);
+  }
+
   cancel() {
     if (!this.worker) return;
     this.worker.terminate();

@@ -66,7 +66,7 @@ describe("local magic detection", () => {
     expect(classifyInput(new TextEncoder().encode("<!doctype html><img src=x>"))).toBe("unsupported");
     expect(refuseMessage("unsupported")).toMatch(/SVG and HTML are never rendered/);
     expect(refuseMessage("video")).toBe(
-      "This is a video. The web app adapts photos. Open it in the Fitifact desktop app.",
+      "This video can't be opened in the web app. Open it in the Fitifact desktop app.",
     );
     expect(refuseMessage("matroska")).toMatch(/WebM or MKV/);
     expect(refuseMessage("audio")).toMatch(/desktop app/);

@@ -10,7 +10,7 @@ describe("public docs href", () => {
   });
 
   it("offers a desktop handoff only when the refuse copy points there", () => {
-    expect(needsDesktopHandoff("This is a video. The web app adapts photos. Open it in the Fitifact desktop app.")).toBe(true);
+    expect(needsDesktopHandoff("This is audio. The web app handles photos and video. Open sound files in the Fitifact desktop app.")).toBe(true);
     expect(needsDesktopHandoff("This is a PDF. Fitifact adapts photos, video, and sound files, not documents.")).toBe(false);
   });
 });

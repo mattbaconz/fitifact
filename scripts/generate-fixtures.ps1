@@ -11,6 +11,7 @@ $fixtureNames = @(
     "compatible-h264-aac.mp4",
     "mismatch-hevc-aac.mp4",
     "remux-h264-aac.mov",
+    "remux-h264-aac.mkv",
     "corrupt-truncated.mp4",
     "unsupported-extra-video.mp4",
     "refusal-hdr10-hevc-aac.mp4"
@@ -49,7 +50,7 @@ Assert-Encoder "aac" "AAC fixture audio"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $existing = @($fixtureNames | ForEach-Object { Join-Path $out $_ } | Where-Object { Test-Path -LiteralPath $_ })
 if ($existing.Count -gt 0 -and -not $Force) {
-    throw "Fixture outputs already exist. Re-run with -Force to replace only the six known fixture files."
+    throw "Fixture outputs already exist. Re-run with -Force to replace only the seven known fixture files."
 }
 if ($Force) {
     foreach ($path in $existing) {
@@ -90,6 +91,13 @@ Invoke-Ffmpeg ($commonInput + $hevcSdr + @(
 Invoke-Ffmpeg ($commonInput + $h264 + @(
     "-movflags", "+faststart", (Join-Path $out "remux-h264-aac.mov")
 )) "H.264/AAC MOV remux input"
+
+Invoke-Ffmpeg @(
+    "-nostdin", "-hide_banner", "-loglevel", "error", "-n",
+    "-i", (Join-Path $out "remux-h264-aac.mov"),
+    "-map", "0", "-c", "copy", "-map_metadata", "-1", "-fflags", "+bitexact",
+    (Join-Path $out "remux-h264-aac.mkv")
+) "H.264/AAC MKV remux input (stream copy of the MOV)"
 
 $extraInput = @(
     "-nostdin", "-hide_banner", "-loglevel", "error", "-n",

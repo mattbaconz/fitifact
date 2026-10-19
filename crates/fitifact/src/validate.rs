@@ -95,6 +95,25 @@ pub fn validate_adaptation(
             "the staged output could not be freshly inspected",
         )
     })?;
+    Ok(validate_adapted_artifact(
+        artifact,
+        constraints,
+        source,
+        plan,
+        source_hashes,
+        output_hashes,
+    ))
+}
+
+/// Validates a freshly inspected output, wherever it was produced, against the plan's claims.
+pub fn validate_adapted_artifact(
+    artifact: Artifact,
+    constraints: &ConstraintSet,
+    source: &Artifact,
+    plan: &Plan,
+    source_hashes: &StreamHashes,
+    output_hashes: &StreamHashes,
+) -> ValidationReport {
     let checks = check(&artifact, constraints);
     let operation = plan.steps[0].operation;
     let image_job = operation == TransformId::EncodeJpeg || source.family == Family::Image;
@@ -245,13 +264,13 @@ pub fn validate_adaptation(
     for claim in &provenance {
         status = combine_status(status, claim.status);
     }
-    Ok(ValidationReport {
+    ValidationReport {
         status,
         checks,
         artifact,
         integrity,
         provenance,
-    })
+    }
 }
 
 fn compatibility_status(checks: &CompatibilityReport) -> ValidationStatus {

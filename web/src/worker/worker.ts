@@ -2,6 +2,7 @@
 
 import type { Artifact, ErrorReport, ImageKind, InspectReport } from "../types";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
+import type * as MediaModule from "./media";
 import { classifyInput, refuseMessage } from "./magic";
 import { productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
 import {
@@ -328,6 +329,98 @@ async function adapt(request: Extract<WorkerRequest, { type: "adapt" }>) {
   }
 }
 
+type MediaTools = typeof MediaModule;
+
+// The browser runs stream copies only; encodes stay with the desktop app for now.
+const BROWSER_TRANSFORMS = JSON.stringify(["media.remux"]);
+
+let mediaToolsPromise: Promise<MediaTools> | null = null;
+let mediaSource: { file: File; probeJson: string } | null = null;
+let mediaGeneration = 0;
+
+async function mediaTools(id: number): Promise<MediaTools> {
+  if (!mediaToolsPromise) {
+    progress(id, "Loading the local video tools", 10);
+    mediaToolsPromise = import("./media");
+  }
+  return mediaToolsPromise;
+}
+
+async function withMediaFailures<T>(tools: MediaTools, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof tools.MediaFailure) throw localFailure(error.code, error.message);
+    throw error;
+  }
+}
+
+function requireMedia(): { file: File; probeJson: string } {
+  if (!mediaSource) throw localFailure("INPUT_INVALID", "Choose a video first.");
+  return mediaSource;
+}
+
+async function mediaInspect(request: Extract<WorkerRequest, { type: "media_inspect" }>) {
+  const generation = ++mediaGeneration;
+  const [wasm, tools] = await Promise.all([engine(request.id), mediaTools(request.id)]);
+  progress(request.id, "Reading the video's streams", 30);
+  const probeJson = JSON.stringify(await withMediaFailures(tools, () => tools.probe(request.file)));
+  const artifact = parseReport<Artifact>(wasm.inspect_media_probe(probeJson));
+  if (generation !== mediaGeneration) {
+    throw localFailure("EXECUTION_CANCELLED", "A newer video replaced this operation.");
+  }
+  mediaSource = { file: request.file, probeJson };
+  progress(request.id, "Inspection ready", 100);
+  return artifact;
+}
+
+async function mediaAdapt(request: Extract<WorkerRequest, { type: "media_adapt" }>) {
+  const selected = requireMedia();
+  const [wasm, tools] = await Promise.all([engine(request.id), mediaTools(request.id)]);
+  const planned = parseReport<{ outcome: { kind: string; plan?: { steps: Array<{ operation: string }> } } }>(
+    wasm.plan_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS),
+  );
+  const steps = planned.outcome.plan?.steps ?? [];
+  if (!steps.length) {
+    return { report: parseReport(wasm.adapt_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS, "null")) };
+  }
+  if (steps.some((step) => step.operation !== "media.remux")) {
+    throw localFailure("NO_VALID_PLAN", "This change needs the Fitifact desktop app.");
+  }
+  return withMediaFailures(tools, async () => {
+    const output = await tools.remuxToMp4(selected.file, (fraction) =>
+      progress(request.id, "Copying the streams into MP4", 15 + Math.round(fraction * 55)),
+    );
+    const outputFile = new File([output], request.outputName, { type: "video/mp4" });
+    progress(request.id, "Inspecting the new file", 75);
+    const outputProbe = await tools.probe(outputFile);
+    progress(request.id, "Proving every stream was copied", 85);
+    const source = await tools.streamFacts(selected.file);
+    const copied = await tools.streamFacts(outputFile);
+    if (source.geometry !== copied.geometry) {
+      throw localFailure(
+        "VALIDATION_FAILED",
+        "The MP4 would show the picture at a different size, angle, or mirroring, so it was not offered.",
+      );
+    }
+    const report = parseReport<{ status: string }>(
+      wasm.adapt_media_probe(
+        selected.probeJson,
+        request.constraintsJson,
+        BROWSER_TRANSFORMS,
+        JSON.stringify({
+          name: request.outputName,
+          probe: outputProbe,
+          source_hashes: source.hashes,
+          output_hashes: copied.hashes,
+        }),
+      ),
+    );
+    progress(request.id, "Validation complete", 100);
+    return report.status === "adapted" ? { report, output } : { report };
+  });
+}
+
 scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   void (async () => {
@@ -364,6 +457,25 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         );
         const transfers = result.preview ? [result.preview] : [];
         post({ id: request.id, type: "result", ...result }, transfers);
+      } else if (request.type === "media_inspect") {
+        post({ id: request.id, type: "result", report: await mediaInspect(request) });
+      } else if (request.type === "media_plan") {
+        const selected = requireMedia();
+        const wasm = await engine(request.id);
+        progress(request.id, "Checking every requirement", 60);
+        const report = parseReport(
+          wasm.plan_media_probe(selected.probeJson, request.constraintsJson, BROWSER_TRANSFORMS),
+        );
+        post({ id: request.id, type: "result", report });
+      } else if (request.type === "media_adapt") {
+        const result = await mediaAdapt(request);
+        if ("output" in result && result.output) {
+          post({ id: request.id, type: "result", report: result.report, output: result.output }, [
+            result.output,
+          ]);
+        } else {
+          post({ id: request.id, type: "result", report: result.report });
+        }
       } else {
         const result = await adapt(request);
         if ("output" in result && result.output) {

@@ -13,6 +13,7 @@ import {
 } from "../icons";
 import { cropAxis } from "../lib/crop";
 import { fileNameFromPath } from "../lib/desktop";
+import { desktopGuideHref, needsDesktopHandoff } from "../lib/docs-url";
 import { desktopCopyFile } from "../lib/desktop-engine";
 import type { MeasuredRow } from "../lib/explain";
 import { copyFile, fileActions, shareFile } from "../lib/share";
@@ -224,6 +225,7 @@ export function ResultPanel({
     nativeJobRef,
     cancel,
     error,
+    desktop,
     retry,
     doctorUnhealthy,
     refreshDoctor,
@@ -419,7 +421,7 @@ export function ResultPanel({
 
       {resultReady ? (
         <div className="status-actions result-actions">
-          {downloadUrl && download && !mediaArtifact ? (
+          {downloadUrl && download && !mediaPath ? (
             <>
               {/* Safari leaves links out of the Tab order unless they set tabindex. */}
               <a
@@ -436,7 +438,7 @@ export function ResultPanel({
               <FileActions blob={downloadBlob} name={download.name} />
             </>
           ) : null}
-          {mediaArtifact ? (
+          {mediaPath && mediaArtifact ? (
             <>
               <p className="helper">
                 {mediaAdapt?.output
@@ -499,6 +501,11 @@ export function ResultPanel({
           <p className="ft-notice ft-tone-danger error-copy" role="alert">
             {error.message}
           </p>
+          {!desktop && needsDesktopHandoff(error.message) ? (
+            <a className="ft-btn download-button" href={desktopGuideHref()}>
+              Get the desktop app
+            </a>
+          ) : null}
           {state !== "cancelled" ? (
             <details className="error-details">
               <summary>Technical details</summary>

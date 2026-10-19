@@ -53,6 +53,7 @@ import {
   type DesktopArtifact,
   type DesktopPlanOutcome,
   type DoctorReport,
+  type MediaPlanReport,
 } from "./lib/desktop-engine";
 import {
   destinationChips,
@@ -120,8 +121,11 @@ import {
 } from "./worker/magic";
 import { productStateForError } from "./worker/protocol";
 
-const ACCEPT = ".tif,.tiff,.bmp,.gif,.webp,.heic,.heif,image/*";
-const ACCEPT_DESKTOP = `${ACCEPT},.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.flac,.m4a,.ogg,.aac,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4`;
+const ACCEPT_IMAGES = ".tif,.tiff,.bmp,.gif,.webp,.heic,.heif,image/*";
+const ACCEPT = `${ACCEPT_IMAGES},.mp4,.mov,.m4v,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska`;
+const ACCEPT_DESKTOP = `${ACCEPT},.mp3,.wav,.flac,.m4a,.ogg,.aac,audio/mpeg,audio/wav,audio/mp4`;
+const NEEDS_DESKTOP_ENCODE =
+  "This video needs re-encoding, which the web app can't do yet. Open it in the Fitifact desktop app.";
 const PREVIEW_KINDS = new Set(["jpeg", "png", "webp", "gif", "bmp"]);
 export const CHIP_ICONS: Record<DestinationFamily, typeof ChatIcon> = {
   discord: ChatIcon,
@@ -177,7 +181,7 @@ function useObjectUrl(blob: Blob | null) {
 }
 
 function outputDetails(
-  format: OutputFormat,
+  format: OutputFormat | "mp4",
   originalName: string,
   suffix: boolean,
 ) {
@@ -187,10 +191,12 @@ function outputDetails(
       ? "image/jpeg"
       : format === "png"
         ? "image/png"
-        : "image/webp";
+        : format === "mp4"
+          ? "video/mp4"
+          : "image/webp";
   const stem =
     originalName.replace(/\.[^.]*$/, "").replace(/[^a-zA-Z0-9._-]+/g, "-") ||
-    "image";
+    (format === "mp4" ? "video" : "image");
   return {
     extension,
     mime,
@@ -441,12 +447,15 @@ export function useFitifactSession() {
   const settingsRef = useRef(settings);
   const sourceFileRef = useRef<File | null>(null);
   const mediaPathRef = useRef<string | null>(null);
+  // A video the browser worker probed (the web app has no media path).
+  const browserMediaRef = useRef(false);
   const setupRef = useRef(setup);
   const activeProfileRef = useRef<string | null>(seed.profile);
   confirmedRef.current = confirmedConstraintsJson;
   targetDirtyRef.current = targetDirty;
   settingsRef.current = settings;
   mediaPathRef.current = mediaPath;
+  browserMediaRef.current = !desktop && Boolean(mediaArtifact);
   setupRef.current = setup;
   activeProfileRef.current = activeProfile;
 
@@ -593,15 +602,17 @@ export function useFitifactSession() {
   const sourceUrl = useObjectUrl(
     previewBlob ?? (inspectedSafeImage ? sourceFile : null),
   );
-  const outputFormat =
-    adapted?.output_artifact.image?.format ?? plan?.plan.target.format ?? null;
+  const outputFormat = !desktop && mediaArtifact
+    ? "mp4"
+    : (adapted?.output_artifact.image?.format ?? plan?.plan.target.format ?? null);
   const download = useMemo(
     () =>
       outputFormat &&
       sourceFile &&
       (outputFormat === "jpeg" ||
         outputFormat === "png" ||
-        outputFormat === "webp")
+        outputFormat === "webp" ||
+        outputFormat === "mp4")
         ? {
             ...outputDetails(
               outputFormat,
@@ -686,7 +697,7 @@ export function useFitifactSession() {
         ? failure.state
         : productStateForError({ code: mapped }),
     );
-    const message = native || mediaPathRef.current
+    const message = native || mediaPathRef.current || browserMediaRef.current
       ? report.message
       : errorCopy(mapped, report.message);
     setError({
@@ -720,6 +731,7 @@ export function useFitifactSession() {
       setHeicPreviewMissing(false);
       setMediaPath(null);
       setMediaArtifact(null);
+      browserMediaRef.current = false;
     }
   }
 
@@ -783,6 +795,20 @@ export function useFitifactSession() {
         nativeTarget.constraintsJson = JSON.stringify(report);
         persistConfirmed(nativeTarget.constraintsJson, "", id);
         await runDesktopPlan(nativeTarget, operation);
+      } catch (caught) {
+        handleFailure(caught, operation);
+      }
+      return;
+    }
+    if (browserMediaRef.current) {
+      try {
+        const { report } = await client.compileProfile<ConstraintSet>(id);
+        if (operation !== operationRef.current) return;
+        const confirmed = JSON.stringify(report);
+        setTarget(null);
+        setDesktopTarget({ profile: id, constraintsJson: confirmed });
+        persistConfirmed(confirmed, "", id);
+        await runBrowserMediaPlan(confirmed, operation);
       } catch (caught) {
         handleFailure(caught, operation);
       }
@@ -856,11 +882,8 @@ export function useFitifactSession() {
     if (state === "processing") return;
     const kind = currentKind();
     if (!kind) return;
-    if ((kind === "video" || kind === "audio") && !desktop) {
-      handleFailure(
-        unsupportedFailure(refuseMessage(kind === "audio" ? "audio" : "video")),
-        beginOperation(),
-      );
+    if (kind === "audio" && !desktop) {
+      handleFailure(unsupportedFailure(refuseMessage("audio")), beginOperation());
       return;
     }
     if (
@@ -973,16 +996,20 @@ export function useFitifactSession() {
       await applyProfileId(nativeTarget.profile);
       return;
     }
-    if (nativeTarget && desktop && mediaPathRef.current) {
+    const browserConstraints = browserMediaRef.current
+      ? nativeTarget?.constraintsJson
+      : undefined;
+    if (nativeTarget && ((desktop && mediaPathRef.current) || browserConstraints)) {
       setDesktopTarget(nativeTarget);
       setParsed(null);
       setTarget(null);
       setTargetDirty(false);
       setEditingTarget(false);
       setError(null);
-      persistConfirmed(JSON.stringify(nativeTarget), text, null);
+      persistConfirmed(browserConstraints ?? JSON.stringify(nativeTarget), text, null);
       if (gen !== parseGen.current) return;
-      await runDesktopPlan(nativeTarget);
+      if (browserConstraints) await runBrowserMediaPlan(browserConstraints);
+      else await runDesktopPlan(nativeTarget);
       return;
     }
     try {
@@ -1022,7 +1049,7 @@ export function useFitifactSession() {
       setTargetDirty(false);
       setDesktopTarget({ constraintsJson: confirmed });
       setError(null);
-      if (mediaPathRef.current) {
+      if (mediaPathRef.current || browserMediaRef.current) {
         setState("inspected");
         setError({
           schema: "fitifact.error/v1",
@@ -1096,6 +1123,49 @@ export function useFitifactSession() {
     }
   }
 
+  async function inspectBrowserMedia(file: File, operation: number) {
+    const previousState = state;
+    const hadValidSource = Boolean(inspection || mediaArtifact);
+    setError(null);
+    processingRef.current = true;
+    setState("processing");
+    setInspectingName(file.name);
+    try {
+      const { report } = await client.mediaInspect<DesktopArtifact>(
+        file,
+        onProgress(operation),
+      );
+      if (operation !== operationRef.current) return;
+      clearDerivedState(true);
+      setLastRejected(null);
+      setSourceFile(file);
+      sourceFileRef.current = file;
+      setMediaArtifact(report);
+      browserMediaRef.current = true;
+      await maybeApplyAfterInspect(fileKindFromArtifact(report) ?? "video", operation);
+    } catch (caught) {
+      if (operation !== operationRef.current) return;
+      const failure = caught instanceof WorkerFailure ? caught : null;
+      if (hadValidSource) {
+        setState(previousState);
+        setLastRejected({
+          name: file.name,
+          message: failure?.report.message ?? "This video could not be inspected.",
+        });
+      } else if (failure?.report.code === "INSPECTION_UNSUPPORTED") {
+        clearDerivedState(true);
+        setLastRejected({ name: file.name, message: failure.report.message });
+        handleFailure(caught, operation, true);
+      } else handleFailure(caught, operation, true);
+    } finally {
+      if (operation === operationRef.current) {
+        setProgress(null);
+        setInspectingName(null);
+        processingRef.current = false;
+      }
+    }
+  }
+
   async function openDesktopPath(path: string) {
     if (state === "processing") return;
     const header = await desktopReadHeader(path);
@@ -1154,6 +1224,10 @@ export function useFitifactSession() {
         );
         return;
       }
+      if (!desktop && (kind === "video" || kind === "matroska")) {
+        await inspectBrowserMedia(file, beginOperation());
+        return;
+      }
       noteRejected(file.name, refuseMessage(kind));
       return;
     }
@@ -1179,6 +1253,7 @@ export function useFitifactSession() {
       setMediaPath(null);
       mediaPathRef.current = null;
       setMediaArtifact(null);
+      browserMediaRef.current = false;
       setInspection(report);
       setHeicPreviewMissing(report.kind === "heic" && !preview);
       if (preview) setPreviewBuffer(preview);
@@ -1189,8 +1264,9 @@ export function useFitifactSession() {
       if (operation !== operationRef.current) return;
       if (hadValidSource) {
         // A failed inspection clears the worker's source. Restore its confirmed
-        // contract before exposing any retained plan or action again.
-        if (retainedFile) {
+        // contract before exposing any retained plan or action again. A retained
+        // video lives in the worker's separate media slot and is untouched.
+        if (retainedFile && !browserMediaRef.current) {
           try {
             await client.inspect(retainedFile);
             if (operation !== operationRef.current) return;
@@ -1263,10 +1339,53 @@ export function useFitifactSession() {
     }
   }
 
+  async function runBrowserMediaPlan(
+    constraintsJson: string,
+    existingOperation?: number,
+  ) {
+    const operation = existingOperation ?? beginOperation();
+    processingRef.current = true;
+    setState("processing");
+    setError(null);
+    setMediaOutcome(null);
+    setMediaAdapt(null);
+    setOutputBuffer(null);
+    try {
+      const { report } = await client.mediaPlan<MediaPlanReport>(
+        constraintsJson,
+        onProgress(operation),
+      );
+      if (operation !== operationRef.current) return;
+      setMediaOutcome(report.outcome);
+      setMediaChecks(report.report);
+      persistConfirmed(
+        JSON.stringify(report.constraints),
+        targetTextRef.current,
+        activeProfileRef.current,
+      );
+      if (report.needs_encoder) {
+        handleFailure(unsupportedFailure(NEEDS_DESKTOP_ENCODE), operation);
+        return;
+      }
+      setState(mediaPlanState(report.outcome));
+    } catch (caught) {
+      handleFailure(caught, operation);
+    } finally {
+      if (operation === operationRef.current) {
+        setProgress(null);
+        processingRef.current = false;
+      }
+    }
+  }
+
   async function runPlan(constraintsJson: string, existingOperation?: number) {
     if (mediaPathRef.current) {
       const spec = desktopTarget ?? { constraintsJson };
       await runDesktopPlan(spec, existingOperation);
+      return;
+    }
+    if (browserMediaRef.current) {
+      await runBrowserMediaPlan(constraintsJson, existingOperation);
       return;
     }
     const operation = existingOperation ?? beginOperation();
@@ -1346,6 +1465,45 @@ export function useFitifactSession() {
     }
   }
 
+  function settleMediaResult(
+    result: DesktopAdaptResult,
+    operation: number,
+  ): ProductState | null {
+    setMediaAdapt(result);
+    if (result.status === "compatible") {
+      setState("compatible");
+      return "compatible";
+    }
+    if (
+      result.status === "adapted" &&
+      result.validation?.status === "pass" &&
+      result.validation.checks.compatible
+    ) {
+      setState("adapted");
+      return "adapted";
+    }
+    if (result.status === "cannot_satisfy") {
+      setState("cannot_satisfy");
+      return "cannot_satisfy";
+    }
+    const code =
+      result.error && "code" in result.error
+        ? String(result.error.code)
+        : "VALIDATION_FAILED";
+    handleFailure(
+      new WorkerFailure(productStateForError({ code }), {
+        schema: "fitifact.error/v1",
+        code,
+        message:
+          result.error && "message" in result.error
+            ? String(result.error.message)
+            : "Adaptation failed.",
+      }),
+      operation,
+    );
+    return null;
+  }
+
   async function adaptImage(downloadAfter = false) {
     downloadAfterAdaptRef.current = null;
     if (mediaPathRef.current && desktopTarget) {
@@ -1363,42 +1521,42 @@ export function useFitifactSession() {
           jobId,
         );
         if (operation !== operationRef.current) return;
-        setMediaAdapt(result);
-        if (result.status === "compatible") setState("compatible");
-        else if (
-          result.status === "adapted" &&
-          result.validation?.status === "pass" &&
-          result.validation.checks.compatible
-        )
-          setState("adapted");
-        else if (result.status === "cannot_satisfy") setState("cannot_satisfy");
-        else
-          handleFailure(
-            new WorkerFailure(
-              productStateForError({
-                code:
-                  result.error && "code" in result.error
-                    ? String(result.error.code)
-                    : "VALIDATION_FAILED",
-              }),
-              {
-                schema: "fitifact.error/v1",
-                code:
-                  result.error && "code" in result.error
-                    ? String(result.error.code)
-                    : "VALIDATION_FAILED",
-                message:
-                  result.error && "message" in result.error
-                    ? String(result.error.message)
-                    : "Adaptation failed.",
-              },
-            ),
-            operation,
-          );
+        settleMediaResult(result, operation);
       } catch (caught) {
         handleFailure(caught, operation);
       } finally {
         nativeJobRef.current = null;
+        if (operation === operationRef.current) {
+          setProgress(null);
+          processingRef.current = false;
+        }
+      }
+      return;
+    }
+    if (browserMediaRef.current) {
+      if (state === "processing" || !confirmedConstraintsJson || !sourceFile)
+        return;
+      const operation = beginOperation();
+      processingRef.current = true;
+      setState("processing");
+      setError(null);
+      try {
+        downloadAfterAdaptRef.current = downloadAfter ? operation : null;
+        const { report, output } = await client.mediaAdapt<DesktopAdaptResult>(
+          confirmedConstraintsJson,
+          outputDetails("mp4", sourceFile.name, settings.fitifactSuffix).name,
+          onProgress(operation),
+        );
+        if (operation !== operationRef.current) return;
+        // Only a validated output is ever offered for download.
+        if (settleMediaResult(report, operation) === "adapted" && output)
+          setOutputBuffer(output);
+        else if (report.status !== "compatible")
+          downloadAfterAdaptRef.current = null;
+      } catch (caught) {
+        downloadAfterAdaptRef.current = null;
+        handleFailure(caught, operation);
+      } finally {
         if (operation === operationRef.current) {
           setProgress(null);
           processingRef.current = false;
@@ -1540,6 +1698,12 @@ export function useFitifactSession() {
         setTarget(null);
         setDesktopTarget(nativeTarget);
         await runDesktopPlan(nativeTarget);
+        return;
+      }
+      if (browserMediaRef.current) {
+        setTarget(null);
+        setDesktopTarget({ constraintsJson: saved.constraintsJson });
+        await runBrowserMediaPlan(saved.constraintsJson);
         return;
       }
       const { report } = await client.compileConstraints<ConstraintSet>(
@@ -1688,7 +1852,9 @@ export function useFitifactSession() {
   const accept = desktop ? ACCEPT_DESKTOP : ACCEPT;
   const doctorUnhealthy = Boolean(desktop && doctor && !doctor.healthy);
   const fileKind = currentKind();
-  const chips = destinationChips(setup.discordCap, { includeVideo: desktop });
+  const chips = destinationChips(setup.discordCap, {
+    includeVideo: desktop || fileKind === "video",
+  });
   const activeFamily = activeProfile ? familyForProfile(activeProfile) : null;
   const usingCopy = activeFamily
     ? appliedFromLastUsed

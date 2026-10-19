@@ -51,6 +51,13 @@ never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
 - Native operation identifiers, cancellable subprocess execution, an atomic
   cancellation/publication boundary, and recoverable Show in folder actions.
 
+- Web app video: MP4, MOV, WebM, and MKV files are inspected and checked in the
+  browser. A video that already fits is left untouched. An H.264 video with AAC
+  audio (or none) in MOV, MKV, or WebM that only needs an MP4 container is
+  copied into MP4 without re-encoding, then re-read and validated against the
+  same rules as the desktop app before it is offered. A video that needs
+  re-encoding is refused with a link to the desktop app. The video tools
+  (Mediabunny 1.61.1) load only when a video is opened.
 - Desktop and CLI video: WebM/MKV sources, AAC audio encode, scale-to-fit, and
   VP8/VP9/AV1 transcode to H.264 when the destination needs it.
 - Desktop and CLI: audio-only inspect/adapt/verify. Size-only destinations

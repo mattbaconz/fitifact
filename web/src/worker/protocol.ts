@@ -7,7 +7,10 @@ export type WorkerRequest =
   | { id: number; type: "inspect"; file: File }
   | { id: number; type: "plan"; constraintsJson: string }
   | { id: number; type: "replan"; previousConstraintsJson: string; constraintsJson: string }
-      | { id: number; type: "adapt"; constraintsJson: string; crop: CropRectangle | null; firstFrameConsent: boolean };
+      | { id: number; type: "adapt"; constraintsJson: string; crop: CropRectangle | null; firstFrameConsent: boolean }
+  | { id: number; type: "media_inspect"; file: File }
+  | { id: number; type: "media_plan"; constraintsJson: string }
+  | { id: number; type: "media_adapt"; constraintsJson: string; outputName: string };
 
 export type WorkerResponse =
   | { id: number; type: "progress"; stage: string; percent: number }

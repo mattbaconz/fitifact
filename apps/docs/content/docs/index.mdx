@@ -20,14 +20,14 @@ Your original is preserved. Files are processed on your device; nothing is uploa
 
 | Environment | Use it for                                | Processing                                  |
 | ----------- | ----------------------------------------- | ------------------------------------------- |
-| Browser     | A single photo or still-image output      | Local Rust/WASM worker                      |
+| Browser     | Photos; video checks and MP4 repackaging  | Local Rust/WASM worker                      |
 | Desktop     | Photos, video, and audio from local paths | Shared UI, Rust engine, native FFmpeg tools |
 | CLI         | Scripts and inspectable JSON reports      | Rust engine with FFmpeg/ffprobe on PATH     |
 | AI client   | An assistant that checks and fits files   | [`fitifact mcp`](./ai-tools/) over stdio    |
 
 Every destination's rules, sources, and change history are on its [destination page](./destinations/).
 
-The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC. Video and audio require desktop or CLI. Browser inputs are limited to 32 MiB and 24 megapixels. Some files may need explicit first-frame approval or may be refused.
+The browser supports JPEG, PNG, WebP, TIFF, BMP, GIF, and supported single-image HEIC, up to 32 MiB and 24 megapixels. It also checks MP4, MOV, WebM, and MKV video and repackages it into MP4 when no re-encoding is needed; see [video in the browser](./browser-guide/#video-in-the-browser). Video re-encoding and audio require desktop or CLI. Some files may need explicit first-frame approval or may be refused.
 
 ## Desktop
 

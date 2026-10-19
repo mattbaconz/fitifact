@@ -23,6 +23,17 @@ this lazy decoder unless `FITIFACT_HEIC_APPROVED=false`.
 Fitifact does not load this decoder unless HEIC magic is present, and never fetches it from a CDN.
 A decoder-free build can set `FITIFACT_HEIC_APPROVED=false` to omit the chunk.
 
+## Browser video tools
+
+The web app's video path dynamically imports Mediabunny 1.61.1 in its worker, only after a
+video is opened. It reads MP4, MOV, WebM, and MKV containers and copies their streams into
+MP4; it does not decode or encode. Fitifact never fetches it from a CDN, and photo-only visits
+never download it.
+
+- Source: https://github.com/Vanilagy/mediabunny and the published package
+  https://www.npmjs.com/package/mediabunny/v/1.61.1, which includes its TypeScript source
+- License: Mozilla Public License 2.0 (the installed package includes its license text)
+
 ## Desktop FFmpeg sidecars
 
 The Windows desktop app ships `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 9.0.2,
