@@ -38,7 +38,7 @@ pub use bench::{
     BenchOptions, BenchReport, find_lockfile, network_crates_in_lockfile, resolve_fixtures,
     run_bench,
 };
-pub use browser_probe::{BROWSER_PROBE_SCHEMA, artifact_from_browser_probe};
+pub use browser_probe::{BROWSER_PROBE_SCHEMA, artifact_from_browser_probe, h264_config_is_sound};
 pub use capability::{CapabilityCatalog, TransformId, default_catalog};
 pub use check::{CheckResult, CompatibilityReport, check};
 pub use constraints::{
@@ -67,6 +67,7 @@ pub use inspect::{
 pub use local::{LocalImageResult, adapt_local_image_bytes, inspect_local_bytes};
 pub use media_fit::{
     can_fit_media, can_fit_media_with_limits, dimension_limit, file_bytes_limit, fit_output_size,
+    quality_video_bitrate_bps, video_bitrate_ladder,
 };
 pub use media_tools::{MediaToolPaths, bind_media_tools_from_dirs, resolve_media_tools};
 pub use plan::{Plan, PlanOutcome, plan};

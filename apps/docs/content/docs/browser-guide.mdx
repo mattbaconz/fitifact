@@ -49,10 +49,12 @@ You can also add an MP4, MOV, WebM, or MKV video. The browser reads its containe
 
 - A video that already fits shows **Already compatible. Nothing changed.** and keeps the original bytes.
 - An H.264 video with AAC audio (or none) in MOV, MKV, or WebM that only needs an MP4 container is copied into MP4 without re-encoding. The copy is read again and validated against the same rules before you can download it.
-- A video that would need re-encoding is refused with a link to the [desktop app](../desktop-guide/). Audio-only files are refused the same way.
+- A video that needs re-encoding (HEVC, VP8, VP9, or AV1, or H.264 over a size or dimension limit) is scaled to fit and encoded to H.264 by your browser's own encoders. Like the desktop app, Fitifact steps down a bitrate ladder until the file fits and never goes below a quality floor. AAC audio that already passes is copied; other audio is encoded to AAC. The result is read again and validated against the same rules before you can download it.
+- Before it offers an encode, the browser encodes one small test frame and checks its decoders, so Fitifact knows what this browser can do. If an encoder the plan needs is missing, or writes video other apps may misread, the video is refused in plain words with a link to the [desktop app](../desktop-guide/).
+- HDR video, video stored rotated, mirrored, or stretched, video whose only needed change is its soundtrack, and audio-only files are refused the same way.
 - A video with subtitle, data, or attachment tracks is refused rather than losing them.
 
-Repackaging in the browser handles videos up to 1 GiB. The video tools load only when you open a video, so photo-only visits never download them.
+Video in the browser handles files up to 1 GiB, and encoding there can take longer than on the desktop. The video tools load only when you open a video, so photo-only visits never download them.
 
 ## When something fails
 

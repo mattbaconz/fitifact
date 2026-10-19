@@ -99,7 +99,7 @@ export function SettingsDrawer({ session }: { session: FitifactSession }) {
             Version {__FITIFACT_VERSION__} · Images are processed locally.{" "}
             {desktop
               ? "Video and audio use FFmpeg shipped with this app."
-              : "Video is checked and repackaged in this browser. Re-encoding and audio use the desktop app."}
+              : "Video is checked, repackaged, and re-encoded in this browser where its own encoders allow. Audio, HDR video, and video this browser can't encode use the desktop app."}
           </p>
           <a href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`}>
             Third-party notices

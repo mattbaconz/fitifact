@@ -319,13 +319,23 @@ fn web_matrix(name: &str) -> Option<&'static str> {
     })
 }
 
-/// The first SPS NAL unit of an AVCDecoderConfigurationRecord (ISO/IEC 14496-15, 5.3.3.1).
+/// The first SPS NAL unit of an AVCDecoderConfigurationRecord (ISO/IEC 14496-15, 5.3.3.1). A
+/// record whose profile disagrees with the SPS it carries is damaged and yields nothing.
 fn first_sps(avcc: &[u8]) -> Option<&[u8]> {
     if *avcc.first()? != 1 || avcc.get(5)? & 0x1f == 0 {
         return None;
     }
     let length = usize::from(u16::from_be_bytes([*avcc.get(6)?, *avcc.get(7)?]));
-    avcc.get(8..8 + length)
+    let sps = avcc.get(8..8 + length)?;
+    (sps.get(1) == avcc.get(1)).then_some(sps)
+}
+
+/// Whether an H.264 encoder's decoder configuration reads back as the 8-bit 4:2:0 stream the
+/// browser encode promises. Some encoders write records that disagree with their own SPS.
+pub fn h264_config_is_sound(avcc: &[u8]) -> bool {
+    first_sps(avcc)
+        .and_then(parse_sps)
+        .is_some_and(|sps| sps.chroma_format_idc == 1 && sps.bit_depth == 8)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -722,6 +732,33 @@ mod tests {
         assert_eq!(facts.hdr, HdrStatus::Hdr);
     }
 
+    /// A record naming the SPS's profile while carrying that SPS behind a doubled NAL header, as
+    /// Firefox's H.264 encoder writes it.
+    fn doubled_header_avcc(sps: &[u8]) -> Vec<u8> {
+        let mut doubled = vec![sps[0]];
+        doubled.extend_from_slice(sps);
+        let mut record = avcc(&doubled);
+        record[1] = sps[1];
+        record
+    }
+
+    #[test]
+    fn encoder_configs_are_sound_only_when_they_read_back_as_8_bit_420() {
+        let bt709 = Some((false, Some([1, 1, 1])));
+        assert!(h264_config_is_sound(&avcc(&sps(66, None, bt709))));
+        assert!(h264_config_is_sound(&avcc(&sps(100, Some((1, 8)), None))));
+        assert!(!h264_config_is_sound(&avcc(&sps(
+            100,
+            Some((1, 10)),
+            bt709
+        ))));
+        assert!(!h264_config_is_sound(&avcc(&sps(100, Some((2, 8)), bt709))));
+        assert!(!h264_config_is_sound(&doubled_header_avcc(&sps(
+            66, None, bt709
+        ))));
+        assert!(!h264_config_is_sound(&[]));
+    }
+
     #[test]
     fn missing_or_damaged_decoder_config_leaves_picture_unknown() {
         let damaged = sps(100, Some((1, 8)), None)[..4].to_vec();
@@ -729,6 +766,7 @@ mod tests {
             Vec::new(),
             vec![1, 100, 0, 40, 0xff, 0xe0],
             self::avcc(&damaged),
+            doubled_header_avcc(&sps(66, None, Some((false, Some([1, 1, 1]))))),
         ] {
             let json = probe("isobmff", Some("isom"), json!([video(&avcc, json!({}))]));
             let facts = artifact_from_browser_probe(&json)

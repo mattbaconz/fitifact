@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { errorCopy } from "./error-copy";
+import { browserVideoRefusal, errorCopy } from "./error-copy";
 
 describe("consumer error copy", () => {
   it("maps engine codes to sentences and never returns the code", () => {
@@ -32,5 +32,18 @@ describe("consumer error copy", () => {
       "Lossless PNG cannot meet the size limit.",
     );
     expect(errorCopy("NO_VALID_PLAN", "No plan fits.")).toBe("No plan fits.");
+  });
+
+  it("says what a browser lacks for a video encode and points to the desktop app", () => {
+    expect(browserVideoRefusal(["video_decoder"], "hevc")).toBe(
+      "This browser can't decode HEVC video. Open it in the Fitifact desktop app.",
+    );
+    expect(browserVideoRefusal(["video_decoder"], null)).toContain("can't decode this video.");
+    const both = browserVideoRefusal(["audio_decoder", "aac_encoder"], "vp9");
+    expect(both).toContain("soundtrack");
+    expect(both).toContain("AAC");
+    expect(browserVideoRefusal(["teleport"], "hevc")).toBe(
+      "This video needs re-encoding the web app can't do in this browser. Open it in the Fitifact desktop app.",
+    );
   });
 });

@@ -174,6 +174,30 @@ pub fn can_fit_media_with_limits(
     .is_some()
 }
 
+/// The video bitrates a size-fitting encode tries in order: what the byte budget allows (never
+/// more than `cap`), then a quarter less per attempt down to the pixel-based quality floor.
+/// `None` when even the floor would overflow the budget.
+pub fn video_bitrate_ladder(
+    max_bytes: u64,
+    duration_ms: u64,
+    has_audio: bool,
+    (width, height): (u32, u32),
+    cap: Option<u64>,
+) -> Option<Vec<u64>> {
+    let budget = video_bitrate_from_budget(max_bytes, duration_ms, has_audio)?;
+    let initial = cap.map_or(budget, |cap| budget.min(cap));
+    let floor = floor_video_bitrate_bps(width, height);
+    (initial >= floor).then(|| bitrate_ladder(initial, floor))
+}
+
+/// What an encoder without a constant-quality mode (WebCodecs H.264) spends when no size limit
+/// forces less: about 0.1 bit per pixel at 30 fps, near what x264 spends at CRF 23.
+// ponytail: one bits-per-pixel guess for all footage; measure against x264 CRF 23 if
+// browser encodes look worse than desktop ones.
+pub fn quality_video_bitrate_bps(width: u32, height: u32) -> u64 {
+    (u64::from(width) * u64::from(height) * 3).max(floor_video_bitrate_bps(width, height))
+}
+
 pub fn bitrate_ladder(initial: u64, floor: u64) -> Vec<u64> {
     let mut values = Vec::new();
     let mut current = initial;
@@ -250,6 +274,25 @@ mod tests {
         assert_eq!(ladder[0], 1_000_000);
         assert!(ladder.last().copied() == Some(400_000));
         assert!(ladder.len() as u8 <= MEDIA_FIT_ATTEMPTS + 1);
+    }
+
+    #[test]
+    fn a_cap_starts_the_ladder_lower_but_keeps_the_same_floor() {
+        // 1 MB over 10 s with audio leaves 720 kb/s minus the assumed 160 kb/s soundtrack.
+        let uncapped = video_bitrate_ladder(1_000_000, 10_000, true, (640, 360), None).unwrap();
+        assert_eq!(uncapped[0], 560_000);
+        let capped =
+            video_bitrate_ladder(1_000_000, 10_000, true, (640, 360), Some(300_000)).unwrap();
+        assert_eq!(capped[..2], [300_000, 225_000]);
+        assert_eq!(capped.last(), Some(&MIN_VIDEO_BPS));
+        assert_eq!(uncapped.last(), Some(&MIN_VIDEO_BPS));
+        assert!(video_bitrate_ladder(10_000, 10_000, true, (640, 360), None).is_none());
+    }
+
+    #[test]
+    fn the_quality_bitrate_scales_with_pixels_above_the_floor() {
+        assert_eq!(quality_video_bitrate_bps(1920, 1080), 6_220_800);
+        assert_eq!(quality_video_bitrate_bps(16, 16), MIN_VIDEO_BPS);
     }
 
     #[test]

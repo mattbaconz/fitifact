@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CensusFailure, Sha256, trackCensus } from "./media-census";
-import { MEDIABUNNY_VERSION } from "./media";
+import { MEDIABUNNY_VERSION, rgbaToI420 } from "./media";
 
 async function fixture(name: string) {
   const path = fileURLToPath(new URL(`../../../fixtures/media/${name}`, import.meta.url));
@@ -48,12 +48,14 @@ describe("track census", () => {
     });
   });
 
-  it("reads an FFmpeg-written Matroska file", async () => {
-    await expect(trackCensus(await fixture("remux-h264-aac.mkv"))).resolves.toEqual({
-      container: "matroska",
-      majorBrand: null,
-      tracks: ["video", "audio"],
-    });
+  it("reads FFmpeg-written Matroska and WebM files", async () => {
+    for (const name of ["remux-h264-aac.mkv", "transcode-vp9-opus.webm"]) {
+      await expect(trackCensus(await fixture(name))).resolves.toEqual({
+        container: "matroska",
+        majorBrand: null,
+        tracks: ["video", "audio"],
+      });
+    }
   });
 
   it("keeps subtitles and attachments visible so the planner can refuse them", async () => {
@@ -112,4 +114,14 @@ describe("incremental SHA-256", () => {
 
 it("reports the pinned Mediabunny version as the probe provider", () => {
   expect(packageJson.dependencies.mediabunny).toBe(MEDIABUNNY_VERSION);
+});
+
+it("redraws frames as limited-range BT.709 4:2:0, one chroma sample per 2x2 block", () => {
+  const rgba = (...pixels: number[][]) => Uint8ClampedArray.from(pixels.flatMap((rgb) => [...rgb, 255]));
+  const [red, blue, white] = [[255, 0, 0], [0, 0, 255], [255, 255, 255]];
+  // A 4x2 frame, red on the left and blue on the right: Y plane, then Cb, then Cr.
+  expect([...rgbaToI420(rgba(red, red, blue, blue, red, red, blue, blue), 4, 2)]).toEqual([
+    63, 63, 32, 32, 63, 63, 32, 32, 102, 240, 240, 118,
+  ]);
+  expect([...rgbaToI420(rgba(white, white, white, white), 2, 2)]).toEqual([235, 235, 235, 235, 128, 128]);
 });

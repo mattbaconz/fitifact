@@ -124,8 +124,6 @@ import { productStateForError } from "./worker/protocol";
 const ACCEPT_IMAGES = ".tif,.tiff,.bmp,.gif,.webp,.heic,.heif,image/*";
 const ACCEPT = `${ACCEPT_IMAGES},.mp4,.mov,.m4v,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska`;
 const ACCEPT_DESKTOP = `${ACCEPT},.mp3,.wav,.flac,.m4a,.ogg,.aac,audio/mpeg,audio/wav,audio/mp4`;
-const NEEDS_DESKTOP_ENCODE =
-  "This video needs re-encoding, which the web app can't do yet. Open it in the Fitifact desktop app.";
 const PREVIEW_KINDS = new Set(["jpeg", "png", "webp", "gif", "bmp"]);
 export const CHIP_ICONS: Record<DestinationFamily, typeof ChatIcon> = {
   discord: ChatIcon,
@@ -1363,8 +1361,8 @@ export function useFitifactSession() {
         targetTextRef.current,
         activeProfileRef.current,
       );
-      if (report.needs_encoder) {
-        handleFailure(unsupportedFailure(NEEDS_DESKTOP_ENCODE), operation);
+      if (report.browser?.status === "refused") {
+        handleFailure(unsupportedFailure(report.browser.reason), operation);
         return;
       }
       setState(mediaPlanState(report.outcome));

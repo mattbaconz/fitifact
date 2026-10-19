@@ -5,10 +5,7 @@ use crate::artifact::{Artifact, Container, HdrStatus, StreamType, VideoCodec};
 use crate::capability::{CapabilityCatalog, TransformId, default_catalog};
 use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
-use crate::media_fit::{
-    DEFAULT_AUDIO_BPS, audio_bitrate_ladder, bitrate_ladder, floor_video_bitrate_bps,
-    video_bitrate_from_budget,
-};
+use crate::media_fit::{DEFAULT_AUDIO_BPS, audio_bitrate_ladder, video_bitrate_ladder};
 use crate::media_tools::resolve_media_tools;
 use crate::plan::{ExpectedFact, ExpectedValue, Plan, PlanStep};
 use crate::runtime::{
@@ -227,21 +224,16 @@ impl<S: ProcessSpawner> FfmpegProvider<S> {
             .preservation
             .contains(&crate::plan::PreservationClaim::AudioStreamCopied)
             || step.target.audio_codec.is_some();
-        let Some(initial) = video_bitrate_from_budget(ceiling, duration_ms, has_audio) else {
+        let dimensions = video_dimensions_from_step(step);
+        let Some(bitrates) =
+            video_bitrate_ladder(ceiling, duration_ms, has_audio, dimensions, None)
+        else {
             return Err(Error::new(
                 ErrorCode::ExecutionLimit,
                 "the size limit is below the quality floor this encoder will use",
             ));
         };
-        let (width, height) = video_dimensions_from_step(step);
-        let floor = floor_video_bitrate_bps(width, height);
-        if initial < floor {
-            return Err(Error::new(
-                ErrorCode::ExecutionLimit,
-                "the size limit is below the quality floor this encoder will use",
-            ));
-        }
-        for bitrate in bitrate_ladder(initial, floor) {
+        for bitrate in bitrates {
             let args = ffmpeg_args_with_bitrate(step, input, output, Some(bitrate), None)?;
             let spawned = self.spawner.spawn(&self.ffmpeg_program, &args, timeout)?;
             check_ffmpeg_status(spawned, step)?;

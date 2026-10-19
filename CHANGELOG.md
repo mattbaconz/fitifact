@@ -54,10 +54,17 @@ never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
 - Web app video: MP4, MOV, WebM, and MKV files are inspected and checked in the
   browser. A video that already fits is left untouched. An H.264 video with AAC
   audio (or none) in MOV, MKV, or WebM that only needs an MP4 container is
-  copied into MP4 without re-encoding, then re-read and validated against the
-  same rules as the desktop app before it is offered. A video that needs
-  re-encoding is refused with a link to the desktop app. The video tools
-  (Mediabunny 1.61.1) load only when a video is opened.
+  copied into MP4 without re-encoding. A video that needs re-encoding (HEVC,
+  VP8, VP9, or AV1, or H.264 over a size or dimension limit) is scaled to fit
+  and encoded to H.264 with the browser's own WebCodecs encoders, stepping down
+  the same bitrate ladder and quality floor as the desktop app; AAC that already
+  passes is copied, other audio is encoded to AAC. Each output is re-read and
+  validated against the same rules as the desktop app before it is offered. The
+  engine first checks the browser's encoders with a one-frame test encode; a
+  browser missing one the plan needs, HDR video, video stored rotated, mirrored,
+  or stretched, and a soundtrack-only re-encode are refused in plain words with
+  a link to the desktop app. The video tools (Mediabunny 1.61.1) load only when
+  a video is opened.
 - Desktop and CLI video: WebM/MKV sources, AAC audio encode, scale-to-fit, and
   VP8/VP9/AV1 transcode to H.264 when the destination needs it.
 - Desktop and CLI: audio-only inspect/adapt/verify. Size-only destinations

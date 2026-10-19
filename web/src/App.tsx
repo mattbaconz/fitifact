@@ -237,7 +237,7 @@ export function App() {
                     <>
                       Photos and video in this browser.{" "}
                       <a href={desktopGuideHref()}>
-                        Re-encoding and audio on desktop.
+                        Audio and HDR video on desktop.
                       </a>
                     </>
                   )}

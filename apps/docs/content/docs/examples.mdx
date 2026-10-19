@@ -25,12 +25,12 @@ Fitting the original rectangle inside a square would not meet exact dimensions. 
 
 **Source:** MOV containing compatible H.264 video and AAC audio, within the byte limit. **Target:** MP4/H.264/AAC.
 
-Only the container needs to change. The native provider can remux the streams to MP4 without re-encoding. The result is still inspected and validated. Available on desktop and CLI.
+Only the container needs to change. The native provider can remux the streams to MP4 without re-encoding. The result is still inspected and validated. Available on desktop, CLI, and in the browser.
 
 ## Change only the incompatible stream
 
 **Source:** MP4 with HEVC video and AAC audio. **Target:** MP4/H.264/AAC.
 
-The video codec fails the target. The supported plan re-encodes video to H.264 and copies the compatible AAC soundtrack. Conversely, H.264 video with incompatible audio can keep the video and encode only audio.
+The video codec fails the target. The supported plan re-encodes video to H.264 and copies the compatible AAC soundtrack. Conversely, H.264 video with incompatible audio can keep the video and encode only audio. The browser runs the video encode only where its own encoders pass Fitifact's checks; encoding only the audio needs desktop or CLI.
 
 Actual plans depend on inspected properties and confirmed constraints. A tighter byte ceiling may require more work than the examples above.

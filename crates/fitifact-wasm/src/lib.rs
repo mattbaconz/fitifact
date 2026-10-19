@@ -8,13 +8,18 @@ use std::io::Cursor;
 use std::path::PathBuf;
 
 use fitifact::error::ErrorEnvelope;
+use fitifact::media_fit::DEFAULT_AUDIO_BPS;
+use fitifact::plan::{PlanStep, PreservationClaim};
 use fitifact::{
-    CapabilityCatalog, ConstraintSet, ExternalOutput, ImageAdaptOptions, NeverCancelled,
-    PlanOutcome, StreamHashes, TransformId, ValidationCheck, ValidationStatus, adapt_external,
-    artifact_from_browser_probe, default_catalog, execute_image_adaptation,
+    Artifact, CapabilityCatalog, ConstraintSet, ExternalOutput, ImageAdaptOptions, NeverCancelled,
+    Plan, StreamHashes, TransformId, ValidationCheck, ValidationStatus, adapt_external,
+    artifact_from_browser_probe, default_catalog, execute_image_adaptation, h264_config_is_sound,
     image_artifact_from_bytes, parse_image_requirements, plan_image_adaptation,
+    quality_video_bitrate_bps, video_bitrate_ladder,
 };
 use image::{DynamicImage, ImageFormat as EncoderFormat, RgbImage, RgbaImage};
+use serde::Deserialize;
+use serde_json::{Value, json};
 
 pub use fitifact::{
     sample_animated_gif, sample_bmp_rgb, sample_gif_rgb, sample_jpeg_rgb, sample_png_rgb,
@@ -182,24 +187,183 @@ pub fn plan_rgba(rgba: &[u8], width: u32, height: u32, constraints_json: &str) -
     }
 }
 
-/// What the browser can execute in this slice: a stream copy. Encodes wait for the H.264
-/// bitrate ladder, so none is planned here even when a browser reports an encoder.
-const BROWSER_TRANSFORMS: [TransformId; 1] = [TransformId::Remux];
+/// Every transform the engine has, with HDR tone mapping as FFmpeg can run it. The browser runs a
+/// plan only when it is the plan this catalog finds, never a lossier one shaped around what the
+/// browser lacks.
+fn engine_catalog() -> CapabilityCatalog {
+    default_catalog().with_hdr_tone_mapping(true)
+}
 
-/// The default catalog narrowed to the transforms this browser measured it can run and the
-/// browser executor implements.
-fn media_catalog(transforms_json: &str) -> Result<CapabilityCatalog, fitifact::Error> {
-    let allowed: Vec<TransformId> = serde_json::from_str(transforms_json).map_err(|error| {
+/// What the worker measured, when a plan asked, about encoding this source in this browser.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Measured {
+    /// How players show the source's video track; `null` without one.
+    geometry: Option<Geometry>,
+    /// Whether a decoder accepts the source's video track.
+    video_decode: bool,
+    /// The AVCDecoderConfigurationRecord the browser's H.264 encoder wrote for a one-frame BT.709
+    /// sample at the requested size and bitrate; `null` when it has no such encoder.
+    h264_sample: Option<Vec<u8>>,
+    /// Whether a decoder accepts the source's audio track.
+    audio_decode: bool,
+    /// Whether an AAC encoder accepts the requested stereo encode.
+    aac_encode: bool,
+}
+
+/// How a player shows the picture: display size with pixel aspect applied, rotation, mirroring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Geometry {
+    display_width: u32,
+    display_height: u32,
+    rotation: u32,
+    flip: bool,
+}
+
+impl Geometry {
+    fn upright(width: u32, height: u32) -> Self {
+        Self {
+            display_width: width,
+            display_height: height,
+            rotation: 0,
+            flip: false,
+        }
+    }
+
+    fn describe(geometry: Option<Self>) -> String {
+        geometry.map_or_else(
+            || "unknown".into(),
+            |shown| {
+                format!(
+                    "{}x{}, rotated {}, flipped {}",
+                    shown.display_width, shown.display_height, shown.rotation, shown.flip
+                )
+            },
+        )
+    }
+}
+
+/// What this browser does with the engine's plan.
+enum Verdict {
+    /// Instructions the worker follows.
+    Ready(Value),
+    /// The encode the worker must try before the engine can judge this browser.
+    Measure(Value),
+    /// Why the plan cannot run here, as codes the web app puts into words.
+    Refused(Vec<&'static str>),
+}
+
+impl Verdict {
+    fn json(self) -> Value {
+        match self {
+            Self::Ready(execution) => json!({ "status": "ready", "execution": execution }),
+            Self::Measure(request) => json!({ "status": "measure", "measure": request }),
+            Self::Refused(missing) => json!({ "status": "refused", "missing": missing }),
+        }
+    }
+}
+
+fn verdict(artifact: &Artifact, plan: &Plan, measured: Option<&Measured>) -> Verdict {
+    match plan.steps.as_slice() {
+        [step] if step.operation == TransformId::Remux => {
+            Verdict::Ready(json!({ "operation": step.operation }))
+        }
+        [step] if step.operation == TransformId::TranscodeVideo => {
+            transcode_verdict(artifact, step, measured)
+        }
+        [step] if step.operation == TransformId::TranscodeAudio => {
+            Verdict::Refused(vec!["audio_only_encode"])
+        }
+        _ => Verdict::Refused(vec!["unsupported"]),
+    }
+}
+
+/// The native scale-to-fit and bitrate ladder, run by WebCodecs. Without a constant-quality mode
+/// the first attempt spends the quality bitrate unless the size limit forces less.
+fn transcode_verdict(artifact: &Artifact, step: &PlanStep, measured: Option<&Measured>) -> Verdict {
+    // The browser encode writes 8-bit BT.709 SDR and has no tone mapping that matches FFmpeg's.
+    if step.target.tone_map_hdr {
+        return Verdict::Refused(vec!["hdr"]);
+    }
+    let encodes_audio = step.target.audio_codec.is_some();
+    let has_audio = encodes_audio
+        || step
+            .preservation
+            .contains(&PreservationClaim::AudioStreamCopied);
+    let ladder = step.target.width.zip(step.target.height).and_then(|size| {
+        let quality = quality_video_bitrate_bps(size.0, size.1);
+        let bitrates = match (step.target.max_bytes, step.target.duration_ms) {
+            (None, _) => Some(vec![quality]),
+            (Some(max_bytes), Some(duration_ms)) => {
+                video_bitrate_ladder(max_bytes, duration_ms, has_audio, size, Some(quality))
+            }
+            (Some(_), None) => None,
+        };
+        Some((size, bitrates?))
+    });
+    let Some(((width, height), bitrates)) = ladder else {
+        return Verdict::Refused(vec!["unsupported"]);
+    };
+    let Some(measured) = measured else {
+        return Verdict::Measure(json!({
+            "video": { "codec": "avc", "width": width, "height": height, "bitrate": bitrates[0] },
+            "audio": encodes_audio.then(|| json!({
+                "codec": "aac",
+                "channels": 2,
+                "sample_rate": artifact.first_audio().and_then(|audio| audio.sample_rate),
+                "bitrate": DEFAULT_AUDIO_BPS,
+            })),
+        }));
+    };
+    let mut missing = Vec::new();
+    if measured.geometry.is_none() || measured.geometry != stored_geometry(artifact) {
+        missing.push("display_transform");
+    }
+    if !measured.video_decode {
+        missing.push("video_decoder");
+    }
+    match &measured.h264_sample {
+        None => missing.push("h264_encoder"),
+        Some(sample) if !h264_config_is_sound(sample) => missing.push("h264_encoder_output"),
+        Some(_) => {}
+    }
+    if encodes_audio && !measured.audio_decode {
+        missing.push("audio_decoder");
+    }
+    if encodes_audio && !measured.aac_encode {
+        missing.push("aac_encoder");
+    }
+    if !missing.is_empty() {
+        return Verdict::Refused(missing);
+    }
+    Verdict::Ready(json!({
+        "operation": step.operation,
+        "width": width,
+        "height": height,
+        "video_bitrates": bitrates,
+        "audio": if encodes_audio {
+            json!({ "codec": "aac", "channels": 2, "bitrate": DEFAULT_AUDIO_BPS })
+        } else {
+            json!("copy")
+        },
+        "max_bytes": step.target.max_bytes,
+    }))
+}
+
+/// The video shown exactly as stored: no rotation, mirroring, or pixel-aspect stretch.
+fn stored_geometry(artifact: &Artifact) -> Option<Geometry> {
+    let video = artifact.first_video()?;
+    Some(Geometry::upright(video.width?, video.height?))
+}
+
+fn parse_measured(measured_json: &str) -> Result<Option<Measured>, fitifact::Error> {
+    serde_json::from_str(measured_json).map_err(|error| {
         fitifact::Error::new(
             fitifact::ErrorCode::InputInvalid,
-            format!("media.transforms_invalid: {error}"),
+            format!("media.measured_invalid: {error}"),
         )
-    })?;
-    let mut catalog = default_catalog();
-    catalog.capabilities.retain(|capability| {
-        allowed.contains(&capability.id) && BROWSER_TRANSFORMS.contains(&capability.id)
-    });
-    Ok(catalog)
+    })
 }
 
 pub fn inspect_media_probe(probe_json: &str) -> String {
@@ -209,28 +373,24 @@ pub fn inspect_media_probe(probe_json: &str) -> String {
     }
 }
 
-pub fn plan_media_probe(probe_json: &str, constraints_json: &str, transforms_json: &str) -> String {
+/// `measured_json` is `null` until a plan asks the worker to measure an encode, then what it
+/// measured. `browser` says whether this browser can run the engine's plan.
+pub fn plan_media_probe(probe_json: &str, constraints_json: &str, measured_json: &str) -> String {
     let result = parse_constraints(constraints_json).and_then(|constraints| {
-        let catalog = media_catalog(transforms_json)?;
+        let measured = parse_measured(measured_json)?;
         let artifact = artifact_from_browser_probe(probe_json)?;
         let report = fitifact::check(&artifact, &constraints);
-        let outcome = fitifact::plan(&artifact, &constraints, &catalog);
-        // The full catalog (with an FFmpeg that can tone-map) finds a plan this browser cannot run.
-        let needs_encoder = matches!(outcome, PlanOutcome::CannotSatisfy { .. })
-            && fitifact::plan(
-                &artifact,
-                &constraints,
-                &default_catalog().with_hdr_tone_mapping(true),
-            )
+        let outcome = fitifact::plan(&artifact, &constraints, &engine_catalog());
+        let browser = outcome
             .plan()
-            .is_some();
-        Ok(serde_json::json!({
-            "schema": "fitifact.web-media-plan/v1",
+            .map(|plan| verdict(&artifact, plan, measured.as_ref()).json());
+        Ok(json!({
+            "schema": "fitifact.web-media-plan/v2",
             "inspection": artifact,
             "constraints": constraints,
             "report": report,
             "outcome": outcome,
-            "needs_encoder": needs_encoder,
+            "browser": browser,
         }))
     });
     match result {
@@ -239,18 +399,26 @@ pub fn plan_media_probe(probe_json: &str, constraints_json: &str, transforms_jso
     }
 }
 
-/// `output_json` is `null` when nothing ran, or `{name, probe, source_hashes, output_hashes}`
-/// describing the re-probed output and SHA-256 digests of each stream's packet payloads.
-pub fn adapt_media_probe(
-    probe_json: &str,
-    constraints_json: &str,
-    transforms_json: &str,
-    output_json: &str,
-) -> String {
+/// `output_json` is `null` when nothing ran, or `{name, probe, source_hashes, output_hashes,
+/// source_geometry, output_geometry}` describing the re-probed output and SHA-256 digests of
+/// each stream's packet payloads.
+pub fn adapt_media_probe(probe_json: &str, constraints_json: &str, output_json: &str) -> String {
     let result = parse_constraints(constraints_json).and_then(|constraints| {
-        let catalog = media_catalog(transforms_json)?;
+        let catalog = engine_catalog();
         let artifact = artifact_from_browser_probe(probe_json)?;
-        let output = external_output(output_json)?;
+        let outcome = fitifact::plan(&artifact, &constraints, &catalog);
+        if let Some(Verdict::Refused(missing)) =
+            outcome.plan().map(|plan| verdict(&artifact, plan, None))
+        {
+            return Err(fitifact::Error::new(
+                fitifact::ErrorCode::ProviderMissing,
+                format!(
+                    "media.browser_cannot_run: this browser cannot run the plan ({})",
+                    missing.join(", ")
+                ),
+            ));
+        }
+        let output = external_output(output_json, &artifact, outcome.plan())?;
         let original = artifact.path.clone().unwrap_or_default();
         Ok(adapt_external(
             original,
@@ -266,14 +434,18 @@ pub fn adapt_media_probe(
     }
 }
 
-fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact::Error> {
+fn external_output(
+    output_json: &str,
+    source: &Artifact,
+    plan: Option<&Plan>,
+) -> Result<Option<ExternalOutput>, fitifact::Error> {
     let invalid = |message: String| {
         fitifact::Error::new(
             fitifact::ErrorCode::ValidationFailed,
             format!("media.output_invalid: {message}"),
         )
     };
-    let output: serde_json::Value =
+    let output: Value =
         serde_json::from_str(output_json).map_err(|error| invalid(error.to_string()))?;
     if output.is_null() {
         return Ok(None);
@@ -297,22 +469,43 @@ fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact
         ))
     })?;
     let geometry = |key: &str| {
-        display_geometry(&output[key]).map_err(|error| invalid(format!("{key}: {error}")))
+        serde_json::from_value::<Option<Geometry>>(output[key].clone())
+            .map_err(|error| invalid(format!("{key}: {error}")))
     };
-    let (source, copied) = (geometry("source_geometry")?, geometry("output_geometry")?);
-    let integrity = if source.is_none() && copied.is_none() {
+    let (shown, produced) = (geometry("source_geometry")?, geometry("output_geometry")?);
+    let transcode = plan
+        .and_then(|plan| plan.steps.first())
+        .filter(|step| step.operation == TransformId::TranscodeVideo);
+    // A copy must look exactly like the source; an encode is upright at the planned size, and
+    // only ever made from video shown as stored.
+    let expected = match transcode {
+        Some(step) => {
+            if shown.is_none() || shown != stored_geometry(source) {
+                return Err(invalid(
+                    "the browser re-encodes only video shown as stored, without rotation, \
+                     mirroring, or stretching"
+                        .into(),
+                ));
+            }
+            step.target
+                .width
+                .zip(step.target.height)
+                .map(|(width, height)| Geometry::upright(width, height))
+        }
+        None => shown,
+    };
+    let integrity = if expected.is_none() && produced.is_none() {
         Vec::new()
     } else {
-        let describe = |value: Option<String>| value.unwrap_or_else(|| "unknown".into());
         vec![ValidationCheck {
             id: "display_geometry".into(),
-            status: if source.is_some() && source == copied {
+            status: if expected.is_some() && expected == produced {
                 ValidationStatus::Pass
             } else {
                 ValidationStatus::Fail
             },
-            expected: describe(source),
-            actual: describe(copied),
+            expected: Geometry::describe(expected),
+            actual: Geometry::describe(produced),
         }]
     };
     Ok(Some(ExternalOutput {
@@ -326,34 +519,6 @@ fn external_output(output_json: &str) -> Result<Option<ExternalOutput>, fitifact
 
 fn is_sha256(digest: &str) -> bool {
     digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
-/// How a player shows the picture, `{display_width, display_height, rotation, flip}`, as one
-/// comparable description; `null` when the file has no video track.
-fn display_geometry(value: &serde_json::Value) -> Result<Option<String>, String> {
-    if value.is_null() {
-        return Ok(None);
-    }
-    let facts = value
-        .as_object()
-        .filter(|facts| facts.len() == 4)
-        .ok_or("expected display_width, display_height, rotation, and flip")?;
-    let number = |key: &str| {
-        facts
-            .get(key)
-            .and_then(serde_json::Value::as_u64)
-            .ok_or(format!("{key} is missing"))
-    };
-    let flip = facts
-        .get("flip")
-        .and_then(serde_json::Value::as_bool)
-        .ok_or("flip is missing")?;
-    Ok(Some(format!(
-        "{}x{}, rotated {}, flipped {flip}",
-        number("display_width")?,
-        number("display_height")?,
-        number("rotation")?
-    )))
 }
 
 #[allow(clippy::chunks_exact_to_as_chunks)]
@@ -464,19 +629,18 @@ mod wasm_exports {
     pub fn plan_media_probe(
         probe_json: &str,
         constraints_json: &str,
-        transforms_json: &str,
+        measured_json: &str,
     ) -> String {
-        super::plan_media_probe(probe_json, constraints_json, transforms_json)
+        super::plan_media_probe(probe_json, constraints_json, measured_json)
     }
 
     #[wasm_bindgen]
     pub fn adapt_media_probe(
         probe_json: &str,
         constraints_json: &str,
-        transforms_json: &str,
         output_json: &str,
     ) -> String {
-        super::adapt_media_probe(probe_json, constraints_json, transforms_json, output_json)
+        super::adapt_media_probe(probe_json, constraints_json, output_json)
     }
 
     #[wasm_bindgen]
