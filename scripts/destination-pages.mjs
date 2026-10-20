@@ -62,6 +62,10 @@ const TRUST = {
     'Documented, plus Fitifact rules',
     'Documented limits plus Fitifact rules that keep the file playable everywhere.',
   ],
+  'fitifact-rules': [
+    'Fitifact rules only',
+    "None of these rules comes from the destination's documentation; each is Fitifact's own.",
+  ],
   starter: ['Starter', "A starter target, not a named destination's published rules."],
   observed: ['Partly observed', 'Some rules come from observation, not documentation.'],
 };

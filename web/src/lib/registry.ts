@@ -43,6 +43,8 @@ export const TRUST_LABEL: Record<string, string> = {
   documented: "Every rule comes from the destination's own documentation.",
   "documented-with-rules":
     "Documented limits plus Fitifact rules that keep the file playable everywhere.",
+  "fitifact-rules":
+    "None of these rules comes from the destination's documentation; each is Fitifact's own.",
   starter: "A starter target, not a named destination's published rules.",
   observed: "Some rules come from observation, not documentation.",
 };

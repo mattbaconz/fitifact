@@ -126,6 +126,10 @@ never tagged, and there will be no `v0.1.0` or `v0.2.0` tag.
 - `whatsapp/photo` no longer enforces a 16 MB limit: its old source page is
   gone and WhatsApp's media FAQ lists no photo limit, so Fitifact applies none.
   Photos still go out as JPEG.
+- `whatsapp/photo` re-verified on 2026-10-20. WhatsApp's help center names no
+  photo formats, so its JPEG rule is now labeled a Fitifact rule. A profile
+  whose rules are all Fitifact rules gets the new `fitifact-rules` trust level
+  instead of being called documented.
 - `matroska,webm` probes classify as WebM only when the codecs are WebM-legal
   (VP8/VP9/AV1 plus Opus or Vorbis). H.264 in that probe is MKV and can remux.
 
