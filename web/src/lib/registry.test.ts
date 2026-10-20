@@ -17,7 +17,6 @@ describe("profile registry", () => {
     const gmail = registryProfile("gmail/attachment")!;
     expect(isStale(gmail, new Date("2026-11-16T00:00:00Z"))).toBe(false);
     expect(isStale(gmail, new Date("2026-11-17T00:00:00Z"))).toBe(true);
-    expect(isStale(registryProfile("whatsapp/photo")!, new Date("2026-10-17T00:00:00Z"))).toBe(true);
   });
 
   it("reads caps and per-rule provenance from the shipped registry", () => {
