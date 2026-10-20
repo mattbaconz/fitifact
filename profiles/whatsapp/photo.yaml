@@ -1,8 +1,8 @@
 schema: fitifact.profile/v1
 id: whatsapp/photo
 name: WhatsApp photo
-revision: 3
-last_verified: 2026-08-28
+revision: 4
+last_verified: 2026-10-20
 
 scope:
   kind: web-upload
@@ -14,24 +14,31 @@ constraints:
     field: image.format
     op: in
     value: [jpeg]
-    source: src-photo
+    source: src-fitifact-image
 
 preferences:
   preserve:
     resolution: high
 
 sources:
-  - id: src-photo
+  - id: src-media
     type: official-doc
-    url: https://faq.whatsapp.com/1317564962315842
-    observed_at: 2026-08-28
-    note: Meta used to document sending photos up to 16 MB here. On 2026-10-17 this URL showed an unrelated article, and the current WhatsApp media FAQ lists video and document limits but no photo limit, so this profile sets no size limit. WhatsApp may recompress photos on the wire.
+    url: https://faq.whatsapp.com/453914586839706
+    observed_at: 2026-10-20
+    note: "WhatsApp's media FAQ lists video formats (3GP, AVI, FLV, MKV, MOV, and MP4), video size limits, and a 2 GB document limit, but no photo format and no photo size limit, so this profile sets no size limit. Photos are sent in Standard or HD quality, and WhatsApp says shared media is usually compressed."
+  - id: src-fitifact-image
+    type: fitifact-rule
+    observed_at: 2026-10-20
+    note: "Fitifact rule, not a WhatsApp statement: WhatsApp's help center names no formats for photos sent in a chat. Fitifact sends photos as JPEG, the most widely supported photo format."
 
 tests:
   - fixture: image/compatible-jpeg.jpg
     expect: compatible-or-adapt
 
 history:
+  - revision: 4
+    date: 2026-10-20
+    change: "Marked the JPEG rule as a Fitifact rule, because WhatsApp's help center names no photo formats. The source is now WhatsApp's media FAQ; the old page shows an unrelated article."
   - revision: 3
     date: 2026-10-19
     change: "Removed the 16 MB limit: WhatsApp's media FAQ lists no photo limit, so Fitifact applies none."

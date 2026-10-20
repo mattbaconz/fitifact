@@ -259,6 +259,8 @@ fn derived_trust(profile: &ProfileDocument) -> &'static str {
         "starter"
     } else if kinds.iter().all(documented) {
         "documented"
+    } else if kinds.iter().all(|kind| *kind == "fitifact-rule") {
+        "fitifact-rules"
     } else if kinds
         .iter()
         .all(|kind| documented(kind) || *kind == "fitifact-rule")
@@ -769,6 +771,7 @@ constraints:
         assert_eq!(trust("discord/video-upload"), "documented-with-rules");
         assert_eq!(trust("generic/video-upload"), "starter");
         assert_eq!(trust("anthropic/vision"), "documented");
+        assert_eq!(trust("whatsapp/photo"), "fitifact-rules");
     }
 
     #[cfg(not(target_arch = "wasm32"))]
