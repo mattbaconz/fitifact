@@ -16,6 +16,9 @@ All notable changes to Fitifact are documented here.
 - A file opened while offline, before the tools have loaded, says the device is
   offline instead of "The local image worker stopped unexpectedly", and the
   engine retries its load instead of failing for the rest of the visit.
+- A file the browser can't read (moved or deleted after you chose it, or a
+  cloud file that isn't on the device yet) is refused in plain words instead of
+  leaving the page silent.
 
 ## [1.0.0-rc.1] - first 1.0 candidate
 

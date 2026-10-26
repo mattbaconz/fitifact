@@ -67,7 +67,7 @@ import {
   type FileKind,
 } from "./lib/destinations";
 import { desktopGuideHref } from "./lib/docs-url";
-import { errorCopy, mapErrorCode } from "./lib/error-copy";
+import { errorCopy, mapErrorCode, UNREADABLE_FILE } from "./lib/error-copy";
 import {
   describeActions,
   describeKept,
@@ -1221,9 +1221,15 @@ export function useFitifactSession() {
     skipRememberedTarget = false,
   ) {
     if (state === "processing") return;
-    const header = new Uint8Array(
-      await file.slice(0, Math.min(file.size, 65_536)).arrayBuffer(),
-    );
+    let header: Uint8Array;
+    try {
+      header = new Uint8Array(
+        await file.slice(0, Math.min(file.size, 65_536)).arrayBuffer(),
+      );
+    } catch {
+      noteRejected(file.name, UNREADABLE_FILE);
+      return;
+    }
     const kind = classifyInput(header);
     if (!isStillImage(kind)) {
       if (desktop && isDesktopMedia(kind)) {

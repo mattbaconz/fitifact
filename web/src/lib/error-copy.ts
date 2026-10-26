@@ -1,4 +1,9 @@
+/** A file the browser can no longer read: moved, deleted, or a cloud placeholder. */
+export const UNREADABLE_FILE =
+  "Fitifact couldn't read this file. It may have been moved or deleted, or it's a cloud file that isn't on this device yet. Make it available on this device, then choose it again.";
+
 const COPY: Record<string, string> = {
+  FILE_UNREADABLE: UNREADABLE_FILE,
   INPUT_INVALID:
     "Fitifact couldn't find a format, size, or dimension rule in that text.",
   INSPECTION_LIMIT:
