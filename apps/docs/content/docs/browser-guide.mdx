@@ -54,7 +54,9 @@ You can also add an MP4, MOV, WebM, or MKV video. The browser reads its containe
 - HDR video, video stored rotated, mirrored, or stretched, video whose only needed change is its soundtrack, and audio-only files are refused the same way.
 - A video with subtitle, data, or attachment tracks is refused rather than losing them.
 
-Video in the browser handles files up to 1 GiB, and encoding there can take longer than on the desktop. The video tools load only when you open a video, so photo-only visits never download them.
+Video in the browser handles files up to 1 GiB, and encoding there can take longer than on the desktop.
+
+Once the page has loaded, it also downloads its local tools (about 870 KB compressed), so a photo or video still works if your network drops afterwards. Your file is never part of that download. With your browser's Save-Data setting on, the tools load only when you open a file, and the video tools only for a video.
 
 ## When something fails
 

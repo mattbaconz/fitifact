@@ -6,7 +6,7 @@ import { browserVideoRefusal } from "../lib/error-copy";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
 import type * as MediaModule from "./media";
 import { classifyInput, refuseMessage } from "./magic";
-import { productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { offlineReport, productStateForError, type WorkerRequest, type WorkerResponse } from "./protocol";
 import {
   EncodedResourceLimit,
   enterWasmWithEncodedLimit,
@@ -46,10 +46,16 @@ function progress(id: number, stage: string, percent: number) {
 async function engine(id: number): Promise<Engine> {
   if (!enginePromise) {
     progress(id, "Loading the local image engine", 8);
-    enginePromise = import("../wasm/fitifact_wasm.js").then(async (module) => {
-      await module.default();
-      return module;
-    });
+    enginePromise = import("../wasm/fitifact_wasm.js")
+      .then(async (module) => {
+        await module.default();
+        return module;
+      })
+      .catch((error: unknown) => {
+        // Let the next request retry, as the video tools do, instead of failing for good.
+        enginePromise = null;
+        throw scope.navigator.onLine ? error : new EngineFailure(offlineReport());
+      });
   }
   return enginePromise;
 }
@@ -349,6 +355,7 @@ async function mediaTools(id: number): Promise<MediaTools> {
     progress(id, "Loading the local video tools", 10);
     mediaToolsPromise = import("./media").catch(() => {
       mediaToolsPromise = null;
+      if (!scope.navigator.onLine) throw new EngineFailure(offlineReport());
       throw localFailure(
         "INSPECTION_UNSUPPORTED",
         "This browser couldn't load the web app's video tools. Open the video in the Fitifact desktop app.",
@@ -476,7 +483,11 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   void (async () => {
     try {
-      if (request.type === "compile") {
+      if (request.type === "warm") {
+        await engine(request.id);
+        await mediaTools(request.id);
+        post({ id: request.id, type: "result", report: null });
+      } else if (request.type === "compile") {
         const wasm = await engine(request.id);
         progress(request.id, "Reading the requirement", 55);
         const report = parseReport(wasm.compile_requirements(request.requirements));

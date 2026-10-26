@@ -1,6 +1,7 @@
 import type { CropRectangle, ErrorReport, ProductState } from "../types";
 
 export type WorkerRequest =
+  | { id: number; type: "warm" }
   | { id: number; type: "compile"; requirements: string }
   | { id: number; type: "compile_constraints"; constraintsJson: string }
   | { id: number; type: "compile_profile"; profileId: string }
@@ -77,6 +78,17 @@ export function productStateForError(report: Pick<ErrorReport, "code">): Product
     default:
       return "error";
   }
+}
+
+/** A load that failed because the device is offline, said in those words. */
+export function offlineReport(): ErrorReport {
+  return {
+    schema: "fitifact.error/v1",
+    code: "NETWORK_UNAVAILABLE",
+    message:
+      "This device is offline, and Fitifact hadn't finished loading its tools. Reconnect and try again. Once they load, this page keeps working without a network.",
+    details: {},
+  };
 }
 
 export function isWorkerResponse(value: unknown): value is WorkerResponse {

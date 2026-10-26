@@ -57,7 +57,8 @@ The executable adaptation catalog is deliberately small:
 - in the web app (D-037), video gets the no-op check, the MOV/MKV/WebM
   H.264+AAC remux to MP4, and the H.264 video transcode (scale-to-fit, the same
   bitrate ladder and quality floor, AAC copied or encoded) through the
-  browser's WebCodecs encoders: Mediabunny, loaded lazily in the worker,
+  browser's WebCodecs encoders: Mediabunny, loaded in the worker after the page
+  loads (D-045),
   probes, measures the encoders the engine asks about, executes, and re-probes;
   the Rust engine plans, judges the measurement, and validates. HDR, a stored
   display transform (rotation, mirroring, non-square pixels), an audio-only
@@ -131,7 +132,7 @@ External tools are **providers**. Fitifact is the orchestration and compatibilit
 Current implementation: Rust domain core and native runtime with system
 FFmpeg/ffprobe as the media provider, `fitifact-wasm` plus a static drop-first
 web surface for the still-image matrix and browser video stream copy and
-WebCodecs H.264 encode (Mediabunny in a lazy worker chunk), and a thin Tauri 2 host in
+WebCodecs H.264 encode (Mediabunny in a worker chunk warmed after page load), and a thin Tauri 2 host in
 `apps/desktop/` that reuses that UI. The desktop package stays out of the
 workspace lockfile.
 
@@ -244,7 +245,10 @@ Technical details can be expandable.
 - Core has no GUI dependency.
 - Core has no mandatory network dependency.
 - Integrations contain no destination-specific compatibility logic.
-- Do not eagerly load codecs/providers.
+- Do not eagerly load codecs/providers. One exception (D-045): after the page's
+  `load` event, the web app warms its worker, engine WASM, and video tools so a
+  loaded page keeps working offline; it skips this under Save-Data and on desktop,
+  and it never constructs an encoder.
 - No-op path must not initialize encoders.
 - Browser initial bundle must not include heavyweight media WASM by default.
 - Prefer streaming/file handles over reading entire large artifacts into RAM.

@@ -1,5 +1,5 @@
 import type { CropRectangle, ErrorReport, ProductState } from "../types";
-import { isWorkerResponse, type WorkerRequest, type WorkerResponse } from "./protocol";
+import { isWorkerResponse, offlineReport, type WorkerRequest, type WorkerResponse } from "./protocol";
 
 export interface WorkerResult<T> {
   report: T;
@@ -50,6 +50,11 @@ export class ImageWorkerClient {
     private readonly createWorker: () => WorkerPort = () =>
       new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: "fitifact-image" }),
   ) {}
+
+  /** Loads the engine and video tools ahead of the first file, so it works if the network drops. */
+  warm() {
+    return this.call<null>({ type: "warm" }, []);
+  }
 
   compile<T>(requirements: string, onProgress?: (progress: ProgressUpdate) => void) {
     return this.call<T>({ type: "compile", requirements }, [], onProgress);
@@ -138,12 +143,15 @@ export class ImageWorkerClient {
     const worker = this.createWorker();
     worker.addEventListener("message", (event) => this.receive(event.data));
     worker.addEventListener("error", () => {
-      const report: ErrorReport = {
-        schema: "fitifact.error/v1",
-        code: "EXECUTION_FAILED",
-        message: "The local image worker stopped unexpectedly.",
-        details: {},
-      };
+      // A worker that cannot even load while offline is a network problem, not a crash.
+      const report: ErrorReport = !navigator.onLine
+        ? offlineReport()
+        : {
+            schema: "fitifact.error/v1",
+            code: "EXECUTION_FAILED",
+            message: "The local image worker stopped unexpectedly.",
+            details: {},
+          };
       for (const pending of this.pending.values()) {
         pending.reject(new WorkerFailure("error", report));
       }

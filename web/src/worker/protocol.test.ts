@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ImageWorkerClient } from "./client";
 import type { WorkerFailure } from "./client";
 import { isWorkerResponse, productStateForError, type WorkerRequest } from "./protocol";
@@ -18,6 +18,7 @@ class FakeWorker {
     else this.errorListeners.push(listener as (event: ErrorEvent) => void);
   }
   respond(data: unknown) { for (const listener of this.messageListeners) listener({ data } as MessageEvent<unknown>); }
+  fail() { for (const listener of this.errorListeners) listener({} as ErrorEvent); }
 }
 
 describe("worker protocol", () => {
@@ -53,6 +54,17 @@ describe("worker protocol", () => {
       preview,
       constraintsSnapshot: undefined,
     });
+  });
+
+  it("says the device is offline when the worker cannot load without a network", async () => {
+    const fake = new FakeWorker();
+    const client = new ImageWorkerClient(() => fake);
+    const pending = client.warm();
+    expect(fake.messages[0].request).toMatchObject({ type: "warm" });
+    vi.stubGlobal("navigator", { onLine: false });
+    fake.fail();
+    vi.unstubAllGlobals();
+    await expect(pending).rejects.toMatchObject({ state: "error", report: { code: "NETWORK_UNAVAILABLE" } });
   });
 
   it("terminates work and rejects outstanding operations on cancellation", async () => {
