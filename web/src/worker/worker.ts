@@ -2,7 +2,7 @@
 
 import type { Artifact, ErrorReport, ImageKind, InspectReport } from "../types";
 import type { MediaPlanReport } from "../lib/desktop-engine";
-import { browserVideoRefusal } from "../lib/error-copy";
+import { browserVideoRefusal, UNREADABLE_FILE } from "../lib/error-copy";
 import type * as WasmEngine from "../wasm/fitifact_wasm.js";
 import type * as MediaModule from "./media";
 import { classifyInput, refuseMessage } from "./magic";
@@ -479,6 +479,20 @@ function videoCodec(planned: MediaPlanReport): string | null {
   return typeof codec === "string" ? codec : null;
 }
 
+function failureReport(error: unknown): ErrorReport {
+  if (error instanceof EngineFailure) return error.report;
+  // The File behind a request can stop being readable: moved, deleted, or a cloud placeholder.
+  if (error instanceof DOMException && (error.name === "NotReadableError" || error.name === "NotFoundError")) {
+    return { schema: "fitifact.error/v1", code: "FILE_UNREADABLE", message: UNREADABLE_FILE, details: {} };
+  }
+  return {
+    schema: "fitifact.error/v1",
+    code: "EXECUTION_FAILED",
+    message: error instanceof Error ? error.message : "Local processing failed.",
+    details: {},
+  };
+}
+
 scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   void (async () => {
@@ -543,15 +557,7 @@ scope.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
         }
       }
     } catch (error) {
-      const report =
-        error instanceof EngineFailure
-          ? error.report
-          : ({
-              schema: "fitifact.error/v1",
-              code: "EXECUTION_FAILED",
-              message: error instanceof Error ? error.message : "Local processing failed.",
-              details: {},
-            } satisfies ErrorReport);
+      const report = failureReport(error);
       post({ id: request.id, type: "failure", state: productStateForError(report), report });
     }
   })();

@@ -537,3 +537,22 @@ test("sample scenarios replace remembered requirements and require crop approval
   await expect(page.getByRole("heading", { name: "Adapted and verified", exact: true })).toBeFocused();
   await expect(page.locator(".download-button")).toBeInViewport();
 });
+
+test("a file that can't be read is refused in plain words, not left silent", async ({ page }) => {
+  // Reads of a moved file or a cloud placeholder reject with NotReadableError.
+  await page.addInitScript(() => {
+    const read = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = function (this: Blob) {
+      return (window as { unreadable?: boolean }).unreadable
+        ? Promise.reject(new DOMException("The I/O read operation failed.", "NotReadableError"))
+        : read.call(this);
+    };
+  });
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as { unreadable?: boolean }).unreadable = true;
+  });
+  await page.locator("input[type=file]").setInputFiles(path.join(fixtures, "compatible-jpeg.jpg"));
+  await expect(page.locator(".reject-card")).toContainText("compatible-jpeg.jpg");
+  await expect(page.locator(".reject-card")).toContainText("Fitifact couldn't read this file.");
+});
