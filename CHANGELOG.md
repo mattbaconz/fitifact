@@ -2,6 +2,21 @@
 
 All notable changes to Fitifact are documented here.
 
+## [Unreleased]
+
+### [changed]
+
+- The web app loads its engine and video tools once the page has loaded
+  (about 870 KB compressed), so a photo or video still works if the network
+  drops afterwards. With Save-Data on, the tools still load only for a file
+  (D-045).
+
+### [fixed]
+
+- A file opened while offline, before the tools have loaded, says the device is
+  offline instead of "The local image worker stopped unexpectedly", and the
+  engine retries its load instead of failing for the rest of the visit.
+
 ## [1.0.0-rc.1] - first 1.0 candidate
 
 1.0.0 replaces the planned 0.1.0 as the first stable version. Existing

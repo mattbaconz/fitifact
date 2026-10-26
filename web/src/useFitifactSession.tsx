@@ -355,6 +355,21 @@ export function useFitifactSession() {
   const desktop = isDesktop();
   if (!clientRef.current) clientRef.current = new ImageWorkerClient();
   const client = clientRef.current;
+
+  // Once the page has loaded, load the engine and video tools too, so a file still
+  // works if the network drops later (D-045). Skipped when the visitor asked to save
+  // data, and on desktop, which ships them locally.
+  useEffect(() => {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (desktop || connection?.saveData) return;
+    const warm = () => void client.warm().catch(() => undefined);
+    if (document.readyState === "complete") {
+      warm();
+      return;
+    }
+    window.addEventListener("load", warm, { once: true });
+    return () => window.removeEventListener("load", warm);
+  }, [client, desktop]);
   const [seed] = useState(sessionFromLastTarget);
   // A ?for= link picks the destination for the first matching file only; later choices win.
   const linkedFamilyRef = useRef(familyFromQuery(window.location.search));

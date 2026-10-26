@@ -175,10 +175,59 @@ test("a video stream the browser would drop is refused, not lost", async ({ page
   await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
 });
 
-test("the video tools load only for a video", async ({ page, browserName }) => {
+const videoTools = (paths: string[]) => paths.some((url) => /\/assets\/media-[\w-]+\.js$/.test(url));
+
+/** Tells the page the visitor asked to save data, which skips loading the tools ahead of a file. */
+async function saveData(page: Page) {
+  await page.addInitScript(() =>
+    Object.defineProperty(Navigator.prototype, "connection", { configurable: true, get: () => ({ saveData: true }) }),
+  );
+}
+
+/** Waits until no request, worker requests included, has been open for a second. */
+function whenQuiet(page: Page) {
+  let open = 0;
+  let last = Date.now();
+  page.on("request", () => {
+    open += 1;
+    last = Date.now();
+  });
+  const settle = () => {
+    open -= 1;
+    last = Date.now();
+  };
+  page.on("requestfinished", settle);
+  page.on("requestfailed", settle);
+  return () => expect.poll(() => open <= 0 && Date.now() - last > 1000, { timeout: 30_000 }).toBe(true);
+}
+
+/** Playwright's WebKit offline mode also blocks reading the chosen file's blob (NotReadableError). */
+const WEBKIT_OFFLINE = "Playwright's WebKit offline emulation fails reads of the chosen file itself.";
+
+test("once the page loads, a video still fits with the network off", async ({ page, context, browserName }) => {
   test.skip(browserName === "firefox", "Firefox does not report module imports inside a worker as page requests.");
+  test.skip(browserName === "webkit", WEBKIT_OFFLINE);
   const requested = requestLog(page);
-  const videoTools = (paths: string[]) => paths.some((url) => /\/assets\/media-[\w-]+\.js$/.test(url));
+  const quiet = whenQuiet(page);
+  await page.goto("/");
+  await expect.poll(() => videoTools(requested), { timeout: 30_000 }).toBe(true);
+  await quiet();
+  await context.setOffline(true);
+  await dropVideo(page, "remux-h264-aac.mov", /MOV/);
+  await expect(page.getByRole("heading", { name: "Minimum changes ready" })).toBeVisible();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Adapt and download" }).click(),
+  ]);
+  await expect(page.getByRole("heading", { name: "Adapted and verified" })).toBeVisible();
+  await expect(page.locator(".checklist tbody tr.fail")).toHaveCount(0);
+  expect((await saved(download)).toString("latin1", 4, 8)).toBe("ftyp");
+});
+
+test("with Save-Data on, the video tools load only for a video", async ({ page, browserName }) => {
+  test.skip(browserName === "firefox", "Firefox does not report module imports inside a worker as page requests.");
+  await saveData(page);
+  const requested = requestLog(page);
   await page.goto("/");
   await page.locator("input[type=file]").setInputFiles(path.resolve("../fixtures/image/compatible-jpeg.jpg"));
   await page.locator(".destination-chips").getByRole("button", { name: /Web image/ }).click();
@@ -187,6 +236,17 @@ test("the video tools load only for a video", async ({ page, browserName }) => {
   await dropVideo(page, "compatible-h264-aac.mp4", /MP4/);
   await expect(page.getByRole("heading", { name: "Already compatible. Nothing changed." })).toBeVisible();
   expect(videoTools(requested)).toBe(true);
+});
+
+test("a file dropped offline before the tools load says the device is offline", async ({ page, context, browserName }) => {
+  test.skip(browserName === "webkit", WEBKIT_OFFLINE);
+  await saveData(page);
+  await page.goto("/");
+  await context.setOffline(true);
+  await page.locator("input[type=file]").setInputFiles(path.join(media, "remux-h264-aac.mov"));
+  await expect(page.getByText(/^This device is offline, and Fitifact hadn't finished loading its tools\./).first()).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("video tools that fail to load get a plain refusal", async ({ page, browserName }) => {
