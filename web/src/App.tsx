@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { FileSummary } from "./components/FileSummary";
 import { ProcessRail } from "./components/ProcessRail";
-import { ProductExamples, ProductIntro } from "./components/ProductIntro";
+import {
+  DesktopDownload,
+  ProductExamples,
+  ProductIntro,
+  ProductProof,
+} from "./components/ProductIntro";
 import { RequirementsPanel } from "./components/RequirementsPanel";
 import { ResultPanel, StatusIcon } from "./components/ResultPanel";
 import { SettingsDrawer } from "./components/SettingsDrawer";
@@ -113,7 +118,9 @@ export function App() {
             How it works
           </a>
           <a href={publicDocsHref()}>Docs</a>
-          <a href={desktopGuideHref()}>Downloads</a>
+          <a href={showWork || desktop ? desktopGuideHref() : "#download"}>
+            Downloads
+          </a>
         </nav>
         <button
           type="button"
@@ -282,6 +289,12 @@ export function App() {
               onSample={(scenario) => void useSampleImage(scenario)}
               disabled={state === "processing"}
             />
+            {desktop ? null : (
+              <>
+                <ProductProof />
+                <DesktopDownload />
+              </>
+            )}
           </>
         ) : (
           <div className="work-surface">

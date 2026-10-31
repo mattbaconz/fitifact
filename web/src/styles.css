@@ -521,6 +521,7 @@ code {
 .section-heading h2 {
   margin: 0;
   font-size: var(--text-2xl);
+  text-wrap: balance;
 }
 .section-heading > p {
   max-width: 340px;
@@ -612,6 +613,64 @@ code {
   align-items: center;
   min-height: var(--tap);
   font-size: var(--text-sm);
+}
+
+/* Landing: proof and download */
+.proof {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-7);
+}
+.proof + .proof {
+  border-left: 1px solid var(--line);
+}
+.proof h3 {
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+.proof p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+}
+.proof .proof-check {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  color: var(--ink);
+  font: var(--text-xs) / var(--leading) var(--font-mono);
+}
+.how-it-works + .how-it-works {
+  padding-top: var(--space-4);
+}
+.how-it-works.download {
+  padding-top: 0;
+}
+.download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-8);
+}
+.download-card .eyebrow {
+  margin-bottom: var(--space-3);
+}
+.download-card h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-2xl);
+}
+.download-card p:not(.eyebrow) {
+  max-width: 520px;
+  margin: 0;
+  font-size: var(--text-base);
+}
+.download-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 /* Workspace */
@@ -1397,10 +1456,15 @@ code {
   .status-card {
     padding: var(--space-6);
   }
-  .example {
+  .example,
+  .proof {
     padding: 22px;
   }
   .section-heading {
+    align-items: start;
+  }
+  .download-card {
+    flex-direction: column;
     align-items: start;
   }
 }
@@ -1500,6 +1564,23 @@ code {
   .developer-note {
     flex-direction: column;
     align-items: start;
+  }
+  .proof {
+    padding: var(--space-6);
+  }
+  .proof + .proof {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+  .download-card {
+    align-items: stretch;
+    padding: var(--space-6);
+  }
+  .download-card h2 {
+    font-size: 27px;
+  }
+  .download-actions {
+    flex-direction: column;
   }
   .site-footer {
     flex-direction: column;

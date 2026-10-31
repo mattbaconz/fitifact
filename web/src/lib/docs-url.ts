@@ -1,5 +1,5 @@
 /** Canonical public docs URL for sharing. The in-app href is always local. */
-export const PUBLIC_DOCS_URL = "https://mattbaconz.github.io/fitifact/docs/";
+export const PUBLIC_DOCS_URL = "https://fitifact.com/docs/";
 
 export function publicDocsHref(baseUrl = import.meta.env.BASE_URL) {
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
