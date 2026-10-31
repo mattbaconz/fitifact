@@ -4,8 +4,19 @@ All notable changes to Fitifact are documented here.
 
 ## [Unreleased]
 
+### [added]
+
+- The homepage explains, below the drop area, how to check the three claims
+  yourself (works offline once loaded, nothing is uploaded, every output is
+  re-checked) and links the desktop app's downloads. The desktop app doesn't
+  show these sections.
+
 ### [changed]
 
+- Fitifact's home is now `https://fitifact.com/`, a static Vercel deployment
+  of the same `web/dist` build at base `/` with the docs at `/docs/` (D-046).
+  Canonical, Open Graph, and README links point there. GitHub Pages keeps
+  deploying until the new domain is verified.
 - The web app loads its engine and video tools once the page has loaded
   (about 870 KB compressed), so a photo or video still works if the network
   drops afterwards. With Save-Data on, the tools still load only for a file

@@ -4,8 +4,8 @@
 
 **Make your file work there.**
 
-[Try Fitifact](https://mattbaconz.github.io/fitifact/) ·
-[Docs](https://mattbaconz.github.io/fitifact/docs/) ·
+[Try Fitifact](https://fitifact.com/) ·
+[Docs](https://fitifact.com/docs/) ·
 [Downloads](https://github.com/mattbaconz/fitifact/releases) ·
 [Code signing policy](#code-signing-policy)
 
@@ -24,7 +24,7 @@ re-encodes it to H.264 where the browser's own encoders pass Fitifact's checks.
 The desktop interface handles the video the browser refuses, plus audio, using
 bundled FFmpeg tools. Published release
 archives currently verified are CLI builds, not desktop installers. See the
-[desktop guide](https://mattbaconz.github.io/fitifact/docs/desktop-guide/) for
+[desktop guide](https://fitifact.com/docs/desktop-guide/) for
 build and download guidance. Desktop installers are not code-signed yet; see the
 [code signing policy](#code-signing-policy). The CLI uses FFmpeg and ffprobe
 from PATH.
@@ -73,7 +73,7 @@ Named destinations load from local YAML via `--for` (for example
 Discord, Gmail, WhatsApp, Slack, X, GitHub, a typical web image, a typical web
 video, size-only file uploads for sound, and AI APIs (Anthropic and OpenAI
 vision, OpenAI transcription). Each destination's
-[page](https://mattbaconz.github.io/fitifact/docs/destinations/) lists its
+[page](https://fitifact.com/docs/destinations/) lists its
 rules, sources, and change history, and a weekly check flags sources that
 change. The browser image provider
 executes bounded image fitting. The desktop app ships FFmpeg as a sidecar
@@ -169,7 +169,7 @@ refused. The transform timeout defaults to 1800 seconds and can be set from 1
 through 86400 seconds with `--timeout-seconds`.
 
 Desktop packaging lives in [`apps/desktop/README.md`](apps/desktop/README.md).
-On GitHub Pages the web UI adapts still images and checks MP4, MOV, WebM, and MKV
+On [fitifact.com](https://fitifact.com/) the web UI adapts still images and checks MP4, MOV, WebM, and MKV
 video, repackaging H.264/AAC video into MP4 without re-encoding and re-encoding
 to H.264 with the browser's WebCodecs encoders where they pass Fitifact's checks.
 The desktop host adds the video the browser refuses (HDR, for one) and common
@@ -196,7 +196,7 @@ alone, asks before a crop or a first-frame change instead of making it,
 validates every output against the same requirements, and saves it beside the
 original without replacing any file; `dry_run` returns the plan only. The
 client starts and stops the server; there is no daemon and no network. Client
-setup is in [AI tools](https://mattbaconz.github.io/fitifact/docs/ai-tools/).
+setup is in [AI tools](https://fitifact.com/docs/ai-tools/).
 
 ## Prepared release installation and verification
 

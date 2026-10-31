@@ -19,7 +19,7 @@ test("drop zone is visible on first paint without a requirements placeholder", a
   await expect(page.getByRole("button", { name: "Try a sample image" }).first()).toBeVisible();
   await expect(page.getByRole("contentinfo")).toContainText("Local · nothing is uploaded");
   await expect(page.getByRole("contentinfo").getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs/");
-  await expect(page.getByRole("link", { name: "GitHub" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "GitHub", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Settings and navigation" })).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Review requirements" })).toHaveCount(0);

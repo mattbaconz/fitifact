@@ -6,7 +6,7 @@ describe("public docs href", () => {
     expect(publicDocsHref("/fitifact/")).toBe("/fitifact/docs/");
     expect(publicDocsHref("/")).toBe("/docs/");
     expect(desktopGuideHref("/")).toBe("/docs/#desktop");
-    expect(PUBLIC_DOCS_URL).toContain("/fitifact/docs/");
+    expect(PUBLIC_DOCS_URL).toBe("https://fitifact.com/docs/");
   });
 
   it("offers a desktop handoff only when the refuse copy points there", () => {
