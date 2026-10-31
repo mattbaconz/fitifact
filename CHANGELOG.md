@@ -10,6 +10,8 @@ All notable changes to Fitifact are documented here.
   (about 870 KB compressed), so a photo or video still works if the network
   drops afterwards. With Save-Data on, the tools still load only for a file
   (D-045).
+- Building from source needs Rust 1.88 or newer (was 1.85), the oldest that
+  `image` 0.25.10 supports.
 
 ### [fixed]
 
