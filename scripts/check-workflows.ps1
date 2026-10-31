@@ -44,7 +44,7 @@ $ciRequirements = @(
     @{ Name = "supply-chain job"; Pattern = '(?m)^  supply-chain:\s*$' },
     @{ Name = "fixture gate"; Pattern = '\./scripts/check-fixtures\.ps1' },
     @{ Name = "documentation gate"; Pattern = '\./scripts/check-doc-links\.ps1' },
-    @{ Name = "pinned Node action"; Pattern = 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\.4\.0' },
+    @{ Name = "pinned Node action"; Pattern = 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7\.1\.0' },
     @{ Name = "pinned Node file"; Pattern = 'node-version-file: web/\.node-version' },
     @{ Name = "pinned npm"; Pattern = 'npm install --global npm@11\.5\.1' },
     @{ Name = "WASM target"; Pattern = 'rustup target add wasm32-unknown-unknown' },
@@ -59,9 +59,9 @@ $ciRequirements = @(
     @{ Name = "public HEIC Pages assertion"; Pattern = 'Public Pages artifact is missing the lazy HEIC decoder' },
     @{ Name = "default HEIC artifact assertion"; Pattern = 'Default artifact is missing the lazy HEIC decoder' },
     @{ Name = "Pages asset-path assertion"; Pattern = 'Pages artifact does not use the /fitifact/ base path' },
-    @{ Name = "pinned Pages artifact upload"; Pattern = 'actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4' },
+    @{ Name = "pinned Pages artifact upload"; Pattern = 'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5\.0\.0' },
     @{ Name = "post-gate Pages deploy job"; Pattern = '(?ms)^  deploy-pages:\r?\n.*?^    needs:\r?\n      - quality\r?\n      - web\r?\n      - platform\r?\n      - msrv\r?\n      - supply-chain\s*$' },
-    @{ Name = "pinned Pages deployment"; Pattern = 'actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4' }
+    @{ Name = "pinned Pages deployment"; Pattern = 'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5\.0\.1' }
 )
 foreach ($requirement in $ciRequirements) {
     if ($ciWorkflow -notmatch $requirement.Pattern) {
@@ -119,7 +119,7 @@ $desktopRequirements = @(
     @{ Name = "unsigned Windows package"; Pattern = 'Package unsigned Windows app' },
     @{ Name = "sidecar bundle assertion"; Pattern = '\./scripts/check-desktop-bundle\.ps1' },
     @{ Name = "desktop-windows artifact"; Pattern = 'name: desktop-windows' },
-    @{ Name = "pinned artifact upload"; Pattern = 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7\.0\.1' }
+    @{ Name = "pinned artifact upload"; Pattern = 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7\.0\.2' }
 )
 foreach ($requirement in $desktopRequirements) {
     if ($desktopWorkflow -notmatch $requirement.Pattern) {
