@@ -55,10 +55,8 @@ $ciRequirements = @(
     @{ Name = "decoder-free HEIC gate"; Pattern = 'FITIFACT_HEIC_APPROVED: "false"' },
     @{ Name = "decoder-free HEIC browser check"; Pattern = 'npm run test:e2e:heic-off' },
     @{ Name = "all-browser workflow"; Pattern = '(?m)^\s+run: npm run test:e2e\s*$' },
-    @{ Name = "Pages base path"; Pattern = 'FITIFACT_BASE_PATH: /fitifact/' },
-    @{ Name = "public HEIC Pages assertion"; Pattern = 'Public Pages artifact is missing the lazy HEIC decoder' },
     @{ Name = "default HEIC artifact assertion"; Pattern = 'Default artifact is missing the lazy HEIC decoder' },
-    @{ Name = "Pages asset-path assertion"; Pattern = 'Pages artifact does not use the /fitifact/ base path' },
+    @{ Name = "Pages redirect to fitifact.com"; Pattern = 'Copy-Item \.\./scripts/pages-redirect\.html \(Join-Path \$pages 404\.html\)' },
     @{ Name = "pinned Pages artifact upload"; Pattern = 'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5\.0\.0' },
     @{ Name = "post-gate Pages deploy job"; Pattern = '(?ms)^  deploy-pages:\r?\n.*?^    needs:\r?\n      - quality\r?\n      - web\r?\n      - platform\r?\n      - msrv\r?\n      - supply-chain\s*$' },
     @{ Name = "pinned Pages deployment"; Pattern = 'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5\.0\.1' }
