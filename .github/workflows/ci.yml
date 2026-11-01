@@ -107,31 +107,20 @@ jobs:
           }
       - name: Browser workflow tests
         run: npm run test:e2e
-      - name: Build GitHub Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          FITIFACT_BASE_PATH: /fitifact/
-        run: npm run build
-      - name: Verify public Pages artifact
+      - name: Build GitHub Pages redirect
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
-          $assets = @(Get-ChildItem -LiteralPath dist/assets -File | ForEach-Object Name)
-          if (-not ($assets -match '^(?:heic-decoder|wasm-bundle)-')) {
-            throw "Public Pages artifact is missing the lazy HEIC decoder"
-          }
-          $html = Get-Content -Raw -LiteralPath dist/index.html
-          if ($html -match 'heic-decoder|wasm-bundle') {
-            throw "Pages index.html eagerly references the HEIC decoder"
-          }
-          if (-not $html.Contains('/fitifact/assets/')) {
-            throw "Pages artifact does not use the /fitifact/ base path"
-          }
+          # Fitifact lives at fitifact.com (D-046); Pages only sends old links there.
+          $pages = Join-Path $env:RUNNER_TEMP pages
+          New-Item -ItemType Directory -Force -Path $pages | Out-Null
+          Copy-Item ../scripts/pages-redirect.html (Join-Path $pages index.html)
+          Copy-Item ../scripts/pages-redirect.html (Join-Path $pages 404.html)
       - name: Upload GitHub Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: web/dist
+          path: ${{ runner.temp }}/pages
 
   deploy-pages:
     name: deploy static web

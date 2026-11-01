@@ -82,7 +82,9 @@ signing, package-manager formulae, and telemetry/network activity are
 deferred. The public web app is static hosting only; it adds no server or
 upload path. Its home is `https://fitifact.com/` on Vercel (D-046):
 `vercel.json` carries only headers, redirects, and URL rules, never functions,
-rewrites to other origins, analytics, or Speed Insights. A thin Tauri 2
+rewrites to other origins, analytics, or Speed Insights. GitHub Pages only
+serves `scripts/pages-redirect.html`, which sends old `/fitifact/` links to the
+same path on fitifact.com. A thin Tauri 2
 host in `apps/desktop/` (D-031) reuses that UI plus the engine: still images
 in-process/WASM, MP4/MOV/WebM/MKV and common audio via shipped FFmpeg sidecars.
 The desktop crate is **not** a workspace member. Discord Nitro is declared in

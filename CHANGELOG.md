@@ -15,8 +15,10 @@ All notable changes to Fitifact are documented here.
 
 - Fitifact's home is now `https://fitifact.com/`, a static Vercel deployment
   of the same `web/dist` build at base `/` with the docs at `/docs/` (D-046).
-  Canonical, Open Graph, and README links point there. GitHub Pages keeps
-  deploying until the new domain is verified.
+  Canonical, Open Graph, and README links point there.
+- `https://mattbaconz.github.io/fitifact/` now sends every old link to the same
+  path, query, and anchor on `fitifact.com` instead of serving its own copy of
+  the app (D-046).
 - The web app loads its engine and video tools once the page has loaded
   (about 870 KB compressed), so a photo or video still works if the network
   drops afterwards. With Save-Data on, the tools still load only for a file
