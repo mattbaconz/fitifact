@@ -274,17 +274,6 @@ export function App() {
                 </div>
               </div>
             </section>
-            <div className="intro-process">
-              <ProcessRail
-                state={state}
-                stage={progress?.stage}
-                hasFile={false}
-              />
-              <p>
-                Understand the file. Review the plan. Change only what’s needed.
-                Verify the result.
-              </p>
-            </div>
             <ProductExamples
               onSample={(scenario) => void useSampleImage(scenario)}
               disabled={state === "processing"}

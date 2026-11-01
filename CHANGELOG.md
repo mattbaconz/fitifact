@@ -13,6 +13,9 @@ All notable changes to Fitifact are documented here.
 
 ### [changed]
 
+- The homepage is quieter: no step rail or section labels, and the samples,
+  the claims, and the desktop and CLI links are plain rows instead of card
+  grids. The desktop app's start screen no longer links the CLI docs.
 - Fitifact's home is now `https://fitifact.com/`, a static Vercel deployment
   of the same `web/dist` build at base `/` with the docs at `/docs/` (D-046).
   Canonical, Open Graph, and README links point there.
