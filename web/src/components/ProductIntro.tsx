@@ -7,7 +7,6 @@ const RELEASES_URL = "https://github.com/mattbaconz/fitifact/releases";
 export function ProductIntro() {
   return (
     <div className="intro-copy">
-      <p className="eyebrow">Files, fitted with care.</p>
       <h1>
         Make your file
         <br className="desktop-break" /> work there.
@@ -36,81 +35,52 @@ export function ProductExamples({
       id="how-it-works"
       aria-labelledby="how-title"
     >
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Less change. More certainty.</p>
-          <h2 id="how-title">A requirement, not a recipe.</h2>
-        </div>
-        <p>
-          The same destination can need a different answer for every file. Try
-          it with a local sample.
-        </p>
-      </div>
-      <div className="example-grid">
+      <h2 id="how-title" className="section-title">
+        What changes, and what doesn’t.
+      </h2>
+      <div className="row-list">
         <button
           disabled={disabled}
-          className="example"
+          className="row"
           onClick={() => onSample("unchanged")}
         >
-          <span className="example-diagram">
-            <span>PNG</span>
-            <span className="example-connection">=</span>
-            <span>PNG</span>
+          <span className="row-tag">PNG = PNG</span>
+          <span className="row-body">
+            <strong>Leave a good file alone</strong>
+            <span>Already inside the limits, so you get the original back.</span>
           </span>
-          <strong>Leave a good file alone</strong>
-          <span>
-            Already inside the limits. Original bytes, original quality.
-          </span>
-          <span className="text-link">
+          <span className="row-action">
             Try an unchanged file <span aria-hidden="true">↗</span>
           </span>
         </button>
         <button
           disabled={disabled}
-          className="example"
+          className="row"
           onClick={() => onSample("format")}
         >
-          <span className="example-diagram">
-            <span>PNG</span>
-            <span className="example-connection">→</span>
-            <span>JPEG</span>
+          <span className="row-tag">PNG → JPEG</span>
+          <span className="row-body">
+            <strong>Change only what’s needed</strong>
+            <span>A different format, with the same dimensions and shape.</span>
           </span>
-          <strong>Change only what’s needed</strong>
-          <span>A different format, with the same dimensions and shape.</span>
-          <span className="text-link">
+          <span className="row-action">
             Try a format change <span aria-hidden="true">↗</span>
           </span>
         </button>
         <button
           disabled={disabled}
-          className="example"
+          className="row"
           onClick={() => onSample("crop")}
         >
-          <span className="example-diagram">
-            <span>4:3</span>
-            <span className="example-connection">→</span>
-            <span>1:1</span>
+          <span className="row-tag">4:3 → 1:1</span>
+          <span className="row-body">
+            <strong>You choose what gets cropped</strong>
+            <span>Review the framing and approve it before anything changes.</span>
           </span>
-          <strong>You choose what gets cropped</strong>
-          <span>
-            Review the framing and approve it before anything changes.
-          </span>
-          <span className="text-link">
+          <span className="row-action">
             Try a crop <span aria-hidden="true">↗</span>
           </span>
         </button>
-      </div>
-      <div className="developer-note">
-        <div>
-          <h3>The same thinking, from your terminal.</h3>
-          <p>
-            Inspect, preview a plan, and get a machine-readable report with the
-            local CLI.
-          </p>
-        </div>
-        <a href={`${import.meta.env.BASE_URL}docs/cli/`}>
-          Explore the CLI <span aria-hidden="true">↗</span>
-        </a>
       </div>
     </section>
   );
@@ -119,66 +89,50 @@ export function ProductExamples({
 export function ProductProof() {
   return (
     <section className="how-it-works" id="proof" aria-labelledby="proof-title">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Check it yourself</p>
-          <h2 id="proof-title">Claims you can test in this tab.</h2>
+      <h2 id="proof-title" className="section-title">
+        Check it yourself.
+      </h2>
+      <div className="row-list">
+        <div className="row">
+          <span className="row-tag">Loaded → Offline</span>
+          <span className="row-body">
+            <strong>Works offline once loaded</strong>
+            <span>
+              The engine and video tools load in the background, so the network
+              can drop. Data Saver skips this, and HEIC photos load their
+              decoder on first use.
+            </span>
+            <span className="row-check">
+              Wait a few seconds, go offline, drop a file.
+            </span>
+          </span>
         </div>
-        <p>
-          Each one is something this page does, not a promise in a policy.
-        </p>
-      </div>
-      <div className="example-grid">
-        <article className="proof">
-          <span className="example-diagram">
-            <span>Loaded</span>
-            <span className="example-connection">→</span>
-            <span>Offline</span>
+        <div className="row">
+          <span className="row-tag">connect-src 'self'</span>
+          <span className="row-body">
+            <strong>Nothing is uploaded</strong>
+            <span>
+              Your file is read and changed in this tab, and the page’s
+              security policy blocks connections to other sites.
+            </span>
+            <span className="row-check">
+              Open developer tools, watch Network, adapt a file.
+            </span>
           </span>
-          <h3>Works offline once loaded</h3>
-          <p>
-            After the page loads, Fitifact fetches its engine and video tools
-            in the background, so the network can drop and you keep working.
-            Data Saver skips this, and HEIC photos load their decoder on first
-            use.
-          </p>
-          <p className="proof-check">
-            <span className="muted">Try it:</span>{" "}
-            Wait a few seconds, go offline, drop a file.
-          </p>
-        </article>
-        <article className="proof">
-          <span className="example-diagram">
-            <span>connect-src 'self'</span>
+        </div>
+        <div className="row">
+          <span className="row-tag">Output vs Rules</span>
+          <span className="row-body">
+            <strong>Every output is re-checked</strong>
+            <span>
+              The new file is measured against the same rules it was planned
+              with. A failed rule is an error, not a download.
+            </span>
+            <span className="row-check">
+              Every result lists each rule, before and after.
+            </span>
           </span>
-          <h3>Nothing is uploaded</h3>
-          <p>
-            Your file is read and changed inside this tab. There is no server
-            to send it to, and the page’s security policy blocks connections
-            to any other site.
-          </p>
-          <p className="proof-check">
-            <span className="muted">Try it:</span>{" "}
-            Open developer tools, watch Network, adapt a file.
-          </p>
-        </article>
-        <article className="proof">
-          <span className="example-diagram">
-            <span>Output</span>
-            <span className="example-connection">vs</span>
-            <span>Rules</span>
-          </span>
-          <h3>Every output is re-checked</h3>
-          <p>
-            Fitifact inspects the new file and measures it against the same
-            destination rules it planned with. If a rule fails, you get an
-            error, not a download.
-          </p>
-          <p className="proof-check">
-            <span className="muted">Try it:</span>{" "}
-            Every result lists each rule, before and after.
-          </p>
-        </article>
+        </div>
       </div>
     </section>
   );
@@ -187,27 +141,40 @@ export function ProductProof() {
 export function DesktopDownload() {
   return (
     <section
-      className="how-it-works download"
+      className="how-it-works"
       id="download"
       aria-labelledby="download-title"
     >
-      <div className="ft-card download-card">
-        <div>
-          <p className="eyebrow">Desktop app</p>
-          <h2 id="download-title">Audio and HDR video, on your computer.</h2>
-          <p>
-            The same engine with FFmpeg built in, for Windows. Release
-            candidates are not code-signed yet, so Windows may warn you before
-            the installer runs.
-          </p>
+      <h2 id="download-title" className="section-title">
+        Beyond the browser.
+      </h2>
+      <div className="row-list">
+        <div className="row">
+          <span className="row-tag">Windows</span>
+          <span className="row-body">
+            <strong>Desktop app</strong>
+            <span>
+              Audio and HDR video, with FFmpeg built in. Release candidates are
+              not code-signed yet, so Windows may warn you before the installer
+              runs.
+            </span>
+          </span>
+          <span className="row-links">
+            <a href={RELEASES_URL}>Downloads on GitHub</a>
+            <a href={desktopGuideHref()}>Desktop guide</a>
+          </span>
         </div>
-        <div className="download-actions">
-          <a className="ft-btn" href={RELEASES_URL}>
-            Downloads on GitHub
-          </a>
-          <a className="ft-btn ft-btn-secondary" href={desktopGuideHref()}>
-            Desktop guide
-          </a>
+        <div className="row">
+          <span className="row-tag">Terminal</span>
+          <span className="row-body">
+            <strong>Command line</strong>
+            <span>
+              Inspect a file, preview a plan, and get a machine-readable report.
+            </span>
+          </span>
+          <span className="row-links">
+            <a href={`${import.meta.env.BASE_URL}docs/cli/`}>CLI docs</a>
+          </span>
         </div>
       </div>
     </section>
