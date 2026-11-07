@@ -1,4 +1,27 @@
+import type { OutputFormat } from "../types";
+
 type ClipboardItemClass = { supports?: (type: string) => boolean };
+
+/** The output's name, extension, and type: the original's stem, made safe, with the new extension. */
+export function outputDetails(format: OutputFormat | "mp4", originalName: string, suffix: boolean) {
+  const extension = format === "jpeg" ? "jpg" : format;
+  const mime =
+    format === "jpeg"
+      ? "image/jpeg"
+      : format === "png"
+        ? "image/png"
+        : format === "mp4"
+          ? "video/mp4"
+          : "image/webp";
+  const stem =
+    originalName.replace(/\.[^.]*$/, "").replace(/[^a-zA-Z0-9._-]+/g, "-") ||
+    (format === "mp4" ? "video" : "image");
+  return {
+    extension,
+    mime,
+    name: suffix ? `${stem}.fitifact.${extension}` : `${stem}.${extension}`,
+  };
+}
 
 /** Copy and share appear only where this platform can hand over the exact validated file. */
 export function fileActions(file: File | null): { copy: boolean; share: boolean } {

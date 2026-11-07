@@ -50,7 +50,7 @@ inspect -> constraints -> check -> plan -> execute -> validate
 
 ## Scope
 
-Cargo, web, desktop, and docs are at `1.0.0-rc.1`, the first 1.0 candidate.
+Cargo, web, desktop, docs, and the extension are at `1.0.0-rc.1`, the first 1.0 candidate.
 1.0.0 is the first stable version; there will be no `v0.1.0` or `v0.2.0` tag.
 
 | Input and requested result | Behavior |
@@ -169,6 +169,8 @@ refused. The transform timeout defaults to 1800 seconds and can be set from 1
 through 86400 seconds with `--timeout-seconds`.
 
 Desktop packaging lives in [`apps/desktop/README.md`](apps/desktop/README.md).
+The Chrome extension, which fits a video before Discord, Gmail, or WhatsApp Web
+sees it, lives in [`apps/extension/README.md`](apps/extension/README.md).
 On [fitifact.com](https://fitifact.com/) the web UI adapts still images and checks MP4, MOV, WebM, and MKV
 video, repackaging H.264/AAC video into MP4 without re-encoding and re-encoding
 to H.264 with the browser's WebCodecs encoders where they pass Fitifact's checks.

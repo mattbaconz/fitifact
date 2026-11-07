@@ -6,6 +6,15 @@ All notable changes to Fitifact are documented here.
 
 ### [added]
 
+- A Chrome extension in `apps/extension/`, loaded unpacked, fits a video before
+  Discord, Gmail, or WhatsApp Web sees it (D-047). When you attach a video over
+  that destination's limit (on Discord, the limit of the plan you declare), it
+  holds the file, shows what fails and what would change, and fits it on your
+  device with the web app's engine. Only an output that passes the same checks
+  again reaches the page. Use original hands over the file untouched, and a
+  file under the limit is never touched. Its only permission is storage, it
+  runs only on those three sites, and it makes no network requests. Its popup
+  sets your Discord plan and opens a tab that fits a chosen video for download.
 - The homepage explains, below the drop area, how to check the three claims
   yourself (works offline once loaded, nothing is uploaded, every output is
   re-checked) and links the desktop app's downloads. The desktop app doesn't
@@ -45,6 +54,8 @@ All notable changes to Fitifact are documented here.
 
 ### [fixed]
 
+- A video re-encoded only to get under a size limit now says "Re-encode so the
+  file fits the size limit" instead of "Re-encode the video so it plays there".
 - A file opened while offline, before the tools have loaded, says the device is
   offline instead of "The local image worker stopped unexpectedly", and the
   engine retries its load instead of failing for the rest of the visit.

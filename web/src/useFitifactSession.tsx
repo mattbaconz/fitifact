@@ -96,6 +96,7 @@ import {
   setupIsNewer,
   type SetupState,
 } from "./lib/setup";
+import { outputDetails } from "./lib/share";
 import type {
   AdaptReport,
   CompatibilityReport,
@@ -176,30 +177,6 @@ function useObjectUrl(blob: Blob | null) {
     return () => URL.revokeObjectURL(url);
   }, [blob]);
   return entry?.blob === blob ? entry.url : null;
-}
-
-function outputDetails(
-  format: OutputFormat | "mp4",
-  originalName: string,
-  suffix: boolean,
-) {
-  const extension = format === "jpeg" ? "jpg" : format;
-  const mime =
-    format === "jpeg"
-      ? "image/jpeg"
-      : format === "png"
-        ? "image/png"
-        : format === "mp4"
-          ? "video/mp4"
-          : "image/webp";
-  const stem =
-    originalName.replace(/\.[^.]*$/, "").replace(/[^a-zA-Z0-9._-]+/g, "-") ||
-    (format === "mp4" ? "video" : "image");
-  return {
-    extension,
-    mime,
-    name: suffix ? `${stem}.fitifact.${extension}` : `${stem}.${extension}`,
-  };
 }
 
 function applyPlanState(report: PlanReport): ProductState {

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fitifact</title>
+    <link rel="stylesheet" href="../../web/public/brand/tokens.css" />
+    <link rel="stylesheet" href="../../web/public/brand/components.css" />
+    <link rel="stylesheet" href="./src/extension.css" />
+    <script type="module" src="./src/popup.ts"></script>
+  </head>
+  <body>
+    <main class="sheet popup">
+      <header class="bar">
+        <img class="mark" src="../../web/public/ft-mark.svg" alt="" width="18" height="18" />
+        <span class="brand">Fitifact</span>
+      </header>
+      <p class="lede">
+        Attach a video on Discord, Gmail, or WhatsApp Web. If it's over the limit, Fitifact offers to fit it first.
+      </p>
+      <label class="field">
+        <span>Your Discord plan</span>
+        <select class="ft-field" id="plan"></select>
+      </label>
+      <button class="ft-btn ft-btn-block" type="button" id="open">Fit a video</button>
+      <p class="foot">Runs on this device. Nothing is uploaded.</p>
+    </main>
+  </body>
+</html>

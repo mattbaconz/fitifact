@@ -107,6 +107,10 @@ jobs:
           }
       - name: Browser workflow tests
         run: npm run test:e2e
+      - name: Install locked extension dependencies
+        run: npm ci --prefix ../apps/extension
+      - name: Browser extension build and tests
+        run: npm run test:e2e --prefix ../apps/extension
       - name: Build GitHub Pages redirect
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
