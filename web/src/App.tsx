@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FileSummary } from "./components/FileSummary";
+import { HeroShader } from "./components/HeroShader";
 import { ProcessRail } from "./components/ProcessRail";
 import {
   DesktopDownload,
@@ -148,6 +149,8 @@ export function App() {
       <main id="top" tabIndex={-1} inert={sidebarOpen}>
         {!showWork ? (
           <>
+            <div className="hero">
+            {desktop ? null : <HeroShader />}
             <section className="landing-workspace">
               <ProductIntro />
               <div className="drop-canvas">
@@ -274,6 +277,7 @@ export function App() {
                 </div>
               </div>
             </section>
+            </div>
             <ProductExamples
               onSample={(scenario) => void useSampleImage(scenario)}
               disabled={state === "processing"}

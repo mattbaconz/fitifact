@@ -10,8 +10,18 @@ All notable changes to Fitifact are documented here.
   yourself (works offline once loaded, nothing is uploaded, every output is
   re-checked) and links the desktop app's downloads. The desktop app doesn't
   show these sections.
+- The homepage hero has slow contour lines drawn by one small WebGL2 shader.
+  It starts about a second after the page loads, compiles off the main thread
+  where the browser allows it, pauses when scrolled away or in a hidden tab,
+  shows one still frame with reduced motion, and leaves a plain background
+  without WebGL2. The desktop app doesn't run it.
 
 ### [changed]
+
+- The homepage copy is shorter, sample rows are one line each, the three
+  claims sit in one strip, and the desktop and CLI links share one short
+  section. Text eases in on load and rows lift into place as they scroll in
+  (transform and opacity only, off with reduced motion).
 
 - The homepage is quieter: no step rail or section labels, and the samples,
   the claims, and the desktop and CLI links are plain rows instead of card
