@@ -238,7 +238,8 @@ export function App() {
                   onClick={() => void useSampleImage()}
                   disabled={state === "processing"}
                 >
-                  Try a sample image <span aria-hidden="true">↗</span>
+                  <span>Try a sample image</span>{" "}
+                  <span aria-hidden="true">↗</span>
                 </button>
                 <p className="browser-capability">
                   {desktop ? (

@@ -289,6 +289,7 @@ code {
 }
 .intro-copy h1 {
   margin: 0 0 var(--space-6);
+  text-wrap: balance;
   font-size: var(--text-display);
   font-weight: 500;
   line-height: 1.04;
@@ -296,6 +297,7 @@ code {
 }
 .intro-description {
   max-width: 430px;
+  text-wrap: pretty;
   margin: 0 0 var(--space-7);
   font-size: 17px;
   line-height: 1.7;
@@ -317,9 +319,13 @@ code {
   text-align: center;
 }
 .drop-zone {
+  transition: border-color 200ms ease, background-color 200ms ease;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-lg);
   background: var(--panel);
+}
+.drop-zone-hero:hover {
+  border-color: var(--subtle);
 }
 .drop-zone:focus-within,
 .drop-zone.is-dragging {
@@ -341,7 +347,8 @@ code {
   font-weight: var(--weight-medium);
 }
 .drop-zone-hero #image-help {
-  max-width: 320px;
+  max-width: 400px;
+  text-wrap: balance;
   margin: 0 0 var(--space-6);
   font-size: var(--text-xs);
 }
@@ -353,8 +360,17 @@ code {
 .drop-sample {
   margin-top: var(--space-2);
 }
+.drop-sample {
+  gap: var(--space-1);
+  text-decoration: none;
+}
+.drop-sample > span:first-child {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .browser-capability {
   margin: var(--space-1) 0 0;
+  text-wrap: balance;
   font-size: var(--text-xs);
 }
 .browser-capability a {
@@ -593,7 +609,7 @@ button.row:disabled {
 .hero {
   display: grid;
   align-items: center;
-  min-height: min(720px, calc(100svh - 68px));
+  min-height: min(640px, calc(100svh - 68px));
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -613,7 +629,7 @@ button.row:disabled {
   opacity: 0;
   pointer-events: none;
   transition: opacity 1600ms ease;
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 68%, transparent);
 }
 .hero-field[data-ready] {
   opacity: 1;

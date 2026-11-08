@@ -18,6 +18,10 @@ All notable changes to Fitifact are documented here.
 
 ### [changed]
 
+- Homepage polish: the headline, file-type line, and desktop note wrap in
+  balanced lines; the hero is shorter so the samples show sooner; the
+  contour lines fade in under the header; the drop area brightens its border
+  on hover; and the sample link no longer underlines its arrow.
 - The homepage copy is shorter, sample rows are one line each, the three
   claims sit in one strip, and the desktop and CLI links share one short
   section. Text eases in on load and rows lift into place as they scroll in
