@@ -2,20 +2,11 @@ import { expect, test } from "@playwright/test";
 import type { Download, Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { requestLog, videoTools, whenQuiet } from "./support";
 
 const media = path.resolve("../fixtures/media");
 /** Every refusal of a browser encode ends by pointing to the desktop app. */
 const DESKTOP_POINTER = /Open it in the Fitifact desktop app\.$/;
-
-/**
- * Records the path of every request, including the worker's: WebKit reports a worker's module
- * import as "xhr" rather than "script", so the type is not filtered.
- */
-function requestLog(page: Page) {
-  const paths: string[] = [];
-  page.on("request", (request) => paths.push(new URL(request.url()).pathname));
-  return paths;
-}
 
 async function dropVideo(page: Page, name: string, container: RegExp) {
   await page.locator("input[type=file]").setInputFiles(path.join(media, name));
@@ -175,30 +166,11 @@ test("a video stream the browser would drop is refused, not lost", async ({ page
   await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
 });
 
-const videoTools = (paths: string[]) => paths.some((url) => /\/assets\/media-[\w-]+\.js$/.test(url));
-
 /** Tells the page the visitor asked to save data, which skips loading the tools ahead of a file. */
 async function saveData(page: Page) {
   await page.addInitScript(() =>
     Object.defineProperty(Navigator.prototype, "connection", { configurable: true, get: () => ({ saveData: true }) }),
   );
-}
-
-/** Waits until no request, worker requests included, has been open for a second. */
-function whenQuiet(page: Page) {
-  let open = 0;
-  let last = Date.now();
-  page.on("request", () => {
-    open += 1;
-    last = Date.now();
-  });
-  const settle = () => {
-    open -= 1;
-    last = Date.now();
-  };
-  page.on("requestfinished", settle);
-  page.on("requestfailed", settle);
-  return () => expect.poll(() => open <= 0 && Date.now() - last > 1000, { timeout: 30_000 }).toBe(true);
 }
 
 /** Playwright's WebKit offline mode also blocks reading the chosen file's blob (NotReadableError). */

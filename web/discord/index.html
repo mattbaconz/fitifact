@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en" data-for="discord">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="description" content="Fit a clip under Discord's 20 MB free limit in your browser. Nothing is uploaded, it works offline once loaded, and every result is re-checked." />
+    <meta name="theme-color" content="#f6f7f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0e0e" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href="https://fitifact.com/discord/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Discord video compressor: fit 20 MB free, 50 MB Nitro Basic" />
+    <meta property="og:description" content="Fit a clip under Discord's 20 MB free limit in your browser. Nothing is uploaded, it works offline once loaded, and every result is re-checked." />
+    <meta property="og:url" content="https://fitifact.com/discord/" />
+    <meta property="og:image" content="https://fitifact.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Discord video compressor: fit 20 MB free, 50 MB Nitro Basic" />
+    <meta name="twitter:description" content="Fit a clip under Discord's 20 MB free limit in your browser. Nothing is uploaded, it works offline once loaded, and every result is re-checked." />
+    <meta name="twitter:image" content="https://fitifact.com/og.png" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%ft-mark.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
+    <link rel="stylesheet" href="%BASE_URL%brand/tokens.css" />
+    <link rel="stylesheet" href="%BASE_URL%brand/components.css" />
+    <script src="%BASE_URL%brand/theme.js"></script>
+    <link rel="preload" href="%BASE_URL%brand/geist.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="%BASE_URL%boot.css" />
+    <title>Discord video compressor: fit 20 MB free, 50 MB Nitro Basic | Fitifact</title>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot">
+        <header class="boot-header">Fitifact</header>
+        <h1 class="boot-job">Fit a video for Discord</h1>
+        <p class="boot-limits">Free 20 MB · Nitro Basic 50 MB · Nitro 1 GB</p>
+        <div class="boot-drop">
+          <p>Drop a file</p>
+          <p>Video · MP4 MOV WebM MKV · up to 1 GiB in the browser</p>
+        </div>
+      </div>
+    </div>
+    <div id="page-guide" class="page-guide">
+      <section class="how-it-works" aria-labelledby="limits-title">
+        <h2 id="limits-title" class="section-title">Discord’s file size limit</h2>
+        <p>
+          Discord raised the free upload limit from 10 MB to 20 MB on
+          <a href="https://x.com/discord/status/2087987317298360489">13 August 2026</a>.
+          Nitro Basic allows 50 MB, and Nitro up to 1 GB.
+        </p>
+        <!--discord-limits-->
+        <p class="claims-note">
+          These numbers come from the same profiles Fitifact checks every result
+          against. Fitifact can’t see your account, so pick the tier you have.
+        </p>
+      </section>
+      <section class="how-it-works" aria-labelledby="fail-title">
+        <h2 id="fail-title" class="section-title">Why did my 18 MB clip fail?</h2>
+        <ul class="claims">
+          <li>
+            <strong>Discord checks size before compressing</strong>
+            <span>
+              Since August 2026 the mobile app checks the file you picked, not
+              the smaller file it would send. Discord says Android users may hit
+              the limit more often.
+            </span>
+          </li>
+          <li>
+            <strong>A converted clip can grow</strong>
+            <span>
+              Users report that a phone’s HEVC clip gets converted to H.264 and
+              ends up over the limit. Discord hasn’t documented this. Fitifact
+              sends H.264 already, so there’s nothing left to convert.
+            </span>
+          </li>
+          <li>
+            <strong>20 MB might mean 20,000,000 bytes</strong>
+            <span>
+              Discord hasn’t said whether 20 MB is 20,000,000 bytes or
+              20 × 1024 × 1024. Fitifact aims at the smaller number.
+            </span>
+          </li>
+        </ul>
+      </section>
+      <section class="how-it-works" id="how-it-works" aria-labelledby="works-title">
+        <h2 id="works-title" class="section-title">How it works</h2>
+        <ul class="claims">
+          <li>
+            <strong>Discord is already picked</strong>
+            <span>Choose your tier, then drop a clip.</span>
+          </li>
+          <li>
+            <strong>Only what fails changes</strong>
+            <span>A clip that already fits keeps its original bytes.</span>
+          </li>
+          <li>
+            <strong>The result is checked again</strong>
+            <span>Against the same rules, before you can download it.</span>
+          </li>
+        </ul>
+      </section>
+      <section class="how-it-works" aria-labelledby="limits-plain-title">
+        <h2 id="limits-plain-title" class="section-title">What the browser can’t do</h2>
+        <ul class="plain-list">
+          <li>HDR video, and video stored rotated, mirrored, or stretched, go to the desktop app.</li>
+          <li>Files over 1 GiB are refused in the browser.</li>
+          <li>If this browser lacks an encoder the clip needs, Fitifact says so instead of guessing.</li>
+          <li>20 MB is about 2.7 Mbit/s for a one-minute clip, so longer clips come out smaller or softer. Fitifact stops at a quality floor rather than send mush.</li>
+        </ul>
+        <p class="row-links">
+          <a href="https://github.com/mattbaconz/fitifact/issues/new?template=destination-rejected.yml&amp;destination=Discord">Discord rejected a file Fitifact passed? Tell us</a>
+        </p>
+      </section>
+    </div>
+    <noscript>Fitifact runs in this browser with JavaScript on. Nothing is uploaded.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

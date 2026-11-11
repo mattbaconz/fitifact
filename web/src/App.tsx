@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FileSummary } from "./components/FileSummary";
 import { HeroShader } from "./components/HeroShader";
 import { ProcessRail } from "./components/ProcessRail";
 import {
   DesktopDownload,
+  DiscordIntro,
   ProductExamples,
   ProductIntro,
   ProductProof,
@@ -21,6 +22,19 @@ import {
 import { summarizeTarget } from "./lib/target-summary";
 import { SetupSheet } from "./SetupSheet";
 import { RejectBlock, useFitifactSession } from "./useFitifactSession";
+
+// A destination page ships its guide as static HTML after #root, so it is readable
+// before the app boots; the app moves that node into place below the hero.
+const DISCORD_PAGE = document.documentElement.dataset.for === "discord";
+const pageGuide = document.getElementById("page-guide");
+
+function PageGuide() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (pageGuide) ref.current?.append(pageGuide);
+  }, []);
+  return pageGuide ? <div ref={ref} className="page-guide-slot" /> : null;
+}
 
 export function App() {
   const session = useFitifactSession();
@@ -152,7 +166,14 @@ export function App() {
             <div className="hero">
             {desktop ? null : <HeroShader />}
             <section className="landing-workspace">
-              <ProductIntro />
+              {DISCORD_PAGE ? (
+                <DiscordIntro
+                  cap={setup.discordCap}
+                  onCap={(discordCap) => commitSetup({ ...setup, discordCap })}
+                />
+              ) : (
+                <ProductIntro />
+              )}
               <div className="drop-canvas">
                 {state === "processing" ? (
                   <div
@@ -279,10 +300,14 @@ export function App() {
               </div>
             </section>
             </div>
-            <ProductExamples
-              onSample={(scenario) => void useSampleImage(scenario)}
-              disabled={state === "processing"}
-            />
+            {DISCORD_PAGE ? (
+              <PageGuide />
+            ) : (
+              <ProductExamples
+                onSample={(scenario) => void useSampleImage(scenario)}
+                disabled={state === "processing"}
+              />
+            )}
             {desktop ? null : (
               <>
                 <ProductProof />

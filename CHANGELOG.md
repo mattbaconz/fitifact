@@ -6,6 +6,12 @@ All notable changes to Fitifact are documented here.
 
 ### [added]
 
+- `fitifact.com/discord/` is the same app with Discord picked and a tier
+  picker (Free 20 MB, Nitro Basic 50 MB, Nitro 1 GB) above the drop area.
+  Below it, a limits table built from the shipped Discord profiles at build
+  time, why a clip under 20 MB can still fail, and what the browser can't do.
+  The site also serves `robots.txt` and `sitemap.xml`, and a new issue form
+  reports a file a destination rejected after Fitifact passed it.
 - The homepage explains, below the drop area, how to check the three claims
   yourself (works offline once loaded, nothing is uploaded, every output is
   re-checked) and links the desktop app's downloads. The desktop app doesn't
