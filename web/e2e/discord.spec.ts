@@ -21,6 +21,8 @@ test("/discord/ has its own head, the guide, and the tier picker", async ({ page
   await expect(page.locator("main #page-guide")).toHaveCount(1);
   await expect(page.locator(".limits-table")).toContainText("20,000,000 bytes");
   await expect(page.getByRole("heading", { name: "Why did my 18 MB clip fail?" })).toBeVisible();
+  // The copy above the table says 18 tools; keep the rows in step with it.
+  await expect(page.locator(".audit-table tbody tr")).toHaveCount(18);
   expect(errors).toEqual([]);
 });
 
