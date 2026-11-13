@@ -16,6 +16,7 @@ $fixtureNames = @(
     "unsupported-extra-video.mp4",
     "refusal-hdr10-hevc-aac.mp4",
     "ladder-h264-aac.mp4",
+    "framerate-h264-aac.mp4",
     "transcode-vp9-opus.webm"
 )
 
@@ -54,7 +55,7 @@ Assert-Encoder "libopus" "the Opus transcode fixture"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $existing = @($fixtureNames | ForEach-Object { Join-Path $out $_ } | Where-Object { Test-Path -LiteralPath $_ })
 if ($existing.Count -gt 0 -and -not $Force) {
-    throw "Fixture outputs already exist. Re-run with -Force to replace only the nine known fixture files."
+    throw "Fixture outputs already exist. Re-run with -Force to replace only the ten known fixture files."
 }
 if ($Force) {
     foreach ($path in $existing) {
@@ -151,6 +152,23 @@ $ladderInput = @(
     (Join-Path $out "ladder-h264-aac.mp4")
 )
 Invoke-Ffmpeg $ladderInput "H.264/AAC input over a small byte limit"
+
+$frameRateInput = @(
+    "-nostdin", "-hide_banner", "-loglevel", "error", "-n",
+    "-f", "lavfi", "-i", "color=c=black:size=640x360:rate=60:duration=1,format=rgb24,geq=r='127+120*sin(2*PI*(X/W+T/10))':g='127+120*sin(2*PI*(Y/H+T/20))':b='127+120*cos(2*PI*((X+Y)/(W+H)-T/10))'",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+    "-map", "0:v:0", "-map", "1:a:0", "-map_metadata", "-1",
+    "-metadata", "creation_time=1970-01-01T00:00:00Z",
+    "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
+    "-threads", "1", "-c:a", "aac", "-b:a", "160k",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+    "-x264-params", "threads=1:lookahead_threads=1:sliced_threads=0",
+    "-b:v", "400k", "-maxrate", "400k", "-bufsize", "400k",
+    "-color_range", "tv", "-colorspace", "bt709", "-color_trc", "bt709",
+    "-color_primaries", "bt709", "-movflags", "+faststart",
+    (Join-Path $out "framerate-h264-aac.mp4")
+)
+Invoke-Ffmpeg $frameRateInput "60 fps H.264/AAC input that must give up frame rate and sound bitrate to fit"
 
 $vp9Input = @(
     "-nostdin", "-hide_banner", "-loglevel", "error", "-n",

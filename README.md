@@ -62,7 +62,7 @@ Cargo, web, desktop, and docs are at `1.0.0-rc.1`, the first 1.0 candidate.
 | WAV, FLAC, MP3, or other common sound already under a size-only destination | No-op |
 | Sound file over a byte ceiling, or a destination that needs AAC in MP4 | Encode AAC in MP4; refuse only at the quality floor |
 | Sound file aimed at a video destination | Refuse; that destination is for video |
-| Media file over a byte or dimension ceiling | Scale-to-fit and/or H.264 bitrate-ladder encode; refuse only at the quality floor |
+| Media file over a byte or dimension ceiling | Scale-to-fit and/or H.264 bitrate-ladder encode, giving up sound bitrate, then frame rate, then picture size when the budget is tight (sound that still fits is copied); refuse only at the quality floor |
 | JPEG/PNG already satisfying the confirmed target | No-op |
 | JPEG/PNG/still WebP/TIFF/BMP/GIF/HEIC requiring format, bounded resize, crop or first-frame consent, or byte fitting | In-process adaptation to JPEG, PNG, or WebP (when named) with re-inspection and validation |
 | Animated PNG, AVIF, RAW, ZIP, PDF | Refuse explicitly |

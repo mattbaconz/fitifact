@@ -23,7 +23,7 @@ export interface DisplayGeometry {
 
 /** The encode the engine asks the worker to try before it judges this browser. */
 export interface MeasureRequest {
-  video: { codec: "avc"; width: number; height: number; bitrate: number };
+  video: { codec: "avc"; width: number; height: number; frame_rate: number | null; bitrate: number };
   audio: { codec: "aac"; channels: number; sample_rate: number | null; bitrate: number } | null;
 }
 
@@ -41,6 +41,11 @@ export interface TranscodeExecution {
   operation: "media.transcode_video";
   width: number;
   height: number;
+  /**
+   * Frames per second to encode at: the engine's lowered rate, or a fast source's own rate when
+   * bytes are limited, so the encoder's rate control knows it. `null` leaves the source's timing.
+   */
+  frame_rate: number | null;
   video_bitrates: number[];
   audio: "copy" | { codec: "aac"; channels: number; bitrate: number };
   max_bytes: number | null;

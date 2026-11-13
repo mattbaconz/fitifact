@@ -135,6 +135,37 @@ test("H.264 over its byte limit runs the bitrate ladder and validates in Chromiu
   expect(output.includes("mp4a")).toBe(true);
 });
 
+/** How many samples each track of an MP4 holds, read from its `stsz` boxes. */
+function sampleCounts(mp4: Buffer) {
+  const counts: number[] = [];
+  for (let at = mp4.indexOf("stsz"); at !== -1; at = mp4.indexOf("stsz", at + 4)) counts.push(mp4.readUInt32BE(at + 12));
+  return counts;
+}
+
+test("60 fps H.264 over its byte limit is encoded at 30 fps with smaller sound in Chromium", async ({ page, browserName }) => {
+  test.slow();
+  await page.goto("/");
+  // One second of 640x360 with 145 kbit/s sound. Under this limit the picture's floor holds only
+  // at 30 fps, and only beside sound encoded smaller. Chromium lands near 35 KB.
+  const limit = 37_000;
+  await customTarget(page, "framerate-h264-aac.mp4", /MP4/, [
+    ...H264_AAC_MP4,
+    { id: "bytes", field: "file.bytes", op: "lte", value: limit },
+  ]);
+  const outcome = await planOutcome(page);
+  if (mustEncode(browserName)) expect(outcome).toBe("ready");
+  if (outcome === "refused") return;
+  const notes = page.locator(".output-notes");
+  await expect(notes).toContainText("Frame rate lowered to 30 fps so the file can fit.");
+  await expect(notes).toContainText("Sound re-encoded at 96 kbit/s to leave room for the picture.");
+  const output = await adaptAndVerify(page);
+  expect(output.byteLength).toBeLessThanOrEqual(limit);
+  expect(output.includes("mp4a")).toBe(true);
+  const samples = sampleCounts(output);
+  expect(samples.some((count) => count >= 29 && count <= 31)).toBe(true); // the picture, at 30 fps
+  expect(samples).not.toContain(60);
+});
+
 test("H.264 over a width limit is scaled to fit and validates in Chromium", async ({ page, browserName }) => {
   test.slow();
   await page.goto("/");

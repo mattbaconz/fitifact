@@ -66,8 +66,8 @@ pub use inspect::{
 };
 pub use local::{LocalImageResult, adapt_local_image_bytes, inspect_local_bytes};
 pub use media_fit::{
-    can_fit_media, can_fit_media_with_limits, dimension_limit, file_bytes_limit, fit_output_size,
-    quality_video_bitrate_bps, video_bitrate_ladder,
+    FitSource, MediaFit, can_fit_media, can_fit_media_with_limits, dimension_limit,
+    file_bytes_limit, fit_output, quality_video_bitrate_bps, video_bitrate_ladder,
 };
 pub use media_tools::{MediaToolPaths, bind_media_tools_from_dirs, resolve_media_tools};
 pub use plan::{Plan, PlanOutcome, plan};

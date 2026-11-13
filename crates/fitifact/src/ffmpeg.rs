@@ -3,11 +3,10 @@ use std::time::Duration;
 
 use crate::artifact::{Artifact, Container, HdrStatus, StreamType, VideoCodec};
 use crate::capability::{CapabilityCatalog, TransformId, default_catalog};
-use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
 use crate::media_fit::{DEFAULT_AUDIO_BPS, audio_bitrate_ladder, video_bitrate_ladder};
 use crate::media_tools::resolve_media_tools;
-use crate::plan::{ExpectedFact, ExpectedValue, Plan, PlanStep};
+use crate::plan::{Plan, PlanStep};
 use crate::runtime::{
     ExecutionContext, ProcessSpawner, SpawnOutput, StreamHashes, SystemSpawner, TransformProvider,
 };
@@ -224,9 +223,18 @@ impl<S: ProcessSpawner> FfmpegProvider<S> {
             .preservation
             .contains(&crate::plan::PreservationClaim::AudioStreamCopied)
             || step.target.audio_codec.is_some();
-        let dimensions = video_dimensions_from_step(step);
-        let Some(bitrates) =
-            video_bitrate_ladder(ceiling, duration_ms, has_audio, dimensions, None)
+        let audio_bps = if has_audio {
+            step.target.audio_bitrate_bps.unwrap_or(DEFAULT_AUDIO_BPS)
+        } else {
+            0
+        };
+        let floor = step.target.video_floor_bps.ok_or_else(|| {
+            Error::new(
+                ErrorCode::ExecutionFailed,
+                "size-fitting encode is missing its quality floor",
+            )
+        })?;
+        let Some(bitrates) = video_bitrate_ladder(ceiling, duration_ms, audio_bps, floor, None)
         else {
             return Err(Error::new(
                 ErrorCode::ExecutionLimit,
@@ -396,6 +404,10 @@ fn ffmpeg_args_with_bitrate(
                 encoder.into(),
             ]);
             let mut filters = Vec::new();
+            // Frames are dropped first, so nothing after this works on one that is thrown away.
+            if let Some(rate) = step.target.frame_rate {
+                filters.push(format!("fps={}/{}", rate.numerator, rate.denominator));
+            }
             if step.target.tone_map_hdr {
                 filters.push(TONE_MAP_TO_SDR.to_string());
             }
@@ -440,7 +452,7 @@ fn ffmpeg_args_with_bitrate(
                     "-c:a".into(),
                     "aac".into(),
                     "-b:a".into(),
-                    "160k".into(),
+                    audio_bitrate_arg(step.target.audio_bitrate_bps.unwrap_or(DEFAULT_AUDIO_BPS)),
                     "-ac".into(),
                     "2".into(),
                 ]);
@@ -574,33 +586,6 @@ fn required_video_codec(step: &PlanStep) -> Result<VideoCodec> {
     })
 }
 
-fn video_dimensions_from_step(step: &PlanStep) -> (u32, u32) {
-    match (step.target.width, step.target.height) {
-        (Some(width), Some(height)) if width > 0 && height > 0 => return (width, height),
-        _ => {}
-    }
-    let mut width = 16u32;
-    let mut height = 16u32;
-    for fact in &step.expected {
-        match fact {
-            ExpectedFact {
-                field: Field::MediaVideoWidth,
-                value: ExpectedValue::Integer(value),
-            } => {
-                width = u32::try_from(*value).unwrap_or(16).max(1);
-            }
-            ExpectedFact {
-                field: Field::MediaVideoHeight,
-                value: ExpectedValue::Integer(value),
-            } => {
-                height = u32::try_from(*value).unwrap_or(16).max(1);
-            }
-            _ => {}
-        }
-    }
-    (width, height)
-}
-
 fn scale_from_step(step: &PlanStep) -> Option<(u32, u32)> {
     if step
         .preservation
@@ -670,9 +655,10 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::artifact::{Artifact, AudioCodec, VideoCodec};
-    use crate::constraints::media_h264_mp4_aac;
+    use crate::artifact::{Artifact, AudioCodec, Rational, VideoCodec};
+    use crate::constraints::{Field, media_h264_mp4_aac};
     use crate::plan::StepTarget;
+    use std::sync::Mutex;
 
     struct NeverSpawner;
 
@@ -896,6 +882,101 @@ mod tests {
         assert!(args.windows(2).any(|w| w == ["-bufsize", "800000"]));
         assert!(!args.windows(2).any(|w| w == ["-crf", "23"]));
         assert!(args.windows(2).any(|w| w == ["-c:a", "aac"]));
+    }
+
+    #[test]
+    fn transcode_args_lower_the_frame_rate_before_scaling_and_shrink_the_sound() {
+        let mut step = transcode_step();
+        step.target.width = Some(810);
+        step.target.height = Some(454);
+        step.target.frame_rate = Rational::new(60, 2);
+        step.target.audio_codec = Some(AudioCodec::Aac);
+        step.target.audio_bitrate_bps = Some(96_000);
+        let args = ffmpeg_args(&step, Path::new("in.mkv"), Path::new("out.mp4")).unwrap();
+        let filters = format!("fps=60/2,scale=810:454:flags=lanczos,{TAG_BT709}");
+        assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
+        assert!(args.windows(2).any(|w| w == ["-b:a", "96k"]));
+        assert!(!args.windows(2).any(|w| w == ["-c:a", "copy"]));
+    }
+
+    /// Every encode "succeeds" with a file that is still too large, so the whole ladder runs.
+    struct OversizeSpawner {
+        size: usize,
+        video_bitrates: Mutex<Vec<u64>>,
+    }
+
+    impl ProcessSpawner for OversizeSpawner {
+        fn spawn(
+            &self,
+            _program: &str,
+            args: &[String],
+            _timeout: Duration,
+        ) -> Result<SpawnOutput> {
+            let rate = args.iter().position(|arg| arg == "-b:v").unwrap();
+            self.video_bitrates
+                .lock()
+                .unwrap()
+                .push(args[rate + 1].parse().unwrap());
+            std::fs::write(args.last().unwrap(), vec![0u8; self.size]).unwrap();
+            Ok(SpawnOutput {
+                status: 0,
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                stdout_truncated: false,
+                stderr_truncated: false,
+            })
+        }
+    }
+
+    #[test]
+    fn the_size_ladder_stops_at_the_plans_floor_instead_of_starving_the_picture() {
+        let dir = std::env::temp_dir().join(format!("fitifact-floor-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (input, output) = (dir.join("in.mp4"), dir.join("out.mp4"));
+        std::fs::write(&input, vec![0u8; 2_000]).unwrap();
+
+        // 1,000 bytes over 10 ms is a 720 kb/s budget: 560 kb/s of video beside the sound.
+        let mut step = transcode_step();
+        step.target.audio_codec = Some(AudioCodec::Aac);
+        step.target.max_bytes = Some(1_000);
+        step.target.duration_ms = Some(10);
+        step.target.video_floor_bps = Some(300_000);
+        let provider = FfmpegProvider::with_program(
+            OversizeSpawner {
+                size: 2_000,
+                video_bitrates: Mutex::new(Vec::new()),
+            },
+            "ffmpeg",
+        );
+        let error = provider
+            .run_transcode(&step, &input, &output, Duration::from_secs(1))
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::ExecutionLimit);
+        assert_eq!(
+            *provider.spawner.video_bitrates.lock().unwrap(),
+            [560_000, 420_000, 315_000, 300_000]
+        );
+        assert!(
+            !output.exists(),
+            "an oversized attempt is never left behind"
+        );
+
+        // A budget already under the floor spawns nothing at all.
+        step.target.video_floor_bps = Some(600_000);
+        provider.spawner.video_bitrates.lock().unwrap().clear();
+        let error = provider
+            .run_transcode(&step, &input, &output, Duration::from_secs(1))
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::ExecutionLimit);
+        assert!(provider.spawner.video_bitrates.lock().unwrap().is_empty());
+
+        // A size-fitting step with no floor is refused, not run without one.
+        step.target.video_floor_bps = None;
+        let error = provider
+            .run_transcode(&step, &input, &output, Duration::from_secs(1))
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::ExecutionFailed);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
