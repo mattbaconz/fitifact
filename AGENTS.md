@@ -80,10 +80,16 @@ introduce Pareto scoring until a later decision supersedes D-022. Destination
 policy is a YAML profile compiled to `ConstraintSet`; `plan.rs` must not match
 on destination names.
 
-Images beyond this still-image matrix, browser extensions, mobile
+Images beyond this still-image matrix, mobile
 shells, managed APIs/cloud execution, ffmpeg.wasm, registry publishing, OS
 signing, package-manager formulae, and telemetry/network activity are
-deferred. The public web app is static hosting only; it adds no server or
+deferred. A Chrome MV3 extension in `apps/extension/` (D-047) holds a video
+over the cap on discord.com, mail.google.com, or web.whatsapp.com before the
+page sees it, fits it with the web app's worker, and hands the page only a
+validated output or the untouched original. Its only permission is `storage`
+(the declared Discord plan) plus those three content-script hosts; its CSP
+allows no connection beyond its own files. Firefox, images, paste, and a
+context menu are not in it yet. The public web app is static hosting only; it adds no server or
 upload path. Its home is `https://fitifact.com/` on Vercel (D-046):
 `vercel.json` carries only headers, redirects, and URL rules, never functions,
 rewrites to other origins, analytics, or Speed Insights. GitHub Pages only

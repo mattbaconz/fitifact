@@ -1,0 +1,204 @@
+/* The panel and popup: Fitifact's tokens and ft- components, sized for a small card. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+}
+
+.sheet {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-radius: var(--radius-lg);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+
+.mark {
+  display: block;
+}
+
+.brand {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.count {
+  margin-left: auto;
+  color: var(--subtle);
+  font-size: var(--text-xs);
+}
+
+.plan {
+  width: auto;
+  min-height: 32px;
+  margin-left: auto;
+  padding-block: 0;
+  font-size: var(--text-sm);
+}
+
+.count:not([hidden]) + .plan {
+  margin-left: var(--space-2);
+}
+
+.status {
+  display: grid;
+  gap: var(--space-2);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.facts,
+.detail,
+.lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  margin: var(--space-1) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.rows dt,
+.rows dd {
+  margin: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+
+.rows dt {
+  padding-right: var(--space-4);
+  color: var(--subtle);
+}
+
+.note {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.note svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  fill: none;
+  stroke: var(--tone, currentColor);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.progress {
+  height: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+}
+
+.fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--duration) var(--ease);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.actions:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.choose,
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field > span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.foot {
+  margin: 0;
+  color: var(--subtle);
+  font-size: var(--text-xs);
+}
+
+/* The tab the popup opens: the same card, on the page background. */
+.page,
+.page body {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.page body {
+  display: grid;
+  place-items: start center;
+  box-sizing: border-box;
+  padding: 12vh var(--space-4) var(--space-8);
+}
+
+.page .sheet {
+  max-width: 440px;
+}
+
+.popup {
+  width: 320px;
+  border-radius: 0;
+  background: var(--panel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

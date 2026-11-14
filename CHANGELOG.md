@@ -6,6 +6,15 @@ All notable changes to Fitifact are documented here.
 
 ### [added]
 
+- A Chrome extension in `apps/extension/`, loaded unpacked, fits a video before
+  Discord, Gmail, or WhatsApp Web sees it (D-047). When you attach a video over
+  that destination's limit (on Discord, the limit of the plan you declare), it
+  holds the file, shows what fails and what would change, and fits it on your
+  device with the web app's engine. Only an output that passes the same checks
+  again reaches the page. Use original hands over the file untouched, and a
+  file under the limit is never touched. Its only permission is storage, it
+  runs only on those three sites, and it makes no network requests. Its popup
+  sets your Discord plan and opens a tab that fits a chosen video for download.
 - `fitifact.com/discord/` is the same app with Discord picked and a tier
   picker (Free 20 MB, Nitro Basic 50 MB, Nitro 1 GB) above the drop area.
   Below it, a limits table built from the shipped Discord profiles at build
@@ -53,6 +62,8 @@ All notable changes to Fitifact are documented here.
 
 ### [fixed]
 
+- A video re-encoded only to get under a size limit now says "Re-encode so the
+  file fits the size limit" instead of "Re-encode the video so it plays there".
 - A long video aimed at a small size limit no longer comes out as flat grey,
   unreadable frames reported as a success. A 7-minute 1080p 60 fps recording
   aimed at 20 MB kept its full size and frame rate on about 209 kbit/s of

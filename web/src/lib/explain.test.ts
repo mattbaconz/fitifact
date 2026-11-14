@@ -106,8 +106,13 @@ describe("human plan copy", () => {
     expect(describeMediaActions([
       { operation: "media.remux" },
       { operation: "media.transcode_video", reasons: [{ message: "file.bytes exceeds the ceiling" }] },
+      // The planner's own wording for a byte limit (plan.rs).
+      { operation: "media.transcode_video", reasons: [{ message: "The target requires a smaller file." }] },
+      { operation: "media.transcode_audio", reasons: [{ message: "The target requires a smaller file." }] },
     ])).toEqual([
       "Change the wrapper. Keep the same picture and sound",
+      "Re-encode so the file fits the size limit",
+      "Re-encode so the file fits the size limit",
       "Re-encode so the file fits the size limit",
     ]);
     expect(describeProblemsFromChecks({

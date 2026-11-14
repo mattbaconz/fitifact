@@ -1,15 +1,16 @@
 # Fitifact design system
 
 One system serves the web app, the desktop app (which loads the same `web/dist`
-build), and the documentation site.
+build), the documentation site, and the browser extension's panel and popup.
 
 | Layer | File | Used by |
 | --- | --- | --- |
-| Tokens | `web/public/brand/tokens.css` | web, desktop, docs |
-| Components (`ft-*`) | `web/public/brand/components.css` | web, desktop, docs |
+| Tokens | `web/public/brand/tokens.css` | web, desktop, docs, extension |
+| Components (`ft-*`) | `web/public/brand/components.css` | web, desktop, docs, extension |
 | Theme bootstrap | `web/public/brand/theme.js` | web, desktop, docs |
 | App layout and app-only parts | `web/src/styles.css` | web, desktop |
 | Docs bridge to Fumadocs | `apps/docs/app/styles.css` | docs |
+| Extension panel and popup | `apps/extension/src/extension.css` | extension |
 
 The docs build copies `web/public/brand` into `apps/docs/public/brand`
 (`apps/docs/scripts/sync-brand.mjs`), so all three surfaces render from the

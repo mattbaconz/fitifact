@@ -21,3 +21,7 @@ fixtures/media/.generate-*
 /apps/docs/out
 /apps/docs/.source
 /apps/docs/content/docs/destinations
+/apps/extension/node_modules
+/apps/extension/dist
+/apps/extension/test-results
+/apps/extension/playwright-report

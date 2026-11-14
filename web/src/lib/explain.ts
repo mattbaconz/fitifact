@@ -294,6 +294,9 @@ export function describeActions(plan: PlanReport, completed = false): string[] {
   return actions;
 }
 
+/** The planner says "The target requires a smaller file." for a byte limit. */
+const isSizeReason = (reason: string) => reason.includes("byte") || reason.includes("size") || reason.includes("smaller file");
+
 export function describeMediaActions(steps: Array<{ operation: string; reasons?: Array<{ message: string }>; warnings?: string[] }> | undefined): string[] {
   if (!steps?.length) return [];
   return steps.map((step) => {
@@ -301,7 +304,7 @@ export function describeMediaActions(steps: Array<{ operation: string; reasons?:
     if (operation.includes("remux")) return "Change the wrapper. Keep the same picture and sound";
     if (operation.includes("transcode_audio") || operation.includes("transcode-audio")) {
       const reason = step.reasons?.[0]?.message?.toLowerCase() ?? "";
-      if (reason.includes("byte") || reason.includes("size")) {
+      if (isSizeReason(reason)) {
         return "Re-encode so the file fits the size limit";
       }
       if (reason.includes("picture") || reason.includes("video")) {
@@ -311,7 +314,7 @@ export function describeMediaActions(steps: Array<{ operation: string; reasons?:
     }
     if (operation.includes("transcode")) {
       const reason = step.reasons?.[0]?.message?.toLowerCase() ?? "";
-      if (reason.includes("byte") || reason.includes("size")) {
+      if (isSizeReason(reason)) {
         return "Re-encode so the file fits the size limit";
       }
       if (reason.includes("width") || reason.includes("height") || reason.includes("dimension")) {
