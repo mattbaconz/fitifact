@@ -12,8 +12,8 @@ const root = path.resolve(process.env.FITIFACT_PREVIEW_DIR || fileURLToPath(new 
 const base = (process.env.FITIFACT_BASE_PATH || '/').replace(/\/$/, '');
 const port = Number(process.env.FITIFACT_PREVIEW_PORT || 4173);
 // GitHub Pages gzips text responses; serving them the same way keeps local measurements honest.
-const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.wasm', '.txt', '.md']);
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.txt': 'text/plain', '.md': 'text/plain' };
+const compressible = new Set(['.html', '.xml', '.js', '.css', '.json', '.svg', '.wasm', '.txt', '.md']);
+const types = { '.html': 'text/html', '.xml': 'application/xml', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.txt': 'text/plain', '.md': 'text/plain' };
 
 createServer(async (request, response) => {
   try {

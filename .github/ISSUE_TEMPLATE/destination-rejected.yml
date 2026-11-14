@@ -1,0 +1,41 @@
+name: A destination rejected a file Fitifact passed
+description: Fitifact said a file fits, but the destination refused it.
+title: "[rejected] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please don't attach the file itself: the details below are enough to check the rule.
+  - type: input
+    id: destination
+    attributes:
+      label: Destination
+      description: Where you tried to send the file.
+      placeholder: Discord
+    validations:
+      required: true
+  - type: input
+    id: tier
+    attributes:
+      label: Account tier or plan
+      description: For Discord, Free, Nitro Basic, or Nitro. Say if the server is boosted.
+      placeholder: Free
+  - type: input
+    id: client
+    attributes:
+      label: App and device
+      description: Where you sent it from.
+      placeholder: Discord desktop on Windows, Discord on Android, discord.com in Firefox
+  - type: textarea
+    id: rejection
+    attributes:
+      label: What the destination said
+      description: The exact error text, or what happened instead of the upload.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: What Fitifact reported
+      description: File type and size before and after, from the result's checklist.
+      placeholder: "MP4, H.264 + AAC, 19,804,112 bytes, all checks passed"

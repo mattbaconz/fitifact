@@ -604,6 +604,96 @@ button.row:disabled {
   padding-block: var(--space-2);
   color: var(--ink);
 }
+/* Destination pages (/discord/) */
+.tier-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 0;
+}
+.tier-picker legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.tier-picker label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.tier-picker label:has(:checked) {
+  border-color: var(--ink);
+}
+.tier-picker input {
+  margin: 0;
+  accent-color: var(--ink);
+}
+.page-guide-slot {
+  display: contents;
+}
+.page-guide > section > p {
+  max-width: 640px;
+  font-size: var(--text-sm);
+}
+:is(.limits-table, .audit-table) {
+  width: 100%;
+  margin-top: var(--space-6);
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+:is(.limits-table, .audit-table) caption {
+  padding-bottom: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-align: left;
+}
+:is(.limits-table, .audit-table) th,
+:is(.limits-table, .audit-table) td {
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: baseline;
+}
+:is(.limits-table, .audit-table) thead th {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+:is(.limits-table, .audit-table) td:nth-child(3) {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+:is(.limits-table, .audit-table) a {
+  color: var(--ink);
+}
+.audit {
+  margin-top: var(--space-4);
+}
+.audit-table tbody th {
+  font-weight: inherit;
+}
+.audit-table td:nth-child(2) {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.plain-list {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 640px;
+  margin: 0;
+  padding: var(--space-6) 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  font-size: var(--text-sm);
+}
 
 /* Hero field: one WebGL canvas, transparent until its first frame */
 .hero {

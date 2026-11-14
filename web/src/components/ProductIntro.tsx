@@ -1,3 +1,4 @@
+import { DISCORD_CAPS, type DiscordCap } from "../lib/destinations";
 import { desktopGuideHref } from "../lib/docs-url";
 
 export type SampleScenario = "inspect" | "unchanged" | "format" | "crop";
@@ -15,6 +16,41 @@ export function ProductIntro() {
         Say where it’s going. Fitifact makes the smallest change that fits, then
         checks it. Already fits? Nothing changes.
       </p>
+      <p className="local-note">
+        <span aria-hidden="true">↳</span> Your file stays on this device.
+      </p>
+    </div>
+  );
+}
+
+export function DiscordIntro({
+  cap,
+  onCap,
+}: {
+  cap: DiscordCap;
+  onCap: (cap: DiscordCap) => void;
+}) {
+  return (
+    <div className="intro-copy">
+      <h1>Fit a video for Discord</h1>
+      <p className="intro-description">
+        Drop a clip. Fitifact fits it under your upload limit in this browser,
+        then checks the result. A clip that already fits stays as it is.
+      </p>
+      <fieldset className="tier-picker">
+        <legend>Your Discord account</legend>
+        {(Object.keys(DISCORD_CAPS) as DiscordCap[]).map((option) => (
+          <label key={option}>
+            <input
+              type="radio"
+              name="discord-tier"
+              checked={cap === option}
+              onChange={() => onCap(option)}
+            />
+            {DISCORD_CAPS[option].label} · {DISCORD_CAPS[option].short}
+          </label>
+        ))}
+      </fieldset>
       <p className="local-note">
         <span aria-hidden="true">↳</span> Your file stays on this device.
       </p>
