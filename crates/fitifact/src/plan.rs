@@ -1144,6 +1144,9 @@ fn instantiate_transcode_audio(
             audio_codec: Some(AudioCodec::Aac),
             width: video.width,
             height: video.height,
+            // The file is under the limit, but AAC at the default rate can outgrow light sound
+            // (24 kbit/s Opus, say); the limit lets the sound's bitrate ladder run.
+            max_bytes: limits.max_bytes,
             ..StepTarget::default()
         },
         reasons,

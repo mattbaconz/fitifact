@@ -207,9 +207,12 @@ describe("unindexed tracks", () => {
     try {
       const [video] = await input.getVideoTracks();
       const [audio] = await input.getAudioTracks();
-      // The opening alone says 5 frames per second and 4 kbit/s.
-      expect((await video.computePacketStats(120)).averagePacketRate).toBeLessThan(6);
-      expect((await audio.computePacketStats(120)).averageBitrate).toBeLessThan(5_000);
+      // The opening alone says 5 frames per second and 4 kbit/s: what a file too large for the
+      // browser to change is judged on.
+      const sampled = await packetStats(video, false);
+      expect(sampled?.packetCount).toBe(120);
+      expect(sampled?.averagePacketRate).toBeLessThan(6);
+      expect((await packetStats(audio, false))?.averageBitrate).toBeLessThan(5_000);
       // 750 frames over 40 s, timed to the millisecond; 215,000 bytes of sound over 40 s.
       const pictures = await packetStats(video);
       expect(pictures?.packetCount).toBe(750);

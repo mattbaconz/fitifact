@@ -1149,6 +1149,25 @@ fn audio_under_its_limit_that_must_change_carries_the_limit_or_is_refused() {
 }
 
 #[test]
+fn h264_with_other_sound_under_its_limit_carries_the_limit_into_the_aac_encode() {
+    let mut artifact = recording(60_000, 1_000_000);
+    artifact.container = Some(Container::Mkv);
+    artifact.first_audio_mut().unwrap().codec = Some(AudioCodec::Opus);
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(1_100_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let outcome = plan(&artifact, &target, &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeAudio);
+    assert_eq!(step.target.max_bytes, Some(1_100_000));
+}
+
+#[test]
 fn audio_only_cannot_satisfy_a_video_target() {
     let artifact = Artifact::audio(Container::Mp3, AudioCodec::Mp3, 80_000);
     assert_eq!(

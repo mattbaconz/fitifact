@@ -314,6 +314,12 @@ fn check_ffmpeg_status(output: SpawnOutput, step: &PlanStep) -> Result<()> {
     if output.success() {
         return Ok(());
     }
+    if output.stderr_str().contains("option 'fps_mode'") {
+        return Err(Error::new(
+            ErrorCode::ProviderMissing,
+            "this FFmpeg is older than 5.1, and re-encoding video needs FFmpeg 5.1 or newer. Run `fitifact doctor` to see which FFmpeg is in use",
+        ));
+    }
     Err(Error::new(
         ErrorCode::ExecutionFailed,
         format!(
@@ -919,6 +925,27 @@ mod tests {
             let output = args.iter().position(|arg| arg == "out.mp4").unwrap();
             assert!(args.iter().position(|arg| arg == "-fps_mode").unwrap() < output);
         }
+    }
+
+    #[test]
+    fn ffmpeg_too_old_for_fps_mode_says_so() {
+        let failed = |stderr: &str| SpawnOutput {
+            status: 8,
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+        };
+        let old = check_ffmpeg_status(
+            failed("Unrecognized option 'fps_mode'.\nError splitting the argument list: Option not found\n"),
+            &transcode_step(),
+        )
+        .unwrap_err();
+        assert_eq!(old.code, ErrorCode::ProviderMissing);
+        assert!(old.message.contains("5.1 or newer"));
+        let other =
+            check_ffmpeg_status(failed("Invalid data found"), &transcode_step()).unwrap_err();
+        assert_eq!(other.code, ErrorCode::ExecutionFailed);
     }
 
     /// Every encode "succeeds" with a file that is still too large, so the whole ladder runs.

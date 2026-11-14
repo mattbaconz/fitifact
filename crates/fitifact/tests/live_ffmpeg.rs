@@ -1050,6 +1050,54 @@ fn live_wav_over_a_byte_ceiling_adapts_to_aac() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// H.264 with light Opus sound, already under its limit: the video is copied and the sound
+/// becomes AAC. At the default 160 kbit/s that AAC alone outgrows the limit, so the sound's
+/// bitrate ladder has to run. It once ran one encode and failed validation.
+#[test]
+#[ignore]
+fn live_h264_with_light_sound_under_its_limit_fits_after_aac() {
+    require_tools();
+    assert!(encoder_ok("libopus"), "need libopus to generate Opus sound");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-av-audio-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate_at(
+        &dir,
+        "light.mkv",
+        "testsrc=duration=10:size=160x120:rate=10",
+        "sine=frequency=440:duration=10",
+        &[
+            "-c:v", "libx264", "-b:v", "16k", "-c:a", "libopus", "-b:a", "24k",
+        ],
+    );
+    let source_len = std::fs::metadata(&input).unwrap().len();
+    // Room for 32 kbit/s AAC beside the copied video, not for 160 kbit/s (about 200 KB).
+    let ceiling = source_len + 25_000;
+    let result = adapt_in(
+        &dir,
+        &input,
+        compile(ConstraintInput {
+            container: Some(vec!["mp4".into()]),
+            video_codec: Some(vec!["h264".into()]),
+            audio_codec: Some(vec!["aac".into()]),
+            max_bytes: Some(ceiling),
+            ..ConstraintInput::default()
+        })
+        .unwrap(),
+    );
+    let step = &result.plan.as_ref().unwrap().steps[0];
+    assert_eq!(step.operation, TransformId::TranscodeAudio);
+    assert_eq!(step.target.max_bytes, Some(ceiling));
+    assert_eq!(result.status, AdaptationStatus::Adapted, "{result:?}");
+    let validation = result.validation.expect("validation");
+    assert_eq!(validation.status, fitifact::ValidationStatus::Pass);
+    assert_eq!(
+        validation.artifact.first_audio().unwrap().codec,
+        Some(AudioCodec::Aac)
+    );
+    assert!(validation.artifact.byte_length <= ceiling);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 #[ignore]
 fn live_audio_cannot_satisfy_a_video_destination() {

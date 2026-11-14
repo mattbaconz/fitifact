@@ -70,9 +70,10 @@ export async function probe(file: File) {
     let video = 0;
     let audio = 0;
     const tracks = [];
+    const whole = file.size <= MAX_REMUX_BYTES;
     for (const type of census.tracks) {
-      if (type === "video") tracks.push(await videoFacts(videos[video++]));
-      else if (type === "audio") tracks.push(await audioFacts(audios[audio++]));
+      if (type === "video") tracks.push(await videoFacts(videos[video++], whole));
+      else if (type === "audio") tracks.push(await audioFacts(audios[audio++], whole));
       else tracks.push({ type });
     }
     if (video < videos.length || audio < audios.length) {
@@ -96,19 +97,19 @@ export async function probe(file: File) {
   }
 }
 
-async function videoFacts(track: InputVideoTrack | undefined) {
+async function videoFacts(track: InputVideoTrack | undefined, whole: boolean) {
   if (!track) return { type: "video" };
   const codec = await track.getCodec();
   const config = codec === "avc" ? await track.getDecoderConfig() : null;
   const color = await track.getColorSpace();
-  const stats = await packetStats(track);
+  const stats = await packetStats(track, whole);
   return {
     type: "video",
     codec,
     width: await track.getCodedWidth(),
     height: await track.getCodedHeight(),
     frame_rate: positive(stats?.averagePacketRate),
-    frame_count: positive(stats?.packetCount),
+    frame_count: whole ? positive(stats?.packetCount) : null,
     avcc: config?.description ? Array.from(bytesOf(config.description)) : null,
     color: {
       primaries: color.primaries ?? null,
@@ -122,29 +123,33 @@ async function videoFacts(track: InputVideoTrack | undefined) {
 /**
  * Packet count, packets per second, and bits per second over the whole track, the way ffprobe
  * counts an MP4 and the way the output is re-read; `null` when they can't be told. MKV and WebM
- * have no index, so every packet header is read (about 1 s for a 138 MB recording): a sample
- * misjudges a recording whose pace changes, and the plan's quality floor would then count on a
- * frame rate the output doesn't have.
+ * have no index, so every packet header is read (about 1 s for a 138 MB recording's video, 3 s
+ * for an hour at 60 fps): a sample misjudges a recording whose pace changes, and the plan's quality floor
+ * would then count on a frame rate the output doesn't have. A file too large for the browser to
+ * change is only sampled, since its plan ends in a pointer to the desktop app anyway.
  */
-export async function packetStats(track: InputTrack): Promise<PacketStats | null> {
+export async function packetStats(track: InputTrack, whole = true): Promise<PacketStats | null> {
   try {
-    return await track.computePacketStats();
+    return await track.computePacketStats(whole ? undefined : SAMPLED_PACKETS);
   } catch {
     return null;
   }
 }
 
+/** Packets read from each track of a file too large to change in the browser. */
+const SAMPLED_PACKETS = 120;
+
 const positive = (value: number | undefined) =>
   value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
 
-async function audioFacts(track: InputAudioTrack | undefined) {
+async function audioFacts(track: InputAudioTrack | undefined, whole: boolean) {
   if (!track) return { type: "audio" };
   return {
     type: "audio",
     codec: await track.getCodec(),
     channels: await track.getNumberOfChannels(),
     sample_rate: await track.getSampleRate(),
-    bitrate: positive((await packetStats(track))?.averageBitrate),
+    bitrate: positive((await packetStats(track, whole))?.averageBitrate),
   };
 }
 
