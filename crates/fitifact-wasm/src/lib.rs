@@ -8,7 +8,7 @@ use std::io::Cursor;
 use std::path::PathBuf;
 
 use fitifact::error::ErrorEnvelope;
-use fitifact::media_fit::DEFAULT_AUDIO_BPS;
+use fitifact::media_fit::{DEFAULT_AUDIO_BPS, reduced_frame_rate};
 use fitifact::plan::{PlanStep, PreservationClaim};
 use fitifact::{
     Artifact, CapabilityCatalog, ConstraintSet, ExternalOutput, ImageAdaptOptions, NeverCancelled,
@@ -292,28 +292,62 @@ fn transcode_verdict(artifact: &Artifact, step: &PlanStep, measured: Option<&Mea
         || step
             .preservation
             .contains(&PreservationClaim::AudioStreamCopied);
+    let audio_bps = step.target.audio_bitrate_bps.unwrap_or(DEFAULT_AUDIO_BPS);
     let ladder = step.target.width.zip(step.target.height).and_then(|size| {
         let quality = quality_video_bitrate_bps(size.0, size.1);
-        let bitrates = match (step.target.max_bytes, step.target.duration_ms) {
-            (None, _) => Some(vec![quality]),
-            (Some(max_bytes), Some(duration_ms)) => {
-                video_bitrate_ladder(max_bytes, duration_ms, has_audio, size, Some(quality))
-            }
-            (Some(_), None) => None,
+        let fit = (
+            step.target.max_bytes,
+            step.target.duration_ms,
+            step.target.video_floor_bps,
+        );
+        let bitrates = match fit {
+            (None, ..) => Some(vec![quality]),
+            (Some(max_bytes), Some(duration_ms), Some(floor)) => video_bitrate_ladder(
+                max_bytes,
+                duration_ms,
+                if has_audio { audio_bps } else { 0 },
+                floor,
+                Some(quality),
+            ),
+            _ => None,
         };
         Some((size, bitrates?))
     });
     let Some(((width, height), bitrates)) = ladder else {
         return Verdict::Refused(vec!["unsupported"]);
     };
+    // The rate the encoder is told. A WebCodecs encoder told none spreads its bitrate as if the
+    // video ran at about 30 fps: measured on Chromium 2026-11-13, a 60 fps encode spent twice the
+    // bitrate it was given. So when the bytes are limited, a fast source that keeps its rate
+    // states it.
+    // ponytail: sources between 30 and 48 fps go unstated and can overshoot by up to 1.6 times,
+    // which ends in the explicit size refusal. Stating any rate also makes the output
+    // constant-rate, so it is done only where the overshoot is large.
+    let source_rate = artifact.first_video().and_then(|video| video.frame_rate);
+    let frame_rate = step
+        .target
+        .frame_rate
+        .or_else(|| {
+            step.target
+                .max_bytes
+                .and(source_rate)
+                .filter(|_| reduced_frame_rate(source_rate).is_some())
+        })
+        .map(|rate| f64::from(rate.numerator) / f64::from(rate.denominator));
     let Some(measured) = measured else {
         return Verdict::Measure(json!({
-            "video": { "codec": "avc", "width": width, "height": height, "bitrate": bitrates[0] },
+            "video": {
+                "codec": "avc",
+                "width": width,
+                "height": height,
+                "frame_rate": frame_rate,
+                "bitrate": bitrates[0],
+            },
             "audio": encodes_audio.then(|| json!({
                 "codec": "aac",
                 "channels": 2,
                 "sample_rate": artifact.first_audio().and_then(|audio| audio.sample_rate),
-                "bitrate": DEFAULT_AUDIO_BPS,
+                "bitrate": audio_bps,
             })),
         }));
     };
@@ -342,9 +376,10 @@ fn transcode_verdict(artifact: &Artifact, step: &PlanStep, measured: Option<&Mea
         "operation": step.operation,
         "width": width,
         "height": height,
+        "frame_rate": frame_rate,
         "video_bitrates": bitrates,
         "audio": if encodes_audio {
-            json!({ "codec": "aac", "channels": 2, "bitrate": DEFAULT_AUDIO_BPS })
+            json!({ "codec": "aac", "channels": 2, "bitrate": audio_bps })
         } else {
             json!("copy")
         },

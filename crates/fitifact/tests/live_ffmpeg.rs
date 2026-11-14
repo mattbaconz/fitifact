@@ -639,6 +639,120 @@ fn live_h264_mp4_fits_a_byte_ceiling() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// How many of the frames sampled once a second are one flat colour.
+fn flat_seconds(path: &Path) -> (usize, usize) {
+    let output = Command::new("ffmpeg")
+        .args(["-nostdin", "-v", "error", "-i"])
+        .arg(path)
+        .args([
+            "-vf",
+            "fps=1,signalstats,metadata=print:file=-",
+            "-an",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .expect("ffmpeg signalstats");
+    let text = String::from_utf8_lossy(&output.stdout);
+    let values = |key: &str| -> Vec<f64> {
+        text.lines()
+            .filter_map(|line| line.strip_prefix(key))
+            .map(|value| value.trim().parse().unwrap())
+            .collect()
+    };
+    let (darkest, brightest) = (
+        values("lavfi.signalstats.YMIN="),
+        values("lavfi.signalstats.YMAX="),
+    );
+    let flat = darkest
+        .iter()
+        .zip(&brightest)
+        .filter(|(low, high)| **high - **low < 16.0)
+        .count();
+    (flat, darkest.len())
+}
+
+/// The shape of the recording that once came out grey: 1080p60 with heavy AAC sound, and a size
+/// limit that leaves the picture about 240 kb/s beside sound encoded smaller, and too little for
+/// 810x454 at 30 fps beside the sound as it is (FFmpeg's AAC lands near 133 kb/s here).
+#[test]
+#[ignore]
+fn live_starved_60_fps_clip_gives_up_sound_frame_rate_and_size_and_keeps_a_picture() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-starved-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut extra = vec![
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "20",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "160k",
+        "-x264-params",
+        "colorprim=bt709:transfer=bt709:colormatrix=bt709",
+    ];
+    extra.extend_from_slice(SDR_BT709);
+    let input = generate_at(
+        &dir,
+        "long-1080p60.mp4",
+        "testsrc2=duration=6:size=1920x1080:rate=60",
+        "sine=frequency=440:duration=6",
+        &extra,
+    );
+    let ceiling = 280_000u64;
+    assert!(std::fs::metadata(&input).unwrap().len() > ceiling);
+    let output = dir.join("long-1080p60.adapted.mp4");
+    let constraints = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(ceiling),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let inspector = FfprobeInspector::default();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(120),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    assert_eq!(result.status, AdaptationStatus::Adapted);
+    let target = &result.plan.as_ref().unwrap().steps[0].target;
+    assert_eq!((target.width, target.height), (Some(810), Some(454)));
+    assert_eq!(target.audio_bitrate_bps, Some(96_000));
+    assert_eq!(target.frame_rate, fitifact::artifact::Rational::new(60, 2));
+
+    let validation = result.validation.expect("validation");
+    assert_eq!(validation.status, fitifact::ValidationStatus::Pass);
+    let video = validation.artifact.first_video().unwrap();
+    assert_eq!((video.width, video.height), (Some(810), Some(454)));
+    assert_eq!(video.frame_rate, fitifact::artifact::Rational::new(30, 1));
+    assert_eq!(
+        validation.artifact.first_audio().unwrap().codec,
+        Some(AudioCodec::Aac)
+    );
+    let out_len = std::fs::metadata(&output).unwrap().len();
+    assert!(out_len <= ceiling, "output {out_len} exceeded {ceiling}");
+    let (flat, sampled) = flat_seconds(&output);
+    assert_eq!((flat, sampled), (0, 6), "flat frames in the output");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 #[ignore]
 fn live_byte_ceiling_below_the_quality_floor_is_refused() {

@@ -220,7 +220,7 @@ fn an_hevc_source_is_measured_then_encoded_with_the_quality_ladder() {
     assert_eq!(plan["browser"]["status"], "measure");
     assert_eq!(
         plan["browser"]["measure"],
-        json!({ "video": { "codec": "avc", "width": 320, "height": 240, "bitrate": 230_400 }, "audio": null })
+        json!({ "video": { "codec": "avc", "width": 320, "height": 240, "frame_rate": null, "bitrate": 230_400 }, "audio": null })
     );
 
     let plan = parse(&plan_media_probe(
@@ -235,6 +235,7 @@ fn an_hevc_source_is_measured_then_encoded_with_the_quality_ladder() {
             "operation": "media.transcode_video",
             "width": 320,
             "height": 240,
+            "frame_rate": null,
             "video_bitrates": [230_400, 172_800, 129_600, 97_200, 80_000],
             "audio": "copy",
             "max_bytes": 25_000_000,
@@ -274,9 +275,170 @@ fn an_oversized_h264_file_runs_the_size_ladder_and_scales_to_fit_limits() {
     ));
     assert_eq!(
         plan["browser"]["measure"]["video"],
-        json!({ "codec": "avc", "width": 160, "height": 120, "bitrate": 80_000 }),
+        json!({ "codec": "avc", "width": 160, "height": 120, "frame_rate": null, "bitrate": 80_000 }),
         "{plan}"
     );
+}
+
+/// What the worker reports for the recording that once came out grey: 414.4 s of 1080p60 H.264
+/// with AAC sound, 138 MB.
+fn long_recording(frame_rate: Value) -> String {
+    let mut source = probe("clip.mp4", "isobmff", Some("isom"), "avc", &[]);
+    source["byte_length"] = json!(137_961_438);
+    source["duration_ms"] = json!(414_400);
+    source["tracks"][0]["width"] = json!(1920);
+    source["tracks"][0]["height"] = json!(1080);
+    source["tracks"][0]["frame_rate"] = frame_rate;
+    source.to_string()
+}
+
+#[test]
+fn a_long_60_fps_recording_is_encoded_smaller_slower_and_with_smaller_sound() {
+    let twenty_megabytes = generic_with(20_000_000, &[]);
+    let source = long_recording(json!(60.0));
+    let plan = parse(&plan_media_probe(&source, &twenty_megabytes, NOT_MEASURED));
+    assert_eq!(plan["outcome"]["kind"], "planned", "{plan}");
+    let target = &plan["outcome"]["plan"]["steps"][0]["target"];
+    assert_eq!(
+        target["frame_rate"],
+        json!({ "numerator": 60_000, "denominator": 2_000 })
+    );
+    let floor = target["video_floor_bps"].as_u64().unwrap();
+    // The trial runs at the planned frame rate, like the encode it stands for.
+    assert_eq!(
+        plan["browser"]["measure"]["video"]["frame_rate"],
+        json!(30.0)
+    );
+    // The sound is encoded, so the browser is asked to prove an AAC encoder at the planned rate.
+    assert_eq!(
+        plan["browser"]["measure"]["audio"],
+        json!({ "codec": "aac", "channels": 2, "sample_rate": 48000, "bitrate": 96_000 }),
+        "{plan}"
+    );
+
+    // The source is shown as stored, 1920x1080.
+    let shown =
+        json!({ "display_width": 1920, "display_height": 1080, "rotation": 0, "flip": false });
+    let plan = parse(&plan_media_probe(
+        &source,
+        &twenty_megabytes,
+        &measured(json!({ "geometry": shown })),
+    ));
+    let execution = &plan["browser"]["execution"];
+    assert_eq!(plan["browser"]["status"], "ready", "{plan}");
+    assert_eq!(
+        (execution["width"].clone(), execution["height"].clone()),
+        (json!(810), json!(454))
+    );
+    assert_eq!(execution["frame_rate"], json!(30.0));
+    assert_eq!(
+        execution["audio"],
+        json!({ "codec": "aac", "channels": 2, "bitrate": 96_000 })
+    );
+    let bitrates: Vec<u64> = execution["video_bitrates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|bitrate| bitrate.as_u64().unwrap())
+        .collect();
+    // 20 MB over 414.4 s, less the container margin and the 96 kb/s sound.
+    assert_eq!(bitrates[0], 251_490, "{bitrates:?}");
+    assert!(
+        bitrates.iter().all(|bitrate| *bitrate >= floor),
+        "{bitrates:?} under {floor}"
+    );
+    assert!(floor > 129_600, "the floor that let the picture go grey");
+}
+
+#[test]
+fn a_probe_without_a_frame_rate_is_planned_as_30_fps_and_keeps_its_rate() {
+    let twenty_megabytes = generic_with(20_000_000, &[]);
+    let plan = parse(&plan_media_probe(
+        &long_recording(Value::Null),
+        &twenty_megabytes,
+        NOT_MEASURED,
+    ));
+    let target = &plan["outcome"]["plan"]["steps"][0]["target"];
+    assert!(target.get("frame_rate").is_none(), "{plan}");
+    assert!(target["width"].as_u64().unwrap() < 1920, "{plan}");
+    assert!(
+        target["video_floor_bps"].as_u64().unwrap() > 129_600,
+        "{plan}"
+    );
+}
+
+#[test]
+fn a_fast_source_that_keeps_its_rate_under_a_byte_limit_tells_the_encoder_that_rate() {
+    let shown =
+        json!({ "display_width": 1920, "display_height": 1080, "rotation": 0, "flip": false });
+    let frame_rate = |fps: Value, constraints: &str| {
+        let mut source: Value = serde_json::from_str(&long_recording(fps)).unwrap();
+        // 30 s: 20 MB holds 1080p at 60 fps as it is.
+        source["duration_ms"] = json!(30_000);
+        let source = source.to_string();
+        let trial = parse(&plan_media_probe(&source, constraints, NOT_MEASURED));
+        let plan = parse(&plan_media_probe(
+            &source,
+            constraints,
+            &measured(json!({ "geometry": shown })),
+        ));
+        assert_eq!(plan["browser"]["status"], "ready", "{plan}");
+        let target = &plan["outcome"]["plan"]["steps"][0]["target"];
+        assert!(target.get("frame_rate").is_none(), "{plan}");
+        let rate = plan["browser"]["execution"]["frame_rate"].clone();
+        assert_eq!(trial["browser"]["measure"]["video"]["frame_rate"], rate);
+        rate
+    };
+    let twenty_megabytes = generic_with(20_000_000, &[]);
+    assert_eq!(frame_rate(json!(60.0), &twenty_megabytes), json!(60.0));
+    assert_eq!(frame_rate(json!(59.94006), &twenty_megabytes), json!(59.94));
+    // At 30 fps the encoder's own assumption is right, and an unknown rate cannot be stated.
+    assert_eq!(frame_rate(json!(30.0), &twenty_megabytes), Value::Null);
+    assert_eq!(frame_rate(Value::Null, &twenty_megabytes), Value::Null);
+}
+
+#[test]
+fn sound_the_worker_measured_as_small_is_copied_and_counted_at_that_bitrate() {
+    let twenty_megabytes = generic_with(20_000_000, &[]);
+    let mut source: Value = serde_json::from_str(&long_recording(json!(60.0))).unwrap();
+    source["tracks"][1]["bitrate"] = json!(48_000.4);
+    let source = source.to_string();
+    let plan = parse(&plan_media_probe(&source, &twenty_megabytes, NOT_MEASURED));
+    let target = &plan["outcome"]["plan"]["steps"][0]["target"];
+    assert_eq!(target["audio_bitrate_bps"], json!(48_000), "{plan}");
+    // Nothing is encoded for the sound, so no AAC encoder is asked for.
+    assert_eq!(plan["browser"]["measure"]["audio"], Value::Null);
+
+    let shown =
+        json!({ "display_width": 1920, "display_height": 1080, "rotation": 0, "flip": false });
+    let plan = parse(&plan_media_probe(
+        &source,
+        &twenty_megabytes,
+        &measured(json!({ "geometry": shown })),
+    ));
+    let execution = &plan["browser"]["execution"];
+    assert_eq!(plan["browser"]["status"], "ready", "{plan}");
+    assert_eq!(execution["audio"], json!("copy"));
+    assert_eq!(execution["frame_rate"], json!(30.0));
+    // 347,490 b/s in all, less the 48 kb/s the sound really takes.
+    assert_eq!(execution["video_bitrates"][0], json!(299_490));
+}
+
+#[test]
+fn a_recording_too_long_for_the_limit_is_refused_in_the_browser_too() {
+    let mut source = parse(&long_recording(json!(60.0)));
+    source["duration_ms"] = json!(1_800_000);
+    let plan = parse(&plan_media_probe(
+        &source.to_string(),
+        &generic_with(20_000_000, &[]),
+        NOT_MEASURED,
+    ));
+    assert_eq!(plan["outcome"]["kind"], "cannot_satisfy", "{plan}");
+    assert_eq!(
+        plan["outcome"]["blocking"][0]["code"],
+        "size_fitting_unsupported"
+    );
+    assert_eq!(plan["browser"], Value::Null);
 }
 
 #[test]

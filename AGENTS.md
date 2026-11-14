@@ -50,6 +50,10 @@ The executable adaptation catalog is deliberately small:
 - audio-only files (MP3/WAV/FLAC/OGG/M4A) on size-only targets are a no-op when under the ceiling; otherwise AAC in MP4 with an audio bitrate ladder;
 - audio-only files aimed at a video target are refused;
 - media `file.bytes` and dimension limits can be executed with scale-to-fit plus an H.264 bitrate ladder and quality floor;
+  when the byte budget would starve the picture, the plan first encodes the sound at 96 kbit/s,
+  then lowers a frame rate of 48 fps or more toward 30, then shrinks the picture, and refuses
+  when even that falls under the floor; sound that fits beside the picture finally chosen, or
+  already measures 96 kbit/s or less, is copied, and counts at its measured bitrate (D-048);
 - JPEG/PNG/still WebP that already satisfies the confirmed image target is a no-op;
 - JPEG/PNG/still WebP/TIFF/BMP/GIF/single-image HEIC can be adapted in-process
   under D-026/D-029 format, byte, dimension, crop, and first-frame constraints

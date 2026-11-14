@@ -3,7 +3,8 @@ use std::collections::{HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::{
-    Artifact, AudioCodec, Container, Family, HdrStatus, ImageFormat, StreamType, VideoCodec,
+    Artifact, AudioCodec, Container, Family, HdrStatus, ImageFormat, Rational, StreamType,
+    VideoCodec,
 };
 use crate::capability::{CapabilityCatalog, TransformId};
 use crate::check::{CheckResult, CompatibilityReport, check};
@@ -11,8 +12,8 @@ use crate::constraints::{ConstraintSet, ConstraintValue, Field};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 use crate::image_adapt::ImageAdaptStepTarget;
 use crate::media_fit::{
-    can_fit_media_with_limits, dimension_limit, even_dimension, file_bytes_floor, file_bytes_limit,
-    fit_output_size,
+    FitSource, can_fit_media_with_limits, copied_audio_bps, dimension_limit, even_dimension,
+    file_bytes_floor, file_bytes_limit, fit_output, kept_audio_bps,
 };
 
 pub const PLANNER_VERSION: &str = "0.1.0";
@@ -41,6 +42,18 @@ pub struct StepTarget {
     /// The source signals HDR (PQ/HLG); the encode must tone-map it to SDR.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tone_map_hdr: bool,
+    /// The output frame rate, when a size limit forces it under the source's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<Rational>,
+    /// The sound bitrate a size-fitting plan counts on: the AAC bitrate to encode at when the
+    /// sound is encoded smaller to leave room for the picture, or the measured bitrate of sound
+    /// that is copied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_bitrate_bps: Option<u64>,
+    /// The lowest video bitrate a size-fitting encode may use. Under it the picture breaks
+    /// down, so the encode fails instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_floor_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -293,7 +306,11 @@ pub fn plan(
             return cannot(vec![blocking(
                 BlockingCode::SizeFittingUnsupported,
                 size_ids(&initial),
-                "the size limit is below the quality floor this encoder will use",
+                if artifact.first_video().is_some() {
+                    "the size limit is below the quality floor: even with a smaller picture, a lower frame rate, and smaller sound, this video would not stay watchable. Trim it, or pick a destination that allows a larger file"
+                } else {
+                    "the size limit is below the quality floor: even at the lowest sound quality Fitifact allows, this recording would not fit. Trim it, or pick a destination that allows a larger file"
+                },
             )]);
         }
         _ => {}
@@ -1151,29 +1168,20 @@ fn instantiate_transcode_video(
         return None;
     }
 
-    let fitted = fit_output_size(
-        source_width,
-        source_height,
+    let fit = fit_output(
+        FitSource {
+            width: source_width,
+            height: source_height,
+            frame_rate: input_video.frame_rate,
+            audio_bps: kept_audio_bps(artifact),
+        },
         max_width,
         max_height,
         max_bytes,
         Some(duration_ms),
-        artifact.first_audio().is_some(),
     )?;
-    let width = even_dimension(fitted.0);
-    let height = even_dimension(fitted.1);
-    if max_bytes.is_some_and(|limit| {
-        artifact.byte_length > limit
-            && !crate::media_fit::can_fit_at(
-                width,
-                height,
-                limit,
-                duration_ms,
-                artifact.first_audio().is_some(),
-            )
-    }) {
-        return None;
-    }
+    let width = even_dimension(fit.width);
+    let height = even_dimension(fit.height);
 
     let mut reasons = Vec::new();
     if let Some(video) = codec_fail {
@@ -1232,7 +1240,7 @@ fn instantiate_transcode_video(
     }
 
     let resized = width != source_width || height != source_height;
-    let copy_audio = copyable_audio(artifact);
+    let copy_audio = copyable_audio(artifact) && fit.audio_bps.is_none();
     let mut preservation = Vec::new();
     if !resized {
         preservation.push(PreservationClaim::VideoDimensions);
@@ -1264,6 +1272,18 @@ fn instantiate_transcode_video(
     if resized {
         warnings.push(format!("Resized to {width}x{height} so the file can fit."));
     }
+    if let Some(rate) = fit.frame_rate {
+        warnings.push(format!(
+            "Frame rate lowered to {} fps so the file can fit.",
+            fps_label(rate)
+        ));
+    }
+    if let Some(bitrate) = fit.audio_bps {
+        warnings.push(format!(
+            "Sound re-encoded at {} kbit/s to leave room for the picture.",
+            bitrate / 1000
+        ));
+    }
 
     Some(PlanStep {
         id: format!("step-{}", index + 1),
@@ -1281,6 +1301,13 @@ fn instantiate_transcode_video(
             width: Some(width),
             height: Some(height),
             tone_map_hdr,
+            frame_rate: fit.frame_rate,
+            audio_bitrate_bps: fit.audio_bps.or_else(|| {
+                max_bytes
+                    .filter(|_| copy_audio)
+                    .and_then(|_| copied_audio_bps(artifact))
+            }),
+            video_floor_bps: fit.video_floor_bps,
             ..StepTarget::default()
         },
         reasons,
@@ -1288,6 +1315,13 @@ fn instantiate_transcode_video(
         preservation,
         warnings,
     })
+}
+
+/// A frame rate as people say it: 30, 29.97, 25.
+fn fps_label(rate: Rational) -> String {
+    let fps = f64::from(rate.numerator) / f64::from(rate.denominator.max(1));
+    let text = format!("{fps:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 fn can_remux_instead(artifact: &Artifact, report: &CompatibilityReport) -> bool {
@@ -1323,6 +1357,9 @@ pub(crate) fn apply(artifact: &Artifact, step: &PlanStep) -> Artifact {
                 }
                 if let Some(height) = step.target.height {
                     video.height = Some(height);
+                }
+                if let Some(rate) = step.target.frame_rate {
+                    video.frame_rate = Some(rate);
                 }
                 // FFmpeg writes the turned picture upright, without a display matrix.
                 video.display_matrix = None;

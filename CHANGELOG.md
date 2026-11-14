@@ -53,6 +53,31 @@ All notable changes to Fitifact are documented here.
 
 ### [fixed]
 
+- A long video aimed at a small size limit no longer comes out as flat grey,
+  unreadable frames reported as a success. A 7-minute 1080p 60 fps recording
+  aimed at 20 MB kept its full size and frame rate on about 209 kbit/s of
+  video: 82 of 414 sampled seconds were flat grey, and Fitifact still said
+  `adapted`. The quality floor now counts frame rate (0.02 bits per pixel per
+  frame, at least 80 kbit/s). When the limit would push the picture under it,
+  the plan encodes the sound at 96 kbit/s, then lowers a frame rate of 48 fps
+  or more toward 30, then shrinks the picture, and lists each change before
+  anything runs. Sound that fits beside the picture finally chosen, or already
+  measures 96 kbit/s or less, is still copied. The same recording now comes
+  out at 810x454, 30 fps, 17.2 MB, with no flat frames; it is visibly soft,
+  because 20 MB over 7 minutes leaves about 250 kbit/s for the picture. The
+  web app follows the same plan (D-048).
+- The size budget counts copied sound at its measured bitrate when the file
+  states one, instead of assuming 160 kbit/s. A heavy soundtrack no longer
+  uses up every attempt and ends in a size refusal, and a light one leaves the
+  picture the room it really has.
+- In the web app, a 60 fps video encoded under a size limit no longer spends
+  about twice the bitrate it was given. The browser's encoder is now told the
+  frame rate; in Chromium a 60 fps encode went from 2.0 times its bitrate to
+  1.03 times.
+- A video too long for its size limit is now refused, with advice to trim it or
+  pick a destination that allows a larger file, instead of being encoded under
+  the floor. With sound, a 1080p recording aimed at 20 MB is refused beyond
+  about 13.6 minutes.
 - A file opened while offline, before the tools have loaded, says the device is
   offline instead of "The local image worker stopped unexpectedly", and the
   engine retries its load instead of failing for the rest of the visit.
