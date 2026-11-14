@@ -4,7 +4,18 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CensusFailure, Sha256, trackCensus } from "./media-census";
-import { MEDIABUNNY_VERSION, finishes, rgbaToI420 } from "./media";
+import {
+  BufferSource,
+  BufferTarget,
+  EncodedAudioPacketSource,
+  EncodedPacket,
+  EncodedVideoPacketSource,
+  Input,
+  MATROSKA,
+  MkvOutputFormat,
+  Output,
+} from "mediabunny";
+import { MEDIABUNNY_VERSION, finishes, packetStats, rgbaToI420 } from "./media";
 
 async function fixture(name: string) {
   const path = fileURLToPath(new URL(`../../../fixtures/media/${name}`, import.meta.url));
@@ -157,5 +168,58 @@ describe("conversion watchdog", () => {
     // 200 ms in all, longer than the 100 ms limit, but never 100 ms without progress
     expect(await finishes(slow, 100, (fraction) => seen.push(fraction))).toBe(true);
     expect(seen).toEqual([0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]);
+  });
+});
+
+describe("unindexed tracks", () => {
+  /**
+   * A recording that opens on a still, silent screen: 30 s at 5 frames per second with near-empty
+   * sound packets, then 10 s at 60 frames per second with full ones. The packet bytes are filler;
+   * only their sizes and times are read.
+   */
+  async function quietOpening() {
+    const output = new Output({ format: new MkvOutputFormat(), target: new BufferTarget() });
+    const video = new EncodedVideoPacketSource("vp8");
+    const audio = new EncodedAudioPacketSource("opus");
+    output.addVideoTrack(video);
+    output.addAudioTrack(audio);
+    await output.start();
+    const videoConfig = { decoderConfig: { codec: "vp8", codedWidth: 640, codedHeight: 360 } };
+    const audioConfig = { decoderConfig: { codec: "opus", numberOfChannels: 2, sampleRate: 48_000 } };
+    const frames = [
+      ...Array.from({ length: 150 }, (_, i) => [i / 5, 1 / 5]),
+      ...Array.from({ length: 600 }, (_, i) => [30 + i / 60, 1 / 60]),
+    ];
+    for (const [i, [timestamp, duration]] of frames.entries()) {
+      await video.add(new EncodedPacket(new Uint8Array(200), i % 60 ? "delta" : "key", timestamp, duration), videoConfig);
+    }
+    // 20 ms Opus packets: 10 bytes each (4 kbit/s) while quiet, 400 bytes (160 kbit/s) after.
+    for (let i = 0; i < 2000; i += 1) {
+      const bytes = new Uint8Array(i < 1500 ? 10 : 400);
+      await audio.add(new EncodedPacket(bytes, "key", i / 50, 1 / 50), audioConfig);
+    }
+    await output.finalize();
+    return new Input({ formats: [MATROSKA], source: new BufferSource(output.target.buffer!) });
+  }
+
+  it("measures the whole track, as the output's re-read will", async () => {
+    const input = await quietOpening();
+    try {
+      const [video] = await input.getVideoTracks();
+      const [audio] = await input.getAudioTracks();
+      // The opening alone says 5 frames per second and 4 kbit/s: what a file too large for the
+      // browser to change is judged on.
+      const sampled = await packetStats(video, false);
+      expect(sampled?.packetCount).toBe(120);
+      expect(sampled?.averagePacketRate).toBeLessThan(6);
+      expect((await packetStats(audio, false))?.averageBitrate).toBeLessThan(5_000);
+      // 750 frames over 40 s, timed to the millisecond; 215,000 bytes of sound over 40 s.
+      const pictures = await packetStats(video);
+      expect(pictures?.packetCount).toBe(750);
+      expect(pictures?.averagePacketRate).toBeCloseTo(18.75, 1);
+      expect((await packetStats(audio))?.averageBitrate).toBeCloseTo(43_000, -2);
+    } finally {
+      input.dispose();
+    }
   });
 });

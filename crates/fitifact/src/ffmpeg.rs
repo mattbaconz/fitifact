@@ -314,6 +314,12 @@ fn check_ffmpeg_status(output: SpawnOutput, step: &PlanStep) -> Result<()> {
     if output.success() {
         return Ok(());
     }
+    if output.stderr_str().contains("option 'fps_mode'") {
+        return Err(Error::new(
+            ErrorCode::ProviderMissing,
+            "this FFmpeg is older than 5.1, and re-encoding video needs FFmpeg 5.1 or newer. Run `fitifact doctor` to see which FFmpeg is in use",
+        ));
+    }
     Err(Error::new(
         ErrorCode::ExecutionFailed,
         format!(
@@ -429,6 +435,11 @@ fn ffmpeg_args_with_bitrate(
                 "bt709".into(),
                 "-preset".into(),
                 "medium".into(),
+                // Keep each frame's own timing. FFmpeg before 7.1 otherwise writes MP4 at a constant
+                // rate and repeats frames up to the source's nominal rate, which the plan's quality
+                // floor never counted on. Needs FFmpeg 5.1 or newer.
+                "-fps_mode".into(),
+                "vfr".into(),
             ]);
             if let Some(bitrate) = video_bitrate_bps {
                 args.extend([
@@ -897,6 +908,44 @@ mod tests {
         assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
         assert!(args.windows(2).any(|w| w == ["-b:a", "96k"]));
         assert!(!args.windows(2).any(|w| w == ["-c:a", "copy"]));
+    }
+
+    /// FFmpeg before 7.1 writes MP4 at a constant rate by default, repeating frames of a
+    /// variable-rate source up to its nominal rate.
+    #[test]
+    fn every_video_encode_keeps_each_frames_own_timing() {
+        let mut slowed = transcode_step();
+        slowed.target.frame_rate = Rational::new(60, 2);
+        for step in [transcode_step(), slowed] {
+            let args = ffmpeg_args(&step, Path::new("in.mkv"), Path::new("out.mp4")).unwrap();
+            assert!(
+                args.windows(2).any(|w| w == ["-fps_mode", "vfr"]),
+                "{args:?}"
+            );
+            let output = args.iter().position(|arg| arg == "out.mp4").unwrap();
+            assert!(args.iter().position(|arg| arg == "-fps_mode").unwrap() < output);
+        }
+    }
+
+    #[test]
+    fn ffmpeg_too_old_for_fps_mode_says_so() {
+        let failed = |stderr: &str| SpawnOutput {
+            status: 8,
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+        };
+        let old = check_ffmpeg_status(
+            failed("Unrecognized option 'fps_mode'.\nError splitting the argument list: Option not found\n"),
+            &transcode_step(),
+        )
+        .unwrap_err();
+        assert_eq!(old.code, ErrorCode::ProviderMissing);
+        assert!(old.message.contains("5.1 or newer"));
+        let other =
+            check_ffmpeg_status(failed("Invalid data found"), &transcode_step()).unwrap_err();
+        assert_eq!(other.code, ErrorCode::ExecutionFailed);
     }
 
     /// Every encode "succeeds" with a file that is still too large, so the whole ladder runs.

@@ -742,6 +742,14 @@ fn live_starved_60_fps_clip_gives_up_sound_frame_rate_and_size_and_keeps_a_pictu
     let video = validation.artifact.first_video().unwrap();
     assert_eq!((video.width, video.height), (Some(810), Some(454)));
     assert_eq!(video.frame_rate, fitifact::artifact::Rational::new(30, 1));
+    let rate = validation
+        .integrity
+        .iter()
+        .find(|row| row.id == "frame_rate");
+    assert_eq!(
+        rate.expect("the frame rate is validated").status,
+        fitifact::ValidationStatus::Pass
+    );
     assert_eq!(
         validation.artifact.first_audio().unwrap().codec,
         Some(AudioCodec::Aac)
@@ -1042,6 +1050,54 @@ fn live_wav_over_a_byte_ceiling_adapts_to_aac() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// H.264 with light Opus sound, already under its limit: the video is copied and the sound
+/// becomes AAC. At the default 160 kbit/s that AAC alone outgrows the limit, so the sound's
+/// bitrate ladder has to run. It once ran one encode and failed validation.
+#[test]
+#[ignore]
+fn live_h264_with_light_sound_under_its_limit_fits_after_aac() {
+    require_tools();
+    assert!(encoder_ok("libopus"), "need libopus to generate Opus sound");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-av-audio-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = generate_at(
+        &dir,
+        "light.mkv",
+        "testsrc=duration=10:size=160x120:rate=10",
+        "sine=frequency=440:duration=10",
+        &[
+            "-c:v", "libx264", "-b:v", "16k", "-c:a", "libopus", "-b:a", "24k",
+        ],
+    );
+    let source_len = std::fs::metadata(&input).unwrap().len();
+    // Room for 32 kbit/s AAC beside the copied video, not for 160 kbit/s (about 200 KB).
+    let ceiling = source_len + 25_000;
+    let result = adapt_in(
+        &dir,
+        &input,
+        compile(ConstraintInput {
+            container: Some(vec!["mp4".into()]),
+            video_codec: Some(vec!["h264".into()]),
+            audio_codec: Some(vec!["aac".into()]),
+            max_bytes: Some(ceiling),
+            ..ConstraintInput::default()
+        })
+        .unwrap(),
+    );
+    let step = &result.plan.as_ref().unwrap().steps[0];
+    assert_eq!(step.operation, TransformId::TranscodeAudio);
+    assert_eq!(step.target.max_bytes, Some(ceiling));
+    assert_eq!(result.status, AdaptationStatus::Adapted, "{result:?}");
+    let validation = result.validation.expect("validation");
+    assert_eq!(validation.status, fitifact::ValidationStatus::Pass);
+    assert_eq!(
+        validation.artifact.first_audio().unwrap().codec,
+        Some(AudioCodec::Aac)
+    );
+    assert!(validation.artifact.byte_length <= ceiling);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 #[ignore]
 fn live_audio_cannot_satisfy_a_video_destination() {
@@ -1304,6 +1360,100 @@ fn live_turned_video_copies_keep_the_matrix_and_mirrors_are_not_re_encoded() {
     assert_eq!(
         create_plan(&artifact, &narrow, &default_catalog()).blocking_codes(),
         vec![BlockingCode::DisplayTransformUnsupported]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A phone or screen recording keeps a frame only when the picture changes, so its nominal rate
+/// (`r_frame_rate`) is above its average. FFmpeg before 7.1 wrote MP4 at the nominal rate by
+/// default, repeating frames that the plan's quality floor never counted on, and the frame-rate
+/// check then refused a good encode. CI's Linux FFmpeg is 6.1.
+#[test]
+#[ignore]
+fn live_variable_rate_clip_keeps_its_own_frames() {
+    require_tools();
+    assert!(encoder_ok("libx264"), "need libx264");
+    let dir = std::env::temp_dir().join(format!("fitifact-live-vfr-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // 30 fps with every fifth frame missing: 144 frames over 6 s, about 24 per second.
+    let mut extra = vec![
+        "-fps_mode",
+        "vfr",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "20",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-x264-params",
+        "colorprim=bt709:transfer=bt709:colormatrix=bt709",
+    ];
+    extra.extend_from_slice(SDR_BT709);
+    let input = generate_at(
+        &dir,
+        "vfr-640x360.mp4",
+        r"testsrc2=duration=6:size=640x360:rate=30,select='not(eq(mod(n\,5)\,4))'",
+        "sine=frequency=440:duration=6",
+        &extra,
+    );
+    let inspector = FfprobeInspector::default();
+    let source = inspector.inspect(&input).unwrap();
+    let video = source.first_video().unwrap();
+    let average = fitifact::media_fit::frames_per_second(video.frame_rate);
+    assert!(average < 25.0, "the source averages {average} fps");
+    let frames = video.frame_count.expect("MP4 counts its frames");
+
+    // A ceiling whose picture budget sits halfway between the floor at the clip's average rate
+    // and the floor at its nominal 30 fps: enough for its own frames, not for repeated ones.
+    let floor = |fps| fitifact::media_fit::floor_video_bitrate_bps(640, 360, fps) as f64;
+    let sound = source.first_audio().unwrap().bitrate_bps.unwrap() as f64;
+    let seconds = source.duration_ms.unwrap() as f64 / 1000.0;
+    let budget = (floor(average) + floor(30.0)) / 2.0;
+    // The planner keeps a tenth of the limit for the container.
+    let ceiling = ((budget + sound) * seconds / 8.0 / 0.9) as u64;
+    assert!(std::fs::metadata(&input).unwrap().len() > ceiling);
+
+    let output = dir.join("vfr-640x360.adapted.mp4");
+    let constraints = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(ceiling),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    let provider = FfmpegProvider::default();
+    let result = adapt(AdaptRequest {
+        input: &input,
+        constraints,
+        output: Some(output.clone()),
+        catalog: None,
+        inspector: &inspector,
+        provider: Some(&provider),
+        execution: ExecutionContext {
+            timeout: Duration::from_secs(120),
+            temp_dir: Some(dir.clone()),
+        },
+    })
+    .unwrap();
+    let target = &result.plan.as_ref().unwrap().steps[0].target;
+    assert_eq!((target.width, target.height), (Some(640), Some(360)));
+    assert_eq!(target.frame_rate, None);
+    assert_eq!(result.status, AdaptationStatus::Adapted, "{result:?}");
+    let validation = result.validation.expect("validation");
+    let row = validation
+        .integrity
+        .iter()
+        .find(|row| row.id == "frame_rate")
+        .expect("the frame rate is validated");
+    assert_eq!(row.status, fitifact::ValidationStatus::Pass, "{row:?}");
+    assert_eq!(
+        validation.artifact.first_video().unwrap().frame_count,
+        Some(frames)
     );
     let _ = std::fs::remove_dir_all(dir);
 }

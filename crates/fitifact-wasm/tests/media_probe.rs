@@ -534,7 +534,8 @@ fn an_encoded_output_must_be_upright_at_the_planned_size_and_validate() {
     let source = probe("clip.mp4", "isobmff", Some("isom"), "hevc", &[]).to_string();
     let mut encoded = probe("clip.fitifact.mp4", "isobmff", Some("isom"), "avc", &[]);
     encoded["tracks"][0]["avcc"] = json!(BT709_AVCC);
-    let output = |shown: Value, produced: Value| {
+    encoded["tracks"][0]["frame_rate"] = json!(30.0);
+    let output_of = |encoded: &Value, shown: Value, produced: Value| {
         json!({
             "name": "clip.fitifact.mp4",
             "probe": encoded,
@@ -545,6 +546,7 @@ fn an_encoded_output_must_be_upright_at_the_planned_size_and_validate() {
         })
         .to_string()
     };
+    let output = |shown: Value, produced: Value| output_of(&encoded, shown, produced);
 
     let adapted = parse(&adapt_media_probe(
         &source,
@@ -553,6 +555,23 @@ fn an_encoded_output_must_be_upright_at_the_planned_size_and_validate() {
     ));
     assert_eq!(adapted["status"], "adapted", "{adapted}");
     assert_eq!(adapted["validation"]["status"], "pass");
+
+    // The source stated no frame rate, so the floor counted on 30. Twice the frames, or a rate
+    // the re-probe could not read, is not the encode that was planned.
+    for (frame_rate, status) in [(json!(60.0), "fail"), (Value::Null, "unknown")] {
+        let mut faster = encoded.clone();
+        faster["tracks"][0]["frame_rate"] = frame_rate;
+        let refused = parse(&adapt_media_probe(
+            &source,
+            &generic(),
+            &output_of(&faster, geometry(0), geometry(0)),
+        ));
+        assert_eq!(refused["status"], "failed", "{refused}");
+        let rows = refused["validation"]["integrity"].as_array().unwrap();
+        let row = rows.iter().find(|row| row["id"] == "frame_rate").unwrap();
+        assert_eq!(row["status"], status);
+        assert_eq!(row["expected"], "at most 30.00 frames per second");
+    }
 
     let turned = parse(&adapt_media_probe(
         &source,

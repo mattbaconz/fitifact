@@ -122,18 +122,21 @@ pub fn diagnose_with_tools(
         workspace_report("temporary", temporary),
     ];
     let mut warnings = Vec::new();
-    if ffmpeg
-        .version
-        .as_deref()
-        .and_then(ffmpeg_major)
-        .is_some_and(|major| major < 6)
-    {
+    let version = ffmpeg.version.as_deref().and_then(ffmpeg_version);
+    // `-fps_mode`, which every video re-encode passes, arrived in FFmpeg 5.1.
+    let too_old = version.is_some_and(|version| version < (5, 1));
+    if too_old {
         warnings.push(
-            "Detected FFmpeg major version is older than 6; behavior may differ from CI-tested 7.x.".into(),
+            "Detected FFmpeg is older than 5.1, which every video re-encode needs. Install FFmpeg 5.1 or newer.".into(),
+        );
+    } else if version.is_some_and(|(major, _)| major < 6) {
+        warnings.push(
+            "Detected FFmpeg major version is older than 6; behavior may differ from the CI-tested 6.1 and 7.x.".into(),
         );
     }
     let healthy = ffprobe.available
         && ffmpeg.available
+        && !too_old
         && capabilities.iter().all(|item| item.available)
         && workspaces.iter().all(|item| item.writable);
     DoctorReport {
@@ -235,14 +238,22 @@ fn workspace_report(name: &str, directory: &Path) -> DoctorWorkspace {
     }
 }
 
-fn ffmpeg_major(version: &str) -> Option<u32> {
+/// Major and minor from `ffmpeg version 4.4.2-0ubuntu0.22.04.1 ...`. Git builds (`N-...`) read as
+/// unknown.
+fn ffmpeg_version(version: &str) -> Option<(u32, u32)> {
     let token = version.split_whitespace().nth(2)?;
-    token
+    let mut parts = token
         .trim_start_matches(|character: char| !character.is_ascii_digit())
-        .split('.')
-        .next()?
-        .parse()
-        .ok()
+        .split('.');
+    let major = parts.next()?.parse().ok()?;
+    let digits = |part: &str| {
+        part.chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .ok()
+    };
+    Some((major, parts.next().and_then(digits).unwrap_or(0)))
 }
 
 #[cfg(test)]
@@ -334,6 +345,66 @@ mod tests {
         assert!(report.tools.iter().all(|tool| {
             tool.available && tool.detail.as_deref() == Some("shipped with Fitifact")
         }));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ffmpeg_versions_read_major_and_minor() {
+        let read = |line: &str| ffmpeg_version(line);
+        assert_eq!(
+            read("ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright"),
+            Some((4, 4))
+        );
+        assert_eq!(read("ffmpeg version 5.0 Copyright"), Some((5, 0)));
+        assert_eq!(read("ffmpeg version 5.1.6 Copyright"), Some((5, 1)));
+        assert_eq!(
+            read("ffmpeg version 7.1.1-full_build-www.gyan.dev"),
+            Some((7, 1))
+        );
+        assert_eq!(read("ffmpeg version n6.1 Copyright"), Some((6, 1)));
+        assert_eq!(read("ffmpeg version 7 Copyright"), Some((7, 0)));
+        assert_eq!(read("ffmpeg version N-112345-gabc Copyright"), None);
+        assert!(Some((5, 0)) < Some((5, 1)) && (5, 1) < (6, 0));
+    }
+
+    #[test]
+    fn ffmpeg_older_than_5_1_is_not_healthy() {
+        struct OldTools(&'static str);
+        impl ProcessSpawner for OldTools {
+            fn spawn(
+                &self,
+                program: &str,
+                args: &[String],
+                timeout: Duration,
+            ) -> Result<SpawnOutput> {
+                let mut output = HealthyTools.spawn(program, args, timeout)?;
+                if args.first().map(String::as_str) == Some("-version") {
+                    output.stdout = format!("ffmpeg version {}\n", self.0).into_bytes();
+                }
+                Ok(output)
+            }
+        }
+        let root = std::env::temp_dir().join(format!("fitifact-doctor-old-{}", std::process::id()));
+        let destination = root.join("destination");
+        let temporary = root.join("temporary");
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::create_dir_all(&temporary).unwrap();
+        let report = |version| {
+            diagnose_with_tools(
+                &OldTools(version),
+                &destination,
+                &temporary,
+                Duration::from_secs(5),
+                &MediaToolPaths::path_names(),
+            )
+        };
+        let old = report("4.4.2-0ubuntu0.22.04.1");
+        assert!(!old.healthy);
+        assert!(old.warnings[0].contains("5.1 or newer"));
+        let five_one = report("5.1.6");
+        assert!(five_one.healthy);
+        assert!(five_one.warnings[0].contains("older than 6"));
+        assert!(report("7.1").warnings.is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

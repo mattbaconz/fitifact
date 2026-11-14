@@ -207,6 +207,16 @@ export function describeProblemsFromChecks(report: CompatibilityReport | null | 
   return problems;
 }
 
+/** The planner's advice when no re-encode can reach the size limit. The checks say what fails, not what to do. */
+export function describeSizeRefusal(blocking: Array<{ message: string; code?: string }> | undefined): string[] {
+  return (blocking ?? [])
+    .filter((item) => item.code === "size_fitting_unsupported")
+    .map((item) => {
+      const line = item.message.charAt(0).toUpperCase() + item.message.slice(1);
+      return line.endsWith(".") ? line : `${line}.`;
+    });
+}
+
 export function describeProblems(plan: PlanReport): string[] {
   const problems = describeProblemsFromChecks(plan.report);
   const sawDimensions = problems.includes("The dimensions don't match");

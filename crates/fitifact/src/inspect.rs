@@ -175,6 +175,7 @@ struct ProbeStream {
     height: Option<u32>,
     avg_frame_rate: Option<String>,
     r_frame_rate: Option<String>,
+    nb_frames: Option<serde_json::Value>,
     pix_fmt: Option<String>,
     bits_per_raw_sample: Option<serde_json::Value>,
     color_range: Option<String>,
@@ -345,6 +346,12 @@ fn normalize_stream(stream: ProbeStream) -> Stream {
                     width,
                     height,
                     frame_rate,
+                    frame_count: stream
+                        .nb_frames
+                        .as_ref()
+                        .and_then(json_u32)
+                        .filter(|frames| *frames > 0)
+                        .map(u64::from),
                     pixel_format: stream.pix_fmt,
                     bit_depth,
                     color_range: stream.color_range,
@@ -538,6 +545,23 @@ mod tests {
         // Matroska streams usually carry none.
         assert_eq!(bitrate_of(""), None);
         assert_eq!(bitrate_of(r#", "bit_rate": "N/A""#), None);
+    }
+
+    #[test]
+    fn a_frame_count_is_read_when_the_container_counts_frames() {
+        let frames_of = |nb_frames: &str| {
+            let json = format!(
+                r#"{{"streams": [{{"codec_type": "video", "codec_name": "h264", "width": 320,
+                    "height": 240, "avg_frame_rate": "30/1"{nb_frames}}}]}}"#
+            );
+            let artifact = artifact_from_ffprobe_json(Path::new("clip.mp4"), 100, &json).unwrap();
+            artifact.first_video().unwrap().frame_count
+        };
+        assert_eq!(frames_of(r#", "nb_frames": "180""#), Some(180));
+        // Matroska streams usually carry none.
+        for unknown in ["", r#", "nb_frames": "N/A""#, r#", "nb_frames": "0""#] {
+            assert_eq!(frames_of(unknown), None, "{unknown}");
+        }
     }
 
     #[test]

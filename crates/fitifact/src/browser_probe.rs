@@ -36,8 +36,11 @@ enum BrowserTrack {
         codec: Option<String>,
         width: Option<u32>,
         height: Option<u32>,
-        /// Average frames per second, from the timing of the track's first packets.
+        /// Average frames per second over the whole track.
         frame_rate: Option<f64>,
+        /// How many frames the track holds.
+        #[serde(default)]
+        frame_count: Option<f64>,
         /// AVCDecoderConfigurationRecord bytes for H.264.
         avcc: Option<Vec<u8>>,
         /// Container-level color, in WebCodecs names.
@@ -47,7 +50,7 @@ enum BrowserTrack {
         codec: Option<String>,
         channels: Option<u32>,
         sample_rate: Option<u32>,
-        /// Average bits per second, from the size and timing of the track's first packets.
+        /// Average bits per second over the whole track.
         #[serde(default)]
         bitrate: Option<f64>,
     },
@@ -123,6 +126,7 @@ fn ffprobe_stream(index: usize, track: &BrowserTrack) -> Value {
             width,
             height,
             frame_rate,
+            frame_count,
             avcc,
             color,
         } => {
@@ -136,6 +140,12 @@ fn ffprobe_stream(index: usize, track: &BrowserTrack) -> Value {
                 frame_rate
                     .filter(|fps| fps.is_finite() && (0.001..=1000.0).contains(fps))
                     .map(|fps| json!(format!("{}/1000", (fps * 1000.0).round() as u32))),
+            );
+            put(
+                "nb_frames",
+                frame_count
+                    .filter(|frames| frames.is_finite() && (1.0..=1e9).contains(frames))
+                    .map(|frames| json!(frames.round() as u64)),
             );
             let picture = Picture::new(
                 avcc.as_deref().and_then(first_sps).and_then(parse_sps),
@@ -721,7 +731,18 @@ mod tests {
         for unknown in [Value::Null, json!(0.0), json!(-30.0), json!(1.0e9)] {
             assert_eq!(rate_of(unknown.clone()), None, "{unknown}");
         }
-        // A probe from before the worker measured frame rate still reads.
+        let count_of = |frame_count: Value| {
+            let mut track = video(&fixture_avcc("remux-h264-aac.mov"), json!({}));
+            track["frame_count"] = frame_count;
+            let json = probe("isobmff", Some("isom"), json!([track]));
+            let artifact = artifact_from_browser_probe(&json).unwrap();
+            artifact.first_video().unwrap().frame_count
+        };
+        assert_eq!(count_of(json!(750.0)), Some(750));
+        for unknown in [Value::Null, json!(0.0), json!(-3.0), json!(f64::MAX)] {
+            assert_eq!(count_of(unknown.clone()), None, "{unknown}");
+        }
+        // A probe from before the worker measured frame rate or counted frames still reads.
         let json = probe(
             "isobmff",
             Some("isom"),
@@ -729,6 +750,7 @@ mod tests {
         );
         let artifact = artifact_from_browser_probe(&json).unwrap();
         assert_eq!(artifact.first_video().unwrap().frame_rate, None);
+        assert_eq!(artifact.first_video().unwrap().frame_count, None);
     }
 
     #[test]

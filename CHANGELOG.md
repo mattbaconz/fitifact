@@ -48,6 +48,9 @@ All notable changes to Fitifact are documented here.
   (about 870 KB compressed), so a photo or video still works if the network
   drops afterwards. With Save-Data on, the tools still load only for a file
   (D-045).
+- The CLI's video re-encodes need FFmpeg 5.1 or newer (Ubuntu 22.04 ships
+  4.4). `fitifact doctor` now reports an older FFmpeg as unhealthy, and an
+  encode that reaches one says so instead of failing with only an exit code.
 - Building from source needs Rust 1.88 or newer (was 1.85), the oldest that
   `image` 0.25.10 supports.
 
@@ -78,6 +81,35 @@ All notable changes to Fitifact are documented here.
   pick a destination that allows a larger file, instead of being encoded under
   the floor. With sound, a 1080p recording aimed at 20 MB is refused beyond
   about 13.6 minutes.
+- An encode made to fit a size limit is now re-checked for its frame rate,
+  counted from the output's frames when the container counts them. An output
+  with more frames per second than the plan counted on fails validation
+  instead of passing with fewer bits per frame than the quality floor allows.
+  A rate the plan states must be met; a rate measured on the source may come
+  out higher only when the picture still got the floor's bits (D-048).
+- CLI video encodes on FFmpeg before 7.1 no longer repeat frames. Those
+  versions wrote MP4 at a constant rate, padding a variable-rate recording
+  with copies of its frames up to the source's nominal rate, which the size
+  plan never counted on. The desktop app's bundled FFmpeg was not affected.
+  On those versions a silent clip that ends on a long still now comes out
+  shorter and is refused, as it already was on FFmpeg 7.1 and newer.
+- In the web app, a video's frame rate, frame count, and sound bitrate are
+  measured over the whole track, the same way the output is re-checked.
+  Before, an MKV or WebM frame rate and every sound bitrate came from the
+  first 120 packets, so a recording that opens on a still or silent screen
+  read slower or lighter than it is. This reads every packet header: about a
+  second for a 138 MB recording, a few seconds for an hour at 60 fps. Files
+  over 1 GB, which the browser can't change anyway, are still sampled.
+- A file already under its size limit that still needs re-encoding (HEVC, for
+  example) and is too long for the encode to fit is refused with advice to
+  trim it or pick a destination that allows a larger file, instead of "no
+  proven plan". The web and desktop apps now show this advice, and the advice
+  for a file over its limit, beside the failed checks.
+- A file under its size limit whose sound must still become AAC (FLAC, or
+  Opus beside H.264 video) now runs the sound's bitrate ladder against that
+  limit, instead of encoding once at 160 kbit/s and possibly failing
+  validation. An audio file that can't fit even at the lowest sound quality
+  is refused before anything runs.
 - A file opened while offline, before the tools have loaded, says the device is
   offline instead of "The local image worker stopped unexpectedly", and the
   engine retries its load instead of failing for the rest of the visit.

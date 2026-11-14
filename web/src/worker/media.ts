@@ -24,6 +24,7 @@ import {
   type InputAudioTrack,
   type InputTrack,
   type InputVideoTrack,
+  type PacketStats,
 } from "mediabunny";
 import type { MeasureRequest, Measured, TranscodeExecution } from "./protocol";
 import { CensusFailure, Sha256, trackCensus } from "./media-census";
@@ -69,9 +70,10 @@ export async function probe(file: File) {
     let video = 0;
     let audio = 0;
     const tracks = [];
+    const whole = file.size <= MAX_REMUX_BYTES;
     for (const type of census.tracks) {
-      if (type === "video") tracks.push(await videoFacts(videos[video++], census.container === "isobmff"));
-      else if (type === "audio") tracks.push(await audioFacts(audios[audio++]));
+      if (type === "video") tracks.push(await videoFacts(videos[video++], whole));
+      else if (type === "audio") tracks.push(await audioFacts(audios[audio++], whole));
       else tracks.push({ type });
     }
     if (video < videos.length || audio < audios.length) {
@@ -95,17 +97,19 @@ export async function probe(file: File) {
   }
 }
 
-async function videoFacts(track: InputVideoTrack | undefined, indexed: boolean) {
+async function videoFacts(track: InputVideoTrack | undefined, whole: boolean) {
   if (!track) return { type: "video" };
   const codec = await track.getCodec();
   const config = codec === "avc" ? await track.getDecoderConfig() : null;
   const color = await track.getColorSpace();
+  const stats = await packetStats(track, whole);
   return {
     type: "video",
     codec,
     width: await track.getCodedWidth(),
     height: await track.getCodedHeight(),
-    frame_rate: await frameRate(track, indexed),
+    frame_rate: positive(stats?.averagePacketRate),
+    frame_count: whole ? positive(stats?.packetCount) : null,
     avcc: config?.description ? Array.from(bytesOf(config.description)) : null,
     color: {
       primaries: color.primaries ?? null,
@@ -116,43 +120,36 @@ async function videoFacts(track: InputVideoTrack | undefined, indexed: boolean) 
   };
 }
 
-/** How many packets stand for a track when counting them all would mean reading the whole file. */
+/**
+ * Packet count, packets per second, and bits per second over the whole track, the way ffprobe
+ * counts an MP4 and the way the output is re-read; `null` when they can't be told. MKV and WebM
+ * have no index, so every packet header is read (about 1 s for a 138 MB recording's video, 3 s
+ * for an hour at 60 fps): a sample misjudges a recording whose pace changes, and the plan's quality floor
+ * would then count on a frame rate the output doesn't have. A file too large for the browser to
+ * change is only sampled, since its plan ends in a pointer to the desktop app anyway.
+ */
+export async function packetStats(track: InputTrack, whole = true): Promise<PacketStats | null> {
+  try {
+    return await track.computePacketStats(whole ? undefined : SAMPLED_PACKETS);
+  } catch {
+    return null;
+  }
+}
+
+/** Packets read from each track of a file too large to change in the browser. */
 const SAMPLED_PACKETS = 120;
 
-/**
- * Average frames per second; `null` when it can't be told. MP4 and MOV list every frame in their
- * index, so the whole track is counted, as ffprobe does.
- */
-// ponytail: MKV and WebM have no such index, so only the first packets are timed. A variable-rate
-// recording that starts on a still screen reads slower than it is; sample later windows if such
-// files show up.
-async function frameRate(track: InputVideoTrack, indexed: boolean): Promise<number | null> {
-  try {
-    const { averagePacketRate } = await track.computePacketStats(indexed ? undefined : SAMPLED_PACKETS);
-    return Number.isFinite(averagePacketRate) && averagePacketRate > 0 ? averagePacketRate : null;
-  } catch {
-    return null;
-  }
-}
+const positive = (value: number | undefined) =>
+  value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
 
-/** Average bits per second of a soundtrack, from its first packets; `null` when it can't be told. */
-async function soundBitrate(track: InputAudioTrack): Promise<number | null> {
-  try {
-    const { averageBitrate } = await track.computePacketStats(SAMPLED_PACKETS);
-    return Number.isFinite(averageBitrate) && averageBitrate > 0 ? averageBitrate : null;
-  } catch {
-    return null;
-  }
-}
-
-async function audioFacts(track: InputAudioTrack | undefined) {
+async function audioFacts(track: InputAudioTrack | undefined, whole: boolean) {
   if (!track) return { type: "audio" };
   return {
     type: "audio",
     codec: await track.getCodec(),
     channels: await track.getNumberOfChannels(),
     sample_rate: await track.getSampleRate(),
-    bitrate: await soundBitrate(track),
+    bitrate: positive((await packetStats(track, whole))?.averageBitrate),
   };
 }
 

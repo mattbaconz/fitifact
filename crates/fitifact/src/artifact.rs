@@ -370,6 +370,10 @@ pub struct VideoStream {
     /// Height as players show it, like `width`.
     pub height: Option<u32>,
     pub frame_rate: Option<Rational>,
+    /// How many frames the track holds, when the container counts them (ffprobe's `nb_frames`;
+    /// the browser counts packets). Absent when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_count: Option<u64>,
     pub pixel_format: Option<String>,
     pub bit_depth: Option<u8>,
     pub color_range: Option<String>,
@@ -558,6 +562,7 @@ impl Artifact {
                         numerator: 30,
                         denominator: 1,
                     }),
+                    frame_count: None,
                     pixel_format: Some("yuv420p".into()),
                     bit_depth: Some(8),
                     color_range: Some("tv".into()),
