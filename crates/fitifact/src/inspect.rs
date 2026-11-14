@@ -183,6 +183,7 @@ struct ProbeStream {
     color_primaries: Option<String>,
     channels: Option<u32>,
     sample_rate: Option<serde_json::Value>,
+    bit_rate: Option<serde_json::Value>,
     sample_aspect_ratio: Option<String>,
     side_data_list: Option<Vec<ProbeSideData>>,
 }
@@ -368,6 +369,7 @@ fn normalize_stream(stream: ProbeStream) -> Stream {
                 codec: stream.codec_name.as_deref().map(AudioCodec::parse_loose),
                 channels: stream.channels,
                 sample_rate: stream.sample_rate.as_ref().and_then(json_u32),
+                bitrate_bps: stream.bit_rate.as_ref().and_then(json_u32).map(u64::from),
             },
         },
         Some("subtitle") => StreamDetails::Subtitle {
@@ -520,6 +522,22 @@ mod tests {
 
     fn matrix_rows(a: i32, b: i32, c: i32, d: i32) -> String {
         format!("\\n00000000: {a} {b} 0\\n00000001: {c} {d} 0\\n00000002: 0 0 1073741824\\n")
+    }
+
+    #[test]
+    fn a_soundtrack_bitrate_is_read_when_ffprobe_reports_one() {
+        let bitrate_of = |bit_rate: &str| {
+            let json = format!(
+                r#"{{"streams": [{{"codec_type": "audio", "codec_name": "aac", "channels": 2,
+                    "sample_rate": "48000"{bit_rate}}}]}}"#
+            );
+            let artifact = artifact_from_ffprobe_json(Path::new("clip.mp4"), 100, &json).unwrap();
+            artifact.first_audio().unwrap().bitrate_bps
+        };
+        assert_eq!(bitrate_of(r#", "bit_rate": "157375""#), Some(157_375));
+        // Matroska streams usually carry none.
+        assert_eq!(bitrate_of(""), None);
+        assert_eq!(bitrate_of(r#", "bit_rate": "N/A""#), None);
     }
 
     #[test]

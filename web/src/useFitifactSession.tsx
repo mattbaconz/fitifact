@@ -349,7 +349,11 @@ export function useFitifactSession() {
   }, [client, desktop]);
   const [seed] = useState(sessionFromLastTarget);
   // A ?for= link picks the destination for the first matching file only; later choices win.
-  const linkedFamilyRef = useRef(familyFromQuery(window.location.search));
+  // A destination page (<html data-for="discord">) links the same way.
+  const linkedFamilyRef = useRef(
+    familyFromQuery(window.location.search) ??
+      familyFromQuery(`for=${document.documentElement.dataset.for ?? ""}`),
+  );
   const [requirements, setRequirementsState] = useState(seed.requirements);
   // The text behind the target being confirmed. Plans persist it, not the
   // requirements their render captured, so remembered text matches its target.

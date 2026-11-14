@@ -411,6 +411,9 @@ pub struct AudioStream {
     pub codec: Option<AudioCodec>,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
+    /// The stream's average bitrate, when the container or the probe reports one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bitrate_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -575,6 +578,7 @@ impl Artifact {
                         codec: Some(codec),
                         channels: Some(2),
                         sample_rate: Some(48_000),
+                        bitrate_bps: None,
                     },
                 },
             });
@@ -611,6 +615,7 @@ impl Artifact {
                         codec: Some(codec),
                         channels: Some(2),
                         sample_rate: Some(44_100),
+                        bitrate_bps: None,
                     },
                 },
             }],

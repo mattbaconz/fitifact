@@ -7,6 +7,7 @@ $manifest = Join-Path $media "SHA256SUMS"
 $expectedNames = @(
     "compatible-h264-aac.mp4",
     "corrupt-truncated.mp4",
+    "framerate-h264-aac.mp4",
     "ladder-h264-aac.mp4",
     "mismatch-hevc-aac.mp4",
     "refusal-hdr10-hevc-aac.mp4",
@@ -32,7 +33,7 @@ $actualNames = @(Get-ChildItem -LiteralPath $media -File | Where-Object {
     $_.Extension -in @(".mp4", ".mov", ".mkv", ".webm")
 } | ForEach-Object Name | Sort-Object)
 if (Compare-Object ($expectedNames | Sort-Object) $actualNames) {
-    throw "Fixture directory does not contain exactly the nine canonical media binaries"
+    throw "Fixture directory does not contain exactly the ten canonical media binaries"
 }
 
 foreach ($name in $expectedNames) {

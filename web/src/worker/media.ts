@@ -70,7 +70,7 @@ export async function probe(file: File) {
     let audio = 0;
     const tracks = [];
     for (const type of census.tracks) {
-      if (type === "video") tracks.push(await videoFacts(videos[video++]));
+      if (type === "video") tracks.push(await videoFacts(videos[video++], census.container === "isobmff"));
       else if (type === "audio") tracks.push(await audioFacts(audios[audio++]));
       else tracks.push({ type });
     }
@@ -95,7 +95,7 @@ export async function probe(file: File) {
   }
 }
 
-async function videoFacts(track: InputVideoTrack | undefined) {
+async function videoFacts(track: InputVideoTrack | undefined, indexed: boolean) {
   if (!track) return { type: "video" };
   const codec = await track.getCodec();
   const config = codec === "avc" ? await track.getDecoderConfig() : null;
@@ -105,6 +105,7 @@ async function videoFacts(track: InputVideoTrack | undefined) {
     codec,
     width: await track.getCodedWidth(),
     height: await track.getCodedHeight(),
+    frame_rate: await frameRate(track, indexed),
     avcc: config?.description ? Array.from(bytesOf(config.description)) : null,
     color: {
       primaries: color.primaries ?? null,
@@ -115,6 +116,35 @@ async function videoFacts(track: InputVideoTrack | undefined) {
   };
 }
 
+/** How many packets stand for a track when counting them all would mean reading the whole file. */
+const SAMPLED_PACKETS = 120;
+
+/**
+ * Average frames per second; `null` when it can't be told. MP4 and MOV list every frame in their
+ * index, so the whole track is counted, as ffprobe does.
+ */
+// ponytail: MKV and WebM have no such index, so only the first packets are timed. A variable-rate
+// recording that starts on a still screen reads slower than it is; sample later windows if such
+// files show up.
+async function frameRate(track: InputVideoTrack, indexed: boolean): Promise<number | null> {
+  try {
+    const { averagePacketRate } = await track.computePacketStats(indexed ? undefined : SAMPLED_PACKETS);
+    return Number.isFinite(averagePacketRate) && averagePacketRate > 0 ? averagePacketRate : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Average bits per second of a soundtrack, from its first packets; `null` when it can't be told. */
+async function soundBitrate(track: InputAudioTrack): Promise<number | null> {
+  try {
+    const { averageBitrate } = await track.computePacketStats(SAMPLED_PACKETS);
+    return Number.isFinite(averageBitrate) && averageBitrate > 0 ? averageBitrate : null;
+  } catch {
+    return null;
+  }
+}
+
 async function audioFacts(track: InputAudioTrack | undefined) {
   if (!track) return { type: "audio" };
   return {
@@ -122,6 +152,7 @@ async function audioFacts(track: InputAudioTrack | undefined) {
     codec: await track.getCodec(),
     channels: await track.getNumberOfChannels(),
     sample_rate: await track.getSampleRate(),
+    bitrate: await soundBitrate(track),
   };
 }
 
@@ -214,7 +245,7 @@ const ENCODE_IDLE_MS = 30_000;
  * `null` when there is no such encoder or the trial doesn't finish.
  */
 async function trialSample(file: Blob, request: MeasureRequest): Promise<number[] | null> {
-  const { width, height, bitrate } = request.video;
+  const { width, height, bitrate, frame_rate: frameRate } = request.video;
   if (!(await supported(() => canEncodeVideo("avc", { width, height, bitrate })))) return null;
   const input = open(file);
   try {
@@ -223,7 +254,7 @@ async function trialSample(file: Blob, request: MeasureRequest): Promise<number[
     const conversion = await plannedEncode(
       input,
       target,
-      { width, height, bitrate, audio: request.audio ?? "copy" },
+      { width, height, frameRate, bitrate, audio: request.audio ?? "copy" },
       { start, end: start + TRIAL_SECONDS },
     );
     if (!conversion.isValid || conversion.discardedTracks.length) return null;
@@ -318,11 +349,11 @@ async function encodeOnce(
   bitrate: number,
   onProgress: (fraction: number) => void,
 ): Promise<ArrayBuffer> {
-  const { width, height, audio } = execution;
+  const { width, height, audio, frame_rate: frameRate } = execution;
   const input = open(file);
   try {
     const target = new BufferTarget();
-    const conversion = await plannedEncode(input, target, { width, height, bitrate, audio });
+    const conversion = await plannedEncode(input, target, { width, height, frameRate, bitrate, audio });
     if (!conversion.isValid || conversion.discardedTracks.length) {
       throw new MediaFailure(
         "NO_VALID_PLAN",
@@ -342,11 +373,20 @@ async function encodeOnce(
   }
 }
 
-/** The engine's H.264 encode as a conversion: its exact size and bitrate, AAC copied or encoded. */
+/**
+ * The engine's H.264 encode as a conversion: its exact size, frame rate, and bitrate, AAC copied
+ * or encoded.
+ */
 function plannedEncode(
   input: Input,
   target: BufferTarget,
-  { width, height, bitrate, audio }: { width: number; height: number; bitrate: number; audio: TranscodeExecution["audio"] },
+  {
+    width,
+    height,
+    frameRate,
+    bitrate,
+    audio,
+  }: { width: number; height: number; frameRate?: number | null; bitrate: number; audio: TranscodeExecution["audio"] },
   trim?: { start: number; end: number },
 ) {
   return Conversion.init({
@@ -357,6 +397,7 @@ function plannedEncode(
       width,
       height,
       fit: "fill",
+      frameRate: frameRate ?? undefined,
       quality: new Quality({ bitrate }),
       forceTranscode: true,
       process: (sample) => toBt709(sample, width, height),

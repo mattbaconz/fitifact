@@ -1,6 +1,6 @@
 # Synthetic media fixtures
 
-These nine small binaries are tracked canonical test inputs. They contain only
+These ten small binaries are tracked canonical test inputs. They contain only
 FFmpeg `lavfi` test patterns, generated sine audio, and (for the corrupt case)
 the first 24 bytes of another synthetic fixture. They contain no user or
 copyrighted media.
@@ -15,6 +15,7 @@ copyrighted media.
 | `unsupported-extra-video.mp4` | Two-video-stream topology that v0.1 refuses |
 | `refusal-hdr10-hevc-aac.mp4` | BT.2020/PQ 10-bit HEVC input that v0.1 refuses |
 | `ladder-h264-aac.mp4` | Noisy 320x240 H.264/AAC that only the size-fitting bitrate ladder brings under a small byte limit |
+| `framerate-h264-aac.mp4` | Smooth, slowly moving 640x360 H.264 at 60 fps with about 145 kbit/s AAC, which fits a small byte limit only at 30 fps with smaller sound |
 | `transcode-vp9-opus.webm` | VP9/Opus WebM that needs H.264 video and AAC audio encoded |
 
 ## Provenance
@@ -25,7 +26,7 @@ Windows using:
 
 - `ffmpeg version 8.1.1-full_build-www.gyan.dev`
 - `ffprobe version 8.1.1-full_build-www.gyan.dev`
-- FFmpeg `lavfi` sources `testsrc2`, `sine`, and `color`
+- FFmpeg `lavfi` sources `testsrc2`, `sine`, and `color`, and the `geq` filter
 - the FFmpeg `libx264`, `libx265`, and native `aac` encoders
 
 [`SHA256SUMS`](SHA256SUMS) records the tracked bytes. A byte-for-byte second
@@ -35,6 +36,10 @@ generation with the same provider build produced the same six hashes.
 same hash. `ladder-h264-aac.mp4` and `transcode-vp9-opus.webm` were added on
 2026-10-19 with the same FFmpeg build (also using the `noise` filter and the
 `libvpx-vp9` and `libopus` encoders); two generations of each produced the same
+hash. `framerate-h264-aac.mp4` was added on 2026-11-13 with the same FFmpeg
+build. Its picture is a `color` source through the `geq` filter: a smooth,
+slowly moving pattern, because Chromium's H.264 encoder cannot go under about
+9 kbit per frame on `testsrc2` at this size. Two generations produced the same
 hash.
 
 The script prints every exact `ffmpeg` argv invocation before executing it. Its
@@ -55,6 +60,7 @@ ffmpeg -nostdin -hide_banner -loglevel error -n -i fixtures/media/remux-h264-aac
 ffmpeg -nostdin -hide_banner -loglevel error -n -f lavfi -i testsrc2=size=160x120:rate=10:duration=0.6 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.6 -f lavfi -i color=c=blue:size=32x32:rate=10:duration=0.6 -map 0:v:0 -map 1:a:0 -map 2:v:0 -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z -fflags +bitexact -threads 1 -c:v libx264 -pix_fmt yuv420p -x264-params threads=1:lookahead_threads=1:sliced_threads=0 -c:a aac -b:a 48k -movflags +faststart fixtures/media/unsupported-extra-video.mp4
 ffmpeg -nostdin -hide_banner -loglevel error -n -f lavfi -i testsrc2=size=160x120:rate=10:duration=0.6 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.6 -map 0:v:0 -map 1:a:0 -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z -fflags +bitexact -flags:v +bitexact -flags:a +bitexact -threads 1 -c:a aac -b:a 48k -c:v libx265 -pix_fmt yuv420p10le -tag:v hvc1 -x265-params pools=none:frame-threads=1:wpp=0:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:range=limited -color_range tv -colorspace bt2020nc -color_trc smpte2084 -color_primaries bt2020 -movflags +faststart fixtures/media/refusal-hdr10-hevc-aac.mp4
 ffmpeg -nostdin -hide_banner -loglevel error -n -f lavfi -i testsrc2=size=320x240:rate=10:duration=1 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=1 -map 0:v:0 -map 1:a:0 -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z -fflags +bitexact -flags:v +bitexact -flags:a +bitexact -threads 1 -c:a aac -b:a 48k -vf noise=alls=12:allf=t:all_seed=7 -c:v libx264 -pix_fmt yuv420p -x264-params threads=1:lookahead_threads=1:sliced_threads=0 -b:v 480k -maxrate 480k -bufsize 480k -color_range tv -colorspace bt709 -color_trc bt709 -color_primaries bt709 -movflags +faststart fixtures/media/ladder-h264-aac.mp4
+ffmpeg -nostdin -hide_banner -loglevel error -n -f lavfi -i color=c=black:size=640x360:rate=60:duration=1,format=rgb24,geq=r='127+120*sin(2*PI*(X/W+T/10))':g='127+120*sin(2*PI*(Y/H+T/20))':b='127+120*cos(2*PI*((X+Y)/(W+H)-T/10))' -f lavfi -i sine=frequency=440:sample_rate=48000:duration=1 -map 0:v:0 -map 1:a:0 -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z -fflags +bitexact -flags:v +bitexact -flags:a +bitexact -threads 1 -c:a aac -b:a 160k -c:v libx264 -pix_fmt yuv420p -x264-params threads=1:lookahead_threads=1:sliced_threads=0 -b:v 400k -maxrate 400k -bufsize 400k -color_range tv -colorspace bt709 -color_trc bt709 -color_primaries bt709 -movflags +faststart fixtures/media/framerate-h264-aac.mp4
 ffmpeg -nostdin -hide_banner -loglevel error -n -f lavfi -i testsrc2=size=160x120:rate=10:duration=0.6 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.6 -map 0:v:0 -map 1:a:0 -map_metadata -1 -metadata creation_time=1970-01-01T00:00:00Z -fflags +bitexact -flags:v +bitexact -flags:a +bitexact -threads 1 -c:a libopus -b:a 48k -c:v libvpx-vp9 -pix_fmt yuv420p -row-mt 0 -color_range tv -colorspace bt709 -color_trc bt709 -color_primaries bt709 fixtures/media/transcode-vp9-opus.webm
 ```
 
@@ -68,7 +74,7 @@ powershell -NoProfile -File scripts/generate-fixtures.ps1 -Force
 ```
 
 Without `-Force`, generation refuses existing outputs. With `-Force`, the
-script removes only the nine known fixture paths and still passes FFmpeg `-n`,
+script removes only the ten known fixture paths and still passes FFmpeg `-n`,
 so FFmpeg itself never clobbers an output. Missing encoders and unsupported
 10-bit encoding fail the run with a clear error; fixtures are never silently
 skipped.

@@ -128,6 +128,7 @@ fn refuses_additional_or_non_av_stream_topologies() {
                 codec: Some(AudioCodec::Aac),
                 channels: Some(2),
                 sample_rate: Some(48_000),
+                bitrate_bps: None,
             },
         },
         StreamDetails::Subtitle {
@@ -342,6 +343,141 @@ fn refuses_resize_and_size_fitting() {
         blocking(&artifact, &size),
         vec![BlockingCode::SizeFittingUnsupported]
     );
+}
+
+/// A 1080p60 H.264 and AAC recording of this length and size, as OBS writes one.
+fn recording(duration_ms: u64, bytes: u64) -> Artifact {
+    let mut artifact = Artifact::media(
+        Container::Mp4,
+        VideoCodec::H264,
+        Some(AudioCodec::Aac),
+        bytes,
+    );
+    artifact.duration_ms = Some(duration_ms);
+    artifact.first_video_mut().unwrap().frame_rate = fitifact::artifact::Rational::new(60, 1);
+    artifact
+}
+
+fn twenty_megabytes() -> fitifact::ConstraintSet {
+    compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        video_codec: Some(vec!["h264".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(20_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap()
+}
+
+#[test]
+fn a_long_recording_gives_up_sound_frame_rate_and_size_before_the_picture_starves() {
+    // 414.4 s and 138 MB into 20 MB: this plan once kept 1080p60 at 187 kb/s and came out grey.
+    let outcome = plan(
+        &recording(414_400, 137_961_438),
+        &twenty_megabytes(),
+        &default_catalog(),
+    );
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeVideo);
+    assert_eq!(
+        step.target.frame_rate,
+        fitifact::artifact::Rational::new(60, 2)
+    );
+    assert_eq!(step.target.audio_bitrate_bps, Some(96_000));
+    assert_eq!(step.target.audio_codec, Some(AudioCodec::Aac));
+    let (width, height) = (step.target.width.unwrap(), step.target.height.unwrap());
+    assert!(width < 1920 && height < 1080, "{width}x{height}");
+    for lost in [
+        PreservationClaim::AudioStreamCopied,
+        PreservationClaim::VideoDimensions,
+    ] {
+        assert!(!step.preservation.contains(&lost), "{lost}");
+    }
+    // 20 MB over 414.4 s, less the container margin and the 96 kb/s sound.
+    let budget = (20_000_000.0 * 8.0 / 414.4 * 0.9) as u64 - 96_000;
+    let floor = step
+        .target
+        .video_floor_bps
+        .expect("a size fit names its floor");
+    assert!(budget >= floor, "{budget} under {floor}");
+    assert!(floor > 129_600, "the floor that let the picture go grey");
+    let warnings = &outcome.plan().unwrap().warnings;
+    for said in [
+        format!("Resized to {width}x{height} so the file can fit."),
+        "Frame rate lowered to 30 fps so the file can fit.".into(),
+        "Sound re-encoded at 96 kbit/s to leave room for the picture.".into(),
+    ] {
+        assert!(warnings.contains(&said), "{said} missing from {warnings:?}");
+    }
+}
+
+#[test]
+fn a_short_oversized_recording_keeps_its_picture_frame_rate_and_sound() {
+    let outcome = plan(
+        &recording(30_000, 60_000_000),
+        &twenty_megabytes(),
+        &default_catalog(),
+    );
+    let step = &outcome.steps()[0];
+    assert_eq!(
+        (step.target.width, step.target.height),
+        (Some(1920), Some(1080))
+    );
+    assert_eq!(step.target.frame_rate, None);
+    assert_eq!(step.target.audio_bitrate_bps, None);
+    assert_eq!(step.target.audio_codec, None);
+    for kept in [
+        PreservationClaim::AudioStreamCopied,
+        PreservationClaim::VideoDimensions,
+    ] {
+        assert!(step.preservation.contains(&kept), "{kept}");
+    }
+    assert!(outcome.plan().unwrap().warnings.is_empty());
+}
+
+#[test]
+fn a_recording_too_long_for_the_limit_is_refused_instead_of_starved() {
+    // Half an hour into 20 MB leaves 80 kb/s for picture and sound together.
+    let outcome = plan(
+        &recording(1_800_000, 600_000_000),
+        &twenty_megabytes(),
+        &default_catalog(),
+    );
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::SizeFittingUnsupported]
+    );
+    assert!(outcome.blocking()[0].message.contains("quality floor"));
+    assert_eq!(outcome.blocking()[0].constraint_ids, ["max-bytes"]);
+}
+
+#[test]
+fn a_size_fit_plan_carries_its_floor_and_stays_provider_neutral() {
+    let outcome = plan(
+        &recording(414_400, 137_961_438),
+        &twenty_megabytes(),
+        &default_catalog(),
+    );
+    let target = &serde_json::to_value(&outcome).unwrap()["plan"]["steps"][0]["target"];
+    assert_eq!(
+        target["frame_rate"],
+        serde_json::json!({ "numerator": 60, "denominator": 2 })
+    );
+    assert_eq!(target["audio_bitrate_bps"], 96_000);
+    assert!(target["video_floor_bps"].is_u64());
+
+    // A plan with no size limit has none of the three.
+    let hevc = Artifact::media(
+        Container::Mp4,
+        VideoCodec::Hevc,
+        Some(AudioCodec::Aac),
+        1000,
+    );
+    let outcome = plan(&hevc, &media_h264_mp4_aac(), &default_catalog());
+    let target = &serde_json::to_value(&outcome).unwrap()["plan"]["steps"][0]["target"];
+    for absent in ["frame_rate", "audio_bitrate_bps", "video_floor_bps"] {
+        assert!(target.get(absent).is_none(), "{absent}");
+    }
 }
 
 #[test]

@@ -54,3 +54,32 @@ export async function holdAdaptation(page: Page) {
     };
   });
 }
+
+/**
+ * Records the path of every request, including the worker's: WebKit reports a worker's module
+ * import as "xhr" rather than "script", so the type is not filtered.
+ */
+export function requestLog(page: Page) {
+  const paths: string[] = [];
+  page.on("request", (request) => paths.push(new URL(request.url()).pathname));
+  return paths;
+}
+
+export const videoTools = (paths: string[]) => paths.some((url) => /\/assets\/media-[\w-]+\.js$/.test(url));
+
+/** Waits until no request, worker requests included, has been open for a second. */
+export function whenQuiet(page: Page) {
+  let open = 0;
+  let last = Date.now();
+  page.on("request", () => {
+    open += 1;
+    last = Date.now();
+  });
+  const settle = () => {
+    open -= 1;
+    last = Date.now();
+  };
+  page.on("requestfinished", settle);
+  page.on("requestfailed", settle);
+  return () => expect.poll(() => open <= 0 && Date.now() - last > 1000, { timeout: 30_000 }).toBe(true);
+}

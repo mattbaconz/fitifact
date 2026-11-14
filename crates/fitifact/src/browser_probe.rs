@@ -36,6 +36,8 @@ enum BrowserTrack {
         codec: Option<String>,
         width: Option<u32>,
         height: Option<u32>,
+        /// Average frames per second, from the timing of the track's first packets.
+        frame_rate: Option<f64>,
         /// AVCDecoderConfigurationRecord bytes for H.264.
         avcc: Option<Vec<u8>>,
         /// Container-level color, in WebCodecs names.
@@ -45,6 +47,9 @@ enum BrowserTrack {
         codec: Option<String>,
         channels: Option<u32>,
         sample_rate: Option<u32>,
+        /// Average bits per second, from the size and timing of the track's first packets.
+        #[serde(default)]
+        bitrate: Option<f64>,
     },
     Subtitle,
     Data,
@@ -117,6 +122,7 @@ fn ffprobe_stream(index: usize, track: &BrowserTrack) -> Value {
             codec,
             width,
             height,
+            frame_rate,
             avcc,
             color,
         } => {
@@ -124,6 +130,13 @@ fn ffprobe_stream(index: usize, track: &BrowserTrack) -> Value {
             put("codec_name", codec.as_ref().map(|codec| json!(codec)));
             put("width", width.map(|value| json!(value)));
             put("height", height.map(|value| json!(value)));
+            // ffprobe's rational form, to the thousandth of a frame.
+            put(
+                "avg_frame_rate",
+                frame_rate
+                    .filter(|fps| fps.is_finite() && (0.001..=1000.0).contains(fps))
+                    .map(|fps| json!(format!("{}/1000", (fps * 1000.0).round() as u32))),
+            );
             let picture = Picture::new(
                 avcc.as_deref().and_then(first_sps).and_then(parse_sps),
                 color.as_ref().unwrap_or(&BrowserColor::default()),
@@ -139,11 +152,18 @@ fn ffprobe_stream(index: usize, track: &BrowserTrack) -> Value {
             codec,
             channels,
             sample_rate,
+            bitrate,
         } => {
             put("codec_type", Some(json!("audio")));
             put("codec_name", codec.as_ref().map(|codec| json!(codec)));
             put("channels", channels.map(|value| json!(value)));
             put("sample_rate", sample_rate.map(|value| json!(value)));
+            put(
+                "bit_rate",
+                bitrate
+                    .filter(|bps| bps.is_finite() && (1.0..=1.0e9).contains(bps))
+                    .map(|bps| json!(bps.round() as u64)),
+            );
         }
         BrowserTrack::Subtitle => put("codec_type", Some(json!("subtitle"))),
         BrowserTrack::Data => put("codec_type", Some(json!("data"))),
@@ -661,6 +681,54 @@ mod tests {
         assert_eq!(video.pixel_format.as_deref(), Some("yuv420p"));
         assert_eq!(video.bit_depth, Some(8));
         assert_eq!(artifact.first_audio().unwrap().sample_rate, Some(48000));
+        // A probe from before the worker measured the soundtrack's bitrate still reads.
+        assert_eq!(artifact.first_audio().unwrap().bitrate_bps, None);
+    }
+
+    #[test]
+    fn the_measured_sound_bitrate_reaches_the_artifact_and_nonsense_does_not() {
+        let bitrate_of = |bitrate: Value| {
+            let json = probe(
+                "isobmff",
+                Some("isom"),
+                json!([
+                    video(&fixture_avcc("remux-h264-aac.mov"), json!({})),
+                    { "type": "audio", "codec": "aac", "channels": 2, "sample_rate": 48000,
+                      "bitrate": bitrate }
+                ]),
+            );
+            let artifact = artifact_from_browser_probe(&json).unwrap();
+            artifact.first_audio().unwrap().bitrate_bps
+        };
+        assert_eq!(bitrate_of(json!(157_374.6)), Some(157_375));
+        for unknown in [Value::Null, json!(0.0), json!(-1.0), json!(1.0e12)] {
+            assert_eq!(bitrate_of(unknown.clone()), None, "{unknown}");
+        }
+    }
+
+    #[test]
+    fn the_measured_frame_rate_reaches_the_artifact_and_nonsense_does_not() {
+        let rate_of = |frame_rate: Value| {
+            let mut track = video(&fixture_avcc("remux-h264-aac.mov"), json!({}));
+            track["frame_rate"] = frame_rate;
+            let json = probe("isobmff", Some("isom"), json!([track]));
+            let artifact = artifact_from_browser_probe(&json).unwrap();
+            artifact.first_video().unwrap().frame_rate
+        };
+        let rational = crate::artifact::Rational::new;
+        assert_eq!(rate_of(json!(60.0)), rational(60_000, 1000));
+        assert_eq!(rate_of(json!(59.94006)), rational(59_940, 1000));
+        for unknown in [Value::Null, json!(0.0), json!(-30.0), json!(1.0e9)] {
+            assert_eq!(rate_of(unknown.clone()), None, "{unknown}");
+        }
+        // A probe from before the worker measured frame rate still reads.
+        let json = probe(
+            "isobmff",
+            Some("isom"),
+            json!([video(&fixture_avcc("remux-h264-aac.mov"), json!({}))]),
+        );
+        let artifact = artifact_from_browser_probe(&json).unwrap();
+        assert_eq!(artifact.first_video().unwrap().frame_rate, None);
     }
 
     #[test]

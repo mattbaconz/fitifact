@@ -7,6 +7,10 @@ use crate::artifact::{Artifact, AudioCodec, Container, Family, StreamType, Video
 use crate::capability::TransformId;
 use crate::constraints::Field;
 use crate::error::{Error, ErrorCode, Result};
+use crate::media_fit::{
+    COMPACT_AUDIO_BPS, copied_audio_bps, floor_video_bitrate_bps, frames_per_second,
+    reduced_frame_rate,
+};
 use crate::plan::{ExpectedFact, ExpectedValue, PLANNER_VERSION, Plan, PreservationClaim};
 
 pub const MAX_PROCESS_STDOUT_BYTES: usize = 1024 * 1024;
@@ -297,6 +301,30 @@ pub fn validate_plan_for_execution(plan: &Plan, artifact: &Artifact) -> Result<(
             if step.target.max_bytes.is_some() && step.target.duration_ms != artifact.duration_ms {
                 return Err(forged_plan());
             }
+            // The floor is the engine's for the planned picture, never a number the plan picked.
+            if let (Some(_), Some(width), Some(height)) =
+                (step.target.max_bytes, step.target.width, step.target.height)
+            {
+                let fps = frames_per_second(step.target.frame_rate.or(video.frame_rate));
+                if step.target.video_floor_bps != Some(floor_video_bitrate_bps(width, height, fps))
+                {
+                    return Err(forged_plan());
+                }
+            }
+            // The frame rate drops only to the engine's own reduced rate, and copied sound counts
+            // only at the bitrate the probe measured.
+            if step.target.frame_rate.is_some()
+                && (step.target.max_bytes.is_none()
+                    || step.target.frame_rate != reduced_frame_rate(video.frame_rate))
+            {
+                return Err(forged_plan());
+            }
+            if step.target.audio_codec.is_none()
+                && step.target.audio_bitrate_bps.is_some()
+                && step.target.audio_bitrate_bps != copied_audio_bps(artifact)
+            {
+                return Err(forged_plan());
+            }
             if step
                 .preservation
                 .contains(&PreservationClaim::AudioStreamCopied)
@@ -377,9 +405,20 @@ pub(crate) fn validate_plan_shape(plan: &Plan) -> Result<()> {
         TransformId::TranscodeVideo => {
             step.target.container == Some(Container::Mp4)
                 && step.target.video_codec == Some(VideoCodec::H264)
-                && (step.target.max_bytes.is_none() || step.target.duration_ms.is_some())
+                && (step.target.max_bytes.is_none()
+                    || (step.target.duration_ms.is_some() && step.target.video_floor_bps.is_some()))
                 && step.target.width.is_some()
                 && step.target.height.is_some()
+                && step
+                    .target
+                    .frame_rate
+                    .is_none_or(|rate| rate.numerator > 0 && rate.denominator > 0)
+                // Encoded sound uses the engine's compact rate; copied sound states its own.
+                && step.target.audio_bitrate_bps.is_none_or(|bitrate| {
+                    step.target.max_bytes.is_some()
+                        && bitrate > 0
+                        && (step.target.audio_codec.is_none() || bitrate == COMPACT_AUDIO_BPS)
+                })
                 && transcode_expected_shape(&step.expected)
         }
         TransformId::EncodeJpeg => {
@@ -835,6 +874,81 @@ mod tests {
         unknown.container = Some(Container::Unknown("ambiguous".into()));
         let error = validate_plan_for_execution(&plan, &unknown).unwrap_err();
         assert_eq!(error.code, ErrorCode::SecurityBlocked);
+    }
+
+    #[test]
+    fn runtime_rejects_a_lowered_quality_floor_or_an_off_ladder_sound_bitrate() {
+        // 414.4 s of 1080p60 into 20 MB: the plan lowers the frame rate and shrinks the sound.
+        let mut source = crate::artifact::Artifact::media(
+            Container::Mp4,
+            crate::artifact::VideoCodec::H264,
+            Some(crate::artifact::AudioCodec::Aac),
+            137_961_438,
+        );
+        source.duration_ms = Some(414_400);
+        source.first_video_mut().unwrap().frame_rate = crate::artifact::Rational::new(60, 1);
+        let target = crate::constraints::compile(crate::constraints::ConstraintInput {
+            max_bytes: Some(20_000_000),
+            ..crate::constraints::ConstraintInput::default()
+        })
+        .unwrap();
+        let plan = crate::plan::plan(&source, &target, &crate::capability::default_catalog())
+            .plan()
+            .expect("a smaller picture fits")
+            .clone();
+        validate_plan_for_execution(&plan, &source).unwrap();
+
+        let forged = |change: fn(&mut StepTarget)| {
+            let mut plan = plan.clone();
+            change(&mut plan.steps[0].target);
+            validate_plan_for_execution(&plan, &source)
+                .unwrap_err()
+                .code
+        };
+        assert_eq!(
+            forged(|target| target.video_floor_bps = Some(80_000)),
+            ErrorCode::SecurityBlocked
+        );
+        assert_eq!(
+            forged(|target| target.video_floor_bps = None),
+            ErrorCode::SecurityBlocked
+        );
+        // Keeping 60 fps while claiming the 30 fps floor is the old bug by another route.
+        assert_eq!(
+            forged(|target| target.frame_rate = None),
+            ErrorCode::SecurityBlocked
+        );
+        assert_eq!(
+            forged(|target| target.audio_bitrate_bps = Some(1)),
+            ErrorCode::SecurityBlocked
+        );
+        // A made-up frame rate that brings its own matching floor is still not the engine's plan.
+        assert_eq!(
+            forged(|target| {
+                target.frame_rate = crate::artifact::Rational::new(1, 1);
+                target.video_floor_bps = Some(80_000);
+            }),
+            ErrorCode::SecurityBlocked
+        );
+
+        // 100 s: the sound is copied, and the plan counts it at the 128 kb/s the probe measured.
+        source.duration_ms = Some(100_000);
+        source.first_audio_mut().unwrap().bitrate_bps = Some(128_000);
+        let plan = crate::plan::plan(&source, &target, &crate::capability::default_catalog())
+            .plan()
+            .expect("30 fps fits beside the sound")
+            .clone();
+        assert_eq!(plan.steps[0].target.audio_bitrate_bps, Some(128_000));
+        assert_eq!(plan.steps[0].target.audio_codec, None);
+        validate_plan_for_execution(&plan, &source).unwrap();
+        let mut lighter = plan.clone();
+        lighter.steps[0].target.audio_bitrate_bps = Some(1);
+        assert_eq!(
+            validate_plan_for_execution(&lighter, &source)
+                .unwrap_err()
+                .code,
+            ErrorCode::SecurityBlocked
+        );
     }
 
     #[test]

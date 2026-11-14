@@ -2,20 +2,11 @@ import { expect, test } from "@playwright/test";
 import type { Download, Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { requestLog, videoTools, whenQuiet } from "./support";
 
 const media = path.resolve("../fixtures/media");
 /** Every refusal of a browser encode ends by pointing to the desktop app. */
 const DESKTOP_POINTER = /Open it in the Fitifact desktop app\.$/;
-
-/**
- * Records the path of every request, including the worker's: WebKit reports a worker's module
- * import as "xhr" rather than "script", so the type is not filtered.
- */
-function requestLog(page: Page) {
-  const paths: string[] = [];
-  page.on("request", (request) => paths.push(new URL(request.url()).pathname));
-  return paths;
-}
 
 async function dropVideo(page: Page, name: string, container: RegExp) {
   await page.locator("input[type=file]").setInputFiles(path.join(media, name));
@@ -135,6 +126,37 @@ test("H.264 over its byte limit runs the bitrate ladder and validates in Chromiu
   expect(output.includes("mp4a")).toBe(true);
 });
 
+/** How many samples each track of an MP4 holds, read from its `stsz` boxes. */
+function sampleCounts(mp4: Buffer) {
+  const counts: number[] = [];
+  for (let at = mp4.indexOf("stsz"); at !== -1; at = mp4.indexOf("stsz", at + 4)) counts.push(mp4.readUInt32BE(at + 12));
+  return counts;
+}
+
+test("60 fps H.264 over its byte limit is encoded at 30 fps with smaller sound in Chromium", async ({ page, browserName }) => {
+  test.slow();
+  await page.goto("/");
+  // One second of 640x360 with 145 kbit/s sound. Under this limit the picture's floor holds only
+  // at 30 fps, and only beside sound encoded smaller. Chromium lands near 35 KB.
+  const limit = 37_000;
+  await customTarget(page, "framerate-h264-aac.mp4", /MP4/, [
+    ...H264_AAC_MP4,
+    { id: "bytes", field: "file.bytes", op: "lte", value: limit },
+  ]);
+  const outcome = await planOutcome(page);
+  if (mustEncode(browserName)) expect(outcome).toBe("ready");
+  if (outcome === "refused") return;
+  const notes = page.locator(".output-notes");
+  await expect(notes).toContainText("Frame rate lowered to 30 fps so the file can fit.");
+  await expect(notes).toContainText("Sound re-encoded at 96 kbit/s to leave room for the picture.");
+  const output = await adaptAndVerify(page);
+  expect(output.byteLength).toBeLessThanOrEqual(limit);
+  expect(output.includes("mp4a")).toBe(true);
+  const samples = sampleCounts(output);
+  expect(samples.some((count) => count >= 29 && count <= 31)).toBe(true); // the picture, at 30 fps
+  expect(samples).not.toContain(60);
+});
+
 test("H.264 over a width limit is scaled to fit and validates in Chromium", async ({ page, browserName }) => {
   test.slow();
   await page.goto("/");
@@ -175,30 +197,11 @@ test("a video stream the browser would drop is refused, not lost", async ({ page
   await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
 });
 
-const videoTools = (paths: string[]) => paths.some((url) => /\/assets\/media-[\w-]+\.js$/.test(url));
-
 /** Tells the page the visitor asked to save data, which skips loading the tools ahead of a file. */
 async function saveData(page: Page) {
   await page.addInitScript(() =>
     Object.defineProperty(Navigator.prototype, "connection", { configurable: true, get: () => ({ saveData: true }) }),
   );
-}
-
-/** Waits until no request, worker requests included, has been open for a second. */
-function whenQuiet(page: Page) {
-  let open = 0;
-  let last = Date.now();
-  page.on("request", () => {
-    open += 1;
-    last = Date.now();
-  });
-  const settle = () => {
-    open -= 1;
-    last = Date.now();
-  };
-  page.on("requestfinished", settle);
-  page.on("requestfailed", settle);
-  return () => expect.poll(() => open <= 0 && Date.now() - last > 1000, { timeout: 30_000 }).toBe(true);
 }
 
 /** Playwright's WebKit offline mode also blocks reading the chosen file's blob (NotReadableError). */
