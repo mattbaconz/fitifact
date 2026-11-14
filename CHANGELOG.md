@@ -78,6 +78,33 @@ All notable changes to Fitifact are documented here.
   pick a destination that allows a larger file, instead of being encoded under
   the floor. With sound, a 1080p recording aimed at 20 MB is refused beyond
   about 13.6 minutes.
+- An encode made to fit a size limit is now re-checked for its frame rate,
+  counted from the output's frames when the container counts them. An output
+  with more frames per second than the plan counted on fails validation
+  instead of passing with fewer bits per frame than the quality floor allows.
+  A rate the plan states must be met; a rate measured on the source may come
+  out higher only when the picture still got the floor's bits (D-048).
+- CLI video encodes keep each frame's own timing whatever FFmpeg is on PATH.
+  FFmpeg before 7.1 wrote MP4 at a constant rate and repeated frames up to
+  the source's nominal rate, so a variable-rate recording could gain frames
+  the size plan never counted on. The desktop app's bundled FFmpeg was not
+  affected. Video re-encodes now need FFmpeg 5.1 or newer.
+- In the web app, a video's frame rate, frame count, and sound bitrate are
+  measured over the whole track, the same way the output is re-checked.
+  Before, an MKV or WebM frame rate and every sound bitrate came from the
+  first 120 packets, so a recording that opens on a still or silent screen
+  read slower or lighter than it is. Measuring a 138 MB recording takes about
+  a second.
+- A file already under its size limit that still needs re-encoding (HEVC, for
+  example) and is too long for the encode to fit is refused with advice to
+  trim it or pick a destination that allows a larger file, instead of "no
+  proven plan". The web and desktop apps now show this advice, and the advice
+  for a file over its limit, beside the failed checks.
+- An audio file under its size limit that still needs re-encoding (FLAC aimed
+  at AAC, for example) now runs the bitrate ladder against that limit, and is
+  refused up front when even the lowest sound quality can't fit, instead of
+  being encoded once without regard to the limit and possibly failing
+  validation.
 - A file opened while offline, before the tools have loaded, says the device is
   offline instead of "The local image worker stopped unexpectedly", and the
   engine retries its load instead of failing for the rest of the visit.

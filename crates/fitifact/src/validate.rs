@@ -8,6 +8,7 @@ use crate::check::{CheckResult, CompatibilityReport, check};
 use crate::constraints::{ConstraintSet, Field};
 use crate::error::{Error, ErrorCode, Result};
 use crate::inspect::Inspector;
+use crate::media_fit::{floor_video_bitrate_bps, frames_per_second, kept_audio_bps};
 use crate::plan::{ExpectedValue, Plan};
 use crate::runtime::StreamHashes;
 
@@ -203,6 +204,7 @@ pub fn validate_adapted_artifact(
             ));
             if encode {
                 integrity.push(display_aspect_check(source, &artifact));
+                integrity.extend(frame_rate_check(source, plan, &artifact));
             }
         }
         integrity.push(duration_check(source.duration_ms, artifact.duration_ms));
@@ -431,6 +433,75 @@ fn display_aspect_check(source: &Artifact, output: &Artifact) -> ValidationCheck
         expected: describe(expected),
         actual: describe(actual),
     }
+}
+
+/// How far over the plan's frame rate an output may measure: 2%, plus a frame and a half across
+/// the whole clip, because a short clip reads a frame off (30 frames timed over 29/30 s).
+const FRAME_RATE_TOLERANCE: f64 = 0.02;
+const FRAME_RATE_SLACK_FRAMES: f64 = 1.5;
+
+/// A size-fitted encode sets its video floor from the frame rate the plan counted on. An output
+/// with more frames per second than that spreads its bits thinner than the floor allows, however
+/// well the bytes fit. The output's rate is its frame count over the clip's length when the
+/// container counts frames: a rate measured over the video track alone reads high when an encode
+/// shortens a held last frame, though no frame was added. A rate the plan states must be met. A
+/// rate the plan only read from the source may turn out higher when the picture still got the
+/// floor's bits at its real rate. Fewer frames than planned pass: the floor still holds. `None`
+/// when the plan set no floor.
+fn frame_rate_check(source: &Artifact, plan: &Plan, output: &Artifact) -> Option<ValidationCheck> {
+    let target = &plan.steps[0].target;
+    target.video_floor_bps?;
+    let source_rate = source.first_video().and_then(|video| video.frame_rate);
+    let planned = frames_per_second(target.frame_rate.or(source_rate));
+    let video = output.first_video();
+    let seconds = output
+        .duration_ms
+        .filter(|duration| *duration > 0)
+        .map(|duration| duration as f64 / 1000.0);
+    let counted = video
+        .and_then(|video| video.frame_count)
+        .zip(seconds)
+        .map(|(frames, seconds)| (frames, frames as f64 / seconds));
+    let actual = counted.map(|(_, rate)| rate).or_else(|| {
+        video
+            .and_then(|video| video.frame_rate)
+            .filter(|rate| rate.numerator > 0 && rate.denominator > 0)
+            .map(|rate| frames_per_second(Some(rate)))
+    });
+    let status = match (
+        actual,
+        video.and_then(|video| video.width.zip(video.height)),
+    ) {
+        (Some(actual), Some((width, height))) => {
+            let slack = seconds.map_or(0.0, |seconds| FRAME_RATE_SLACK_FRAMES / seconds);
+            let as_planned = actual <= planned * (1.0 + FRAME_RATE_TOLERANCE) + slack;
+            let fed = target.frame_rate.is_none()
+                && seconds.is_some_and(|seconds| {
+                    let sound = kept_audio_bps(output).unwrap_or(0) as f64;
+                    output.byte_length as f64 * 8.0 / seconds - sound
+                        >= floor_video_bitrate_bps(width, height, actual) as f64
+                });
+            if as_planned || fed {
+                ValidationStatus::Pass
+            } else {
+                ValidationStatus::Fail
+            }
+        }
+        _ => ValidationStatus::Unknown,
+    };
+    Some(ValidationCheck {
+        id: "frame_rate".into(),
+        status,
+        expected: format!("at most {planned:.2} frames per second"),
+        actual: match (counted, actual) {
+            (Some((frames, rate)), _) => format!(
+                "{frames} frames over {:.2} s, {rate:.2} per second",
+                seconds.unwrap_or_default()
+            ),
+            (None, Some(rate)) => format!("{rate:.2} frames per second"),
+            (None, None) => "unknown".into(),
+        },
+    })
 }
 
 fn duration_check(expected: Option<u64>, actual: Option<u64>) -> ValidationCheck {
@@ -732,6 +803,139 @@ mod tests {
         let hevc = video_shaped(VideoCodec::Hevc, (1080, 1920), Some((1, 1)), QUARTER_TURN);
         let still_turned = video_shaped(VideoCodec::H264, (1080, 1920), Some((1, 1)), QUARTER_TURN);
         assert_eq!(matrix_row(&hevc, still_turned).1, ValidationStatus::Fail);
+    }
+
+    /// The gap this guards: the floor was a planning rule only, so an encoder that ignored the
+    /// planned frame rate passed with half the bits per frame the plan promised.
+    #[test]
+    fn a_size_fitted_encode_with_more_frames_than_its_floor_counted_on_fails() {
+        let limit = |max_bytes| {
+            crate::constraints::compile(crate::constraints::ConstraintInput {
+                max_bytes: Some(max_bytes),
+                ..crate::constraints::ConstraintInput::default()
+            })
+            .unwrap()
+        };
+        let clip = |duration_ms, bytes, rate: Option<(u32, u32)>| {
+            let mut clip = Artifact::media(
+                Container::Mp4,
+                VideoCodec::H264,
+                Some(AudioCodec::Aac),
+                bytes,
+            );
+            clip.duration_ms = Some(duration_ms);
+            clip.first_video_mut().unwrap().frame_rate =
+                rate.and_then(|(numerator, denominator)| Rational::new(numerator, denominator));
+            clip
+        };
+        // The plan for `source` under `max_bytes`, and an output of `bytes` at the planned size
+        // that reports `rate`, counts `frames`, and states `sound` as its AAC bitrate.
+        let row =
+            |source: &Artifact, max_bytes, bytes, rate, frames: Option<u64>, sound: Option<u64>| {
+                let plan = crate::plan::plan(
+                    source,
+                    &limit(max_bytes),
+                    &crate::capability::default_catalog(),
+                )
+                .plan()
+                .expect("the clip fits")
+                .clone();
+                let target = &plan.steps[0].target;
+                let mut output = clip(source.duration_ms.unwrap(), bytes, rate);
+                let video = output.first_video_mut().unwrap();
+                (video.width, video.height) = (target.width, target.height);
+                video.frame_count = frames;
+                output.first_audio_mut().unwrap().bitrate_bps = sound;
+                frame_rate_check(source, &plan, &output).unwrap().status
+            };
+        let reported = |source: &Artifact, max_bytes, bytes, rate| {
+            row(source, max_bytes, bytes, rate, None, None)
+        };
+
+        // 414.4 s of 1080p60 into 20 MB: the plan halves the frame rate, and says so.
+        let recording = clip(414_400, 137_961_438, Some((60, 1)));
+        let fitted = |rate| reported(&recording, 20_000_000, 17_170_243, rate);
+        assert_eq!(fitted(Some((30, 1))), ValidationStatus::Pass);
+        assert_eq!(fitted(Some((60, 1))), ValidationStatus::Fail);
+        assert_eq!(fitted(Some((15, 1))), ValidationStatus::Pass);
+        assert_eq!(fitted(None), ValidationStatus::Unknown);
+
+        // A stated rate is strict. 60 s of 1080p60 into 21 MB: 60 fps misses the floor even with
+        // 96 kbit/s sound, so the plan states 30. An output at 60 fps with 96 kbit/s sound that
+        // fills the limit would clear the floor at 60 (2.69 against 2.49 Mbit/s), but it is not
+        // the encode that was planned.
+        let sixty = clip(60_000, 60_000_000, Some((60, 1)));
+        let stated = crate::plan::plan(
+            &sixty,
+            &limit(21_000_000),
+            &crate::capability::default_catalog(),
+        );
+        assert_eq!(
+            stated.steps()[0].target.frame_rate,
+            Rational::new(60, 2),
+            "{stated:?}"
+        );
+        assert_eq!(
+            row(
+                &sixty,
+                21_000_000,
+                20_900_000,
+                Some((60, 1)),
+                None,
+                Some(96_000)
+            ),
+            ValidationStatus::Fail
+        );
+        // The tolerance: 2%, plus 1.5 frames over the clip (30.625 per second over 60 s).
+        let counted = |frames| {
+            row(
+                &sixty,
+                21_000_000,
+                20_000_000,
+                Some((30, 1)),
+                Some(frames),
+                None,
+            )
+        };
+        assert_eq!(counted(1_837), ValidationStatus::Pass);
+        assert_eq!(counted(1_838), ValidationStatus::Fail);
+
+        // One second measures a frame off, which is not a higher rate.
+        let short = clip(1_000, 2_000_000, Some((60, 1)));
+        assert_eq!(
+            reported(&short, 37_000, 36_000, Some((31, 1))),
+            ValidationStatus::Pass
+        );
+
+        // A source read as 30 fps that comes out at 60: fine while the picture got the floor's
+        // bits at 60 (4.64 against 2.49 Mbit/s), a failure when it got those of 30 (1.28).
+        let sampled = clip(60_000, 60_000_000, Some((30, 1)));
+        let kept = |max_bytes, bytes| reported(&sampled, max_bytes, bytes, Some((60, 1)));
+        assert_eq!(kept(40_000_000, 36_000_000), ValidationStatus::Pass);
+        assert_eq!(kept(12_000_000, 10_800_000), ValidationStatus::Fail);
+
+        // No readable source rate: the floor assumed 30.
+        let unread = clip(60_000, 60_000_000, None);
+        assert_eq!(
+            reported(&unread, 12_000_000, 10_800_000, Some((60, 1))),
+            ValidationStatus::Fail
+        );
+        assert_eq!(
+            reported(&unread, 12_000_000, 10_800_000, Some((30, 1))),
+            ValidationStatus::Pass
+        );
+
+        // A clip that holds its last frame for 3 of its 6 s, shrunk to 1440x810. FFmpeg's
+        // scaler shortens that last frame, so the track's own rate reads 30, but the 90 frames
+        // over 6 s are the 15 per second the plan counted on.
+        let held = clip(6_000, 6_000_000, Some((15, 1)));
+        let shrunk = |frames| row(&held, 438_941, 249_520, Some((30, 1)), frames, None);
+        assert_eq!(shrunk(Some(90)), ValidationStatus::Pass);
+        assert_eq!(shrunk(None), ValidationStatus::Fail);
+
+        // Without a byte limit there is no floor to hold.
+        let hevc = Artifact::media(Container::Mp4, VideoCodec::Hevc, Some(AudioCodec::Aac), 10);
+        assert!(frame_rate_check(&hevc, &planned(&hevc), &hevc).is_none());
     }
 
     #[test]

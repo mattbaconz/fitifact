@@ -8,7 +8,7 @@ use crate::artifact::{
 };
 use crate::capability::{CapabilityCatalog, TransformId};
 use crate::check::{CheckResult, CompatibilityReport, check};
-use crate::constraints::{ConstraintSet, ConstraintValue, Field};
+use crate::constraints::{ConstraintSet, ConstraintValue, Field, Operator};
 pub use crate::contract::{PLAN_SCHEMA, PlanSchema};
 use crate::image_adapt::ImageAdaptStepTarget;
 use crate::media_fit::{
@@ -424,12 +424,56 @@ pub fn plan(
                 "this video is mirrored or turned by an unusual angle, and re-encoding it is not proven to keep the picture the right way around",
             )])
         }
+        // The file is under its byte limit but needs an encode, and the encode cannot stay under
+        // the limit and above the quality floor.
+        None if limits
+            .max_bytes
+            .is_some_and(|limit| artifact.byte_length <= limit)
+            && plan(artifact, &without_byte_ceiling(constraints), catalog)
+                .plan()
+                .is_some() =>
+        {
+            let mut ids = initial.blocking_ids();
+            ids.extend(byte_ceiling_ids(constraints));
+            cannot(vec![blocking(
+                BlockingCode::SizeFittingUnsupported,
+                ids,
+                if artifact.first_video().is_some() {
+                    "this file is under the size limit, but it has to be re-encoded, and the size limit is below the quality floor: even with a smaller picture, a lower frame rate, and smaller sound, the new video would not stay watchable. Trim it, or pick a destination that allows a larger file"
+                } else {
+                    "this file is under the size limit, but it has to be re-encoded, and even at the lowest sound quality Fitifact allows, the new recording would not fit. Trim it, or pick a destination that allows a larger file"
+                },
+            )])
+        }
         None => cannot(vec![blocking(
             BlockingCode::NoProvenPlan,
             initial.blocking_ids(),
             "the bounded v0.1 capability catalog has no proven plan",
         )]),
     }
+}
+
+fn is_byte_ceiling(constraint: &crate::constraints::Constraint) -> bool {
+    constraint.op == Operator::Lte
+        && matches!(constraint.field, Field::FileBytes | Field::FileBase64Bytes)
+}
+
+fn byte_ceiling_ids(constraints: &ConstraintSet) -> Vec<String> {
+    constraints
+        .hard
+        .iter()
+        .filter(|constraint| is_byte_ceiling(constraint))
+        .map(|constraint| constraint.id.clone())
+        .collect()
+}
+
+/// The same target without its byte ceiling, to tell whether the ceiling alone blocks a plan.
+fn without_byte_ceiling(constraints: &ConstraintSet) -> ConstraintSet {
+    let mut relaxed = constraints.clone();
+    relaxed
+        .hard
+        .retain(|constraint| !is_byte_ceiling(constraint));
+    relaxed
 }
 
 /// The same file as if its picture were stored as shown, to tell whether the display matrix
@@ -990,14 +1034,18 @@ fn instantiate_transcode_audio_only(
     if audio_fail.is_none() && container_fail.is_none() && bytes_fail.is_none() {
         return None;
     }
-    let max_bytes = bytes_fail.and(limits.max_bytes);
-    if bytes_fail.is_some() {
-        let duration = artifact.duration_ms?;
-        let limit = max_bytes?;
-        if !crate::media_fit::can_fit_audio(duration, limit) {
-            return None;
+    // Every encode under a byte ceiling carries it, so the bitrate ladder runs: a 24 kbit/s Opus
+    // file under its limit grows several times over at the default AAC rate.
+    let max_bytes = match (limits.max_bytes, artifact.duration_ms) {
+        (Some(limit), Some(duration)) => {
+            if !crate::media_fit::can_fit_audio(duration, limit) {
+                return None;
+            }
+            Some(limit)
         }
-    }
+        (Some(_), None) if bytes_fail.is_some() => return None,
+        _ => None,
+    };
     let mut reasons = Vec::new();
     if let Some(check) = bytes_fail {
         reasons.push(PlanReason {

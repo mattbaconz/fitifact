@@ -112,6 +112,7 @@ fn refuses_additional_or_non_av_stream_topologies() {
                 width: Some(16),
                 height: Some(16),
                 frame_rate: None,
+                frame_count: None,
                 pixel_format: Some("yuv420p".into()),
                 bit_depth: Some(8),
                 color_range: None,
@@ -449,6 +450,55 @@ fn a_recording_too_long_for_the_limit_is_refused_instead_of_starved() {
     );
     assert!(outcome.blocking()[0].message.contains("quality floor"));
     assert_eq!(outcome.blocking()[0].constraint_ids, ["max-bytes"]);
+}
+
+#[test]
+fn a_file_under_the_limit_whose_encode_cannot_fit_is_told_why() {
+    // Half an hour of HEVC already under 20 MB: only the codec fails, and an H.264 encode of
+    // that length cannot stay under the limit and above the floor. This once read "no proven
+    // plan".
+    let mut artifact = recording(1_800_000, 18_000_000);
+    artifact.first_video_mut().unwrap().codec = Some(VideoCodec::Hevc);
+    let outcome = plan(&artifact, &twenty_megabytes(), &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::SizeFittingUnsupported]
+    );
+    let reason = &outcome.blocking()[0];
+    assert!(reason.message.contains("under the size limit"));
+    assert!(reason.message.contains("quality floor"));
+    // The rule that needs the encode, and the limit that blocks it.
+    assert_eq!(reason.constraint_ids, ["video-codec", "max-bytes"]);
+
+    // The same file a minute long is simply encoded.
+    let mut short = recording(60_000, 18_000_000);
+    short.first_video_mut().unwrap().codec = Some(VideoCodec::Hevc);
+    let outcome = plan(&short, &twenty_megabytes(), &default_catalog());
+    assert_eq!(outcome.steps()[0].operation, TransformId::TranscodeVideo);
+
+    // HDR this FFmpeg can't tone-map, and mirrored too, so no encode runs whatever the limit.
+    // Neither file below may read "under the size limit".
+    let mut stuck = recording(60_000, 18_000_000);
+    stuck.container = Some(Container::Mov);
+    let video = stuck.first_video_mut().unwrap();
+    video.hdr = HdrStatus::Hdr;
+    video.display_matrix = Some(DisplayMatrix {
+        rotation: Some(180),
+        mirrored: true,
+    });
+    // Under the limit, as HEVC: dropping the limit would not make the encode possible.
+    let mut hevc = stuck.clone();
+    hevc.first_video_mut().unwrap().codec = Some(VideoCodec::Hevc);
+    assert_eq!(
+        plan(&hevc, &twenty_megabytes(), &default_catalog()).blocking_codes(),
+        vec![BlockingCode::NoProvenPlan]
+    );
+    // Over the limit: without it a copy would do, but the file is not under the limit.
+    stuck.byte_length = 30_000_000;
+    assert_eq!(
+        plan(&stuck, &twenty_megabytes(), &default_catalog()).blocking_codes(),
+        vec![BlockingCode::NoProvenPlan]
+    );
 }
 
 #[test]
@@ -1058,6 +1108,44 @@ fn audio_only_over_a_byte_ceiling_transcodes_to_aac() {
     assert_eq!(outcome.steps()[0].target.audio_codec, Some(AudioCodec::Aac));
     assert_eq!(outcome.steps()[0].target.container, Some(Container::Mp4));
     assert!(outcome.steps()[0].preservation.is_empty());
+}
+
+#[test]
+fn audio_under_its_limit_that_must_change_carries_the_limit_or_is_refused() {
+    let target = compile(ConstraintInput {
+        container: Some(vec!["mp4".into()]),
+        audio_codec: Some(vec!["aac".into()]),
+        max_bytes: Some(25_000_000),
+        ..ConstraintInput::default()
+    })
+    .unwrap();
+    // 50 minutes of 64 kbit/s Opus, 24 MB. AAC at the default 160 kbit/s would be about 60 MB,
+    // so the encode carries the limit and its bitrate ladder runs. It once carried none.
+    let mut fits = Artifact::audio(Container::Ogg, AudioCodec::Opus, 24_000_000);
+    fits.duration_ms = Some(3_000_000);
+    let outcome = plan(&fits, &target, &default_catalog());
+    let step = &outcome.steps()[0];
+    assert_eq!(step.operation, TransformId::TranscodeAudio);
+    assert_eq!(step.target.max_bytes, Some(25_000_000));
+    assert_eq!(step.target.duration_ms, Some(3_000_000));
+
+    // Two hours of 24 kbit/s Opus, 21.6 MB: even 32 kbit/s AAC would be about 32 MB. Refused
+    // before anything runs, instead of failing validation after a 144 MB encode.
+    let mut long = Artifact::audio(Container::Ogg, AudioCodec::Opus, 21_600_000);
+    long.duration_ms = Some(7_200_000);
+    let outcome = plan(&long, &target, &default_catalog());
+    assert_eq!(
+        outcome.blocking_codes(),
+        vec![BlockingCode::SizeFittingUnsupported]
+    );
+    let reason = &outcome.blocking()[0];
+    assert!(
+        reason.message.contains("under the size limit"),
+        "{}",
+        reason.message
+    );
+    assert!(reason.message.contains("lowest sound quality"));
+    assert!(reason.constraint_ids.iter().any(|id| id == "max-bytes"));
 }
 
 #[test]

@@ -104,7 +104,8 @@ to `/` for local and desktop use. No hosted docs server is required.
 Run `fitifact doctor` (or `fitifact doctor --json`) to verify versions,
 `libx264`, MP4 muxing, and destination/temp write access. Doctor warns when the
 FFmpeg major version is older than 6; CI currently tests FFmpeg 7.x. FFmpeg 6.x
-is accepted without an age warning and is not rejected solely for age. Desktop
+is accepted without an age warning and is not rejected solely for age. Video
+re-encodes need FFmpeg 5.1 or newer, which keeps each frame's own timing. Desktop
 doctor reports shipped tools as ready instead of asking you to install FFmpeg.
 
 Fitifact has no telemetry and performs no network activity. Building the

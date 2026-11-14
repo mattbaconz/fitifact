@@ -74,6 +74,7 @@ import {
   describeMediaActions,
   describeProblems,
   describeProblemsFromChecks,
+  describeSizeRefusal,
   describeVerified,
   inspectLine,
   leftoverNote,
@@ -1841,7 +1842,7 @@ export function useFitifactSession() {
   const problems = plan
     ? describeProblems(plan)
     : mediaChecks
-      ? describeProblemsFromChecks(mediaChecks)
+      ? [...describeProblemsFromChecks(mediaChecks), ...describeSizeRefusal(mediaOutcome?.blocking)]
       : (mediaOutcome?.blocking?.map((item) => item.message) ?? []);
   const actions = plan
     ? describeActions(plan, state === "adapted")

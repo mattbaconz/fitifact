@@ -183,6 +183,20 @@ for (const [name, container] of [
   });
 }
 
+test("a video under its byte limit whose encode cannot fit is told what to do", async ({ page }) => {
+  await page.goto("/");
+  // 12.7 KB of VP9 and Opus over 0.6 s: under this limit as it is, but H.264 at its floor beside
+  // 96 kbit/s AAC needs about 13.4 KB.
+  await customTarget(page, "transcode-vp9-opus.webm", /WEBM/, [
+    ...H264_AAC_MP4,
+    { id: "bytes", field: "file.bytes", op: "lte", value: 12_700 },
+  ]);
+  await expect(
+    page.getByText(/^This file is under the size limit, but it has to be re-encoded.+Trim it, or pick a destination that allows a larger file\.$/),
+  ).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: "Adapt and download" })).toHaveCount(0);
+});
+
 test("HDR video is refused before any encoder starts", async ({ page }) => {
   await page.goto("/");
   await dropVideo(page, "refusal-hdr10-hevc-aac.mp4", /MP4/);

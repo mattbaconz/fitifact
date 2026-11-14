@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkLabel, describeActions, describeKept, describeMediaActions, describeProblems, describeProblemsFromChecks, describeVerified, formatCheckValue, formatLabel, inspectLine, leftoverNote, measuredRows, understoodNote } from "./explain";
+import { checkLabel, describeActions, describeKept, describeMediaActions, describeProblems, describeProblemsFromChecks, describeSizeRefusal, describeVerified, formatCheckValue, formatLabel, inspectLine, leftoverNote, measuredRows, understoodNote } from "./explain";
 import type { PlanReport } from "../types";
 
 function plan(overrides: Partial<PlanReport> & { checks?: PlanReport["report"]["checks"] }): PlanReport {
@@ -126,6 +126,16 @@ describe("human plan copy", () => {
       adapted: false,
       checks: [{ constraint_id: "bytes", field: "file.bytes", actual: "1000", required: "<= 2000000", result: "pass" }],
     })).toMatch(/already matches/);
+  });
+});
+
+describe("describeSizeRefusal", () => {
+  it("shows only the planner's size advice, as a sentence", () => {
+    expect(describeSizeRefusal([
+      { code: "unsupported_codec", message: "no provider can encode vp9" },
+      { code: "size_fitting_unsupported", message: "this file is under the size limit, but it has to be re-encoded. Trim it" },
+    ])).toEqual(["This file is under the size limit, but it has to be re-encoded. Trim it."]);
+    expect(describeSizeRefusal(undefined)).toEqual([]);
   });
 });
 

@@ -429,6 +429,11 @@ fn ffmpeg_args_with_bitrate(
                 "bt709".into(),
                 "-preset".into(),
                 "medium".into(),
+                // Keep each frame's own timing. FFmpeg before 7.1 otherwise writes MP4 at a constant
+                // rate and repeats frames up to the source's nominal rate, which the plan's quality
+                // floor never counted on. Needs FFmpeg 5.1 or newer.
+                "-fps_mode".into(),
+                "vfr".into(),
             ]);
             if let Some(bitrate) = video_bitrate_bps {
                 args.extend([
@@ -897,6 +902,23 @@ mod tests {
         assert!(args.windows(2).any(|w| w[0] == "-vf" && w[1] == filters));
         assert!(args.windows(2).any(|w| w == ["-b:a", "96k"]));
         assert!(!args.windows(2).any(|w| w == ["-c:a", "copy"]));
+    }
+
+    /// FFmpeg before 7.1 writes MP4 at a constant rate by default, repeating frames of a
+    /// variable-rate source up to its nominal rate.
+    #[test]
+    fn every_video_encode_keeps_each_frames_own_timing() {
+        let mut slowed = transcode_step();
+        slowed.target.frame_rate = Rational::new(60, 2);
+        for step in [transcode_step(), slowed] {
+            let args = ffmpeg_args(&step, Path::new("in.mkv"), Path::new("out.mp4")).unwrap();
+            assert!(
+                args.windows(2).any(|w| w == ["-fps_mode", "vfr"]),
+                "{args:?}"
+            );
+            let output = args.iter().position(|arg| arg == "out.mp4").unwrap();
+            assert!(args.iter().position(|arg| arg == "-fps_mode").unwrap() < output);
+        }
     }
 
     /// Every encode "succeeds" with a file that is still too large, so the whole ladder runs.

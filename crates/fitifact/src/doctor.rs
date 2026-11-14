@@ -129,7 +129,7 @@ pub fn diagnose_with_tools(
         .is_some_and(|major| major < 6)
     {
         warnings.push(
-            "Detected FFmpeg major version is older than 6; behavior may differ from CI-tested 7.x.".into(),
+            "Detected FFmpeg major version is older than 6; behavior may differ from CI-tested 7.x, and video re-encodes need 5.1 or newer.".into(),
         );
     }
     let healthy = ffprobe.available
